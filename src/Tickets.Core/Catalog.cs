@@ -121,12 +121,21 @@ public sealed partial class Store
         using var r=cmd.ExecuteReader(); var list=new List<SeatInfo>();
         while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetDouble(4),r.GetDouble(5),null,"#CBD5E1",null,"","",null)); return list;
     }
-    public long SavePlan(long venueId,string name,IReadOnlyCollection<PriceValue> prices)
+    public long SavePlan(long venueId,string name,IReadOnlyCollection<PriceValue> prices,IReadOnlyCollection<long>? withdrawnSeatIds=null)
     {
         name=Required(name,"Название расценовки");
         var ids=VenueSeats(venueId).Select(s=>s.Id).ToHashSet();
-        if(prices.Count==0 || prices.Select(x=>x.SeatId).Distinct().Count()!=prices.Count || prices.Any(p=>!ids.Contains(p.SeatId)||p.Amount<0||!Regex.IsMatch(p.Color,"^#[0-9a-fA-F]{6}$")))
+        if((prices.Count==0 && withdrawnSeatIds is null) || prices.Select(x=>x.SeatId).Distinct().Count()!=prices.Count || prices.Any(p=>!ids.Contains(p.SeatId)||p.Amount<0||!Regex.IsMatch(p.Color,"^#[0-9a-fA-F]{6}$")))
             throw new TicketException("Назначьте корректные цены местам выбранного зала. Цена не может быть отрицательной.");
+        var withdrawn=withdrawnSeatIds?.ToHashSet()??[];
+        if(withdrawnSeatIds is not null)
+        {
+            if(withdrawn.Count!=withdrawnSeatIds.Count||withdrawn.Any(id=>!ids.Contains(id))||prices.Any(p=>withdrawn.Contains(p.SeatId)))
+                throw new TicketException("Проверьте места, снятые с продажи.");
+            var assigned=prices.Select(p=>p.SeatId).ToHashSet();
+            var missing=VenueSeats(venueId).Where(s=>!assigned.Contains(s.Id)&&!withdrawn.Contains(s.Id)).ToArray();
+            if(missing.Length>0)throw new TicketException("Назначьте цену или уберите из продажи следующие места:\n"+string.Join("\n",missing.Select(s=>s.Label)));
+        }
         if(prices.GroupBy(p=>p.Amount).Any(g=>g.Select(p=>NormalizePriceColor(p.Color)).Distinct().Count()!=1))
             throw new TicketException("Для одной цены выберите один общий цвет.");
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
@@ -145,6 +154,11 @@ public sealed partial class Store
             {
                 var color=EnsurePriceColor(c,tx,p.Amount,p.Color);
                 using var cmd=Command(c,"INSERT INTO plan_price VALUES($p,$s,$a,$c)","$p",id,"$s",p.SeatId,"$a",p.Amount,"$c",color); cmd.Transaction=tx; cmd.ExecuteNonQuery();
+            }
+            foreach(var seatId in withdrawn)
+            {
+                using var block=Command(c,"INSERT INTO plan_seat_block(plan_id,seat_id) VALUES($p,$s)","$p",id,"$s",seatId);
+                block.Transaction=tx;block.ExecuteNonQuery();
             }
             tx.Commit(); return id;
         }
@@ -175,7 +189,9 @@ public sealed partial class Store
         catch(SqliteException ex) when(ex.SqliteErrorCode==19&&ex.Message.Contains("event_slot_conflict"))
         {throw new TicketException("На этой сцене уже есть показ в выбранную дату и время.");}
         using var prices=Command(c,"INSERT INTO event_price SELECT $e,seat_id,amount,color FROM plan_price WHERE plan_id=$p","$e",id,"$p",planId);
-        prices.Transaction=tx; prices.ExecuteNonQuery();ids.Add(id);
+        prices.Transaction=tx; prices.ExecuteNonQuery();
+        using var blocks=Command(c,"INSERT INTO event_seat_block(event_id,seat_id,changed_at) SELECT $e,seat_id,$t FROM plan_seat_block WHERE plan_id=$p","$e",id,"$p",planId,"$t",DateTimeOffset.Now.ToString("O"));
+        blocks.Transaction=tx;blocks.ExecuteNonQuery();ids.Add(id);
         }
         tx.Commit();return ids;
     }

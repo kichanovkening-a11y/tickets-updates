@@ -31,13 +31,13 @@ public sealed partial class Store
             """);cmd.Transaction=tx;cmd.ExecuteNonQuery();tx.Commit();
     }
     public List<IssueInfo> Issues(long eventId)=>History(eventId).GroupBy(t=>t.IssueId)
-        .Select(g=>new IssueInfo(g.Key,eventId,g.First().Recipient,g.First().IssuedAt,g.Count(),g.Count(t=>t.ReturnedAt is not null),g.Sum(t=>(decimal)t.Amount)))
+        .Select(g=>new IssueInfo(g.Key,eventId,g.First().Recipient,g.First().IssuedAt,g.Count(),g.Count(t=>t.ReturnedAt is not null),g.Sum(t=>(decimal)t.Amount),g.Count(t=>t.ReturnedAt is null&&t.IsReserved),g.Count(t=>t.ReturnedAt is null&&t.IsPrinted)))
         .OrderByDescending(i=>i.Id).ToList();
 
     public InvoiceInfo Invoice(long eventId,long issueId)
     {
         using var c=Open();using var cmd=Command(c,"SELECT title,venue,event_date,recipient,issued_at,sender FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId);
         using var r=cmd.ExecuteReader();if(!r.Read())throw new TicketException("Выдача не найдена в этом мероприятии.");
-        return new(issueId,eventId,r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),History(eventId).Where(t=>t.IssueId==issueId).OrderBy(t=>t.Number).ToList(),r.GetString(5));
+        return new(issueId,eventId,r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),History(eventId).Where(t=>t.IssueId==issueId).OrderBy(t=>t.Number).ToList(),r.GetString(5)){SenderDetails=GetIssueOrganizationDetails(issueId,true),RecipientDetails=GetIssueOrganizationDetails(issueId,false)};
     }
 }

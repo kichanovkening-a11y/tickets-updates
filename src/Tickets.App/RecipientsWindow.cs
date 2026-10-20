@@ -14,6 +14,8 @@ internal sealed class RecipientsWindow:EditorWindow
     private readonly TreeView history=new();
     private readonly TextBlock heading=new(){FontSize=21,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
+    private readonly TextBlock requisites=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
+    private readonly Button edit;
     private readonly TextBlock count=new(){Margin=new Thickness(0,5,0,10)};
     private List<RecipientDirectoryInfo> directory=[];
     private readonly Button open;
@@ -41,9 +43,15 @@ internal sealed class RecipientsWindow:EditorWindow
         filter.Children.Add(count);left.Children.Add(organizations);
         var splitter=new GridSplitter{Width=5,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Stretch};Grid.SetColumn(splitter,1);root.Children.Add(splitter);
         var right=new DockPanel();Grid.SetColumn(right,2);root.Children.Add(right);
-        var details=new StackPanel();DockPanel.SetDock(details,Dock.Top);right.Children.Add(details);details.Children.Add(heading);details.Children.Add(summary);
+        var details=new StackPanel();DockPanel.SetDock(details,Dock.Top);right.Children.Add(details);details.Children.Add(heading);details.Children.Add(summary);details.Children.Add(new ScrollViewer{Content=requisites,MaxHeight=210,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         var actions=new WrapPanel{Margin=new Thickness(0,0,0,12)};details.Children.Add(actions);
         open=Button(actions,"Открыть выдачу",()=>Try(OpenSelected));open.Margin=new Thickness(0,0,10,0);
+        edit=Button(actions,"Реквизиты организации",()=>Try(()=>{
+            if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
+            var editor=new RecipientEditorWindow(Store,organization.Name,true);
+            if(editor.ShowDialog()==true){directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();ShowHistory();}
+        }));edit.Margin=new Thickness(0,0,10,0);
+        organizations.MouseDoubleClick+=(_,_)=>{if(edit.IsEnabled)edit.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));};
         delete=new MenuItem{Header="Удалить"};
         delete.Click+=(_,_)=>Try(()=>{
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
@@ -75,10 +83,12 @@ internal sealed class RecipientsWindow:EditorWindow
 
     private void ShowHistory()
     {
-        history.Items.Clear();open.IsEnabled=false;
-        var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};
+        history.Items.Clear();open.IsEnabled=false;requisites.Text="";
+        var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};edit.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
+        var organizationDetails=Store.GetOrganizationDetails(organization.Name,false);
+        requisites.Text=organizationDetails.DisplayText==organization.Name?"Реквизиты пока не заполнены. Нажмите «Реквизиты организации».":organizationDetails.DisplayText;
         var issues=Store.RecipientHistory(organization.Name);
         summary.Text=issues.Count==0?"Выдач пока нет. Организация сохранена в справочнике.":
             $"Выдач: {issues.Count} · билетов: {issues.Sum(x=>x.Issue.Count)} · возвращено: {issues.Sum(x=>x.Issue.ReturnedCount)}. Нажмите выдачу, чтобы открыть накладную.";

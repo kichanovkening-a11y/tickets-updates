@@ -27,7 +27,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
         var editing=new DockPanel{Margin=new Thickness(8)};var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Bottom);editing.Children.Add(tools);
-        tools.Children.Add(new TextBlock{Text="Подстановки: {recipient} — получатель, {sender} — отправитель, {event} — спектакль, {eventDate} — дата показа, {date} — дата выдачи, {count} — билетов, {amount} — сумма, {total} — итог.",TextWrapping=TextWrapping.Wrap,FontSize=13});
+        tools.Children.Add(new TextBlock{Text="Подстановки: {recipient} — получатель, {sender} — отправитель, {event} — спектакль, {eventDate} — дата показа, {date} — дата выдачи, {count} — билетов, {amount} — сумма, {total} — итог, {items} — таблица билетов, {senderDetails} и {recipientDetails} — реквизиты, {senderPosition}, {senderSignatory}, {recipientPosition}, {recipientSignatory} — должности и подписанты.",TextWrapping=TextWrapping.Wrap,FontSize=13});
         Button(tools,"Сохранить шаблон",()=>Try(()=>{Save();Store.SaveDocumentTemplate(kind,template.Text);status.Text="Шаблон сохранён для следующих выдач. Получатель подставляется автоматически.";}));
         editing.Children.Add(template);tabs.Items.Add(new TabItem{Header="Изменить текст / шаблон",Content=editing});
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0&&template.Text!=original)Try(Save);};
@@ -56,7 +56,26 @@ internal sealed class IssueDocumentWindow:EditorWindow
     {
         var document=new FlowDocument{FontFamily=new FontFamily("Arial"),FontSize=13,PageWidth=794,PagePadding=new Thickness(25),ColumnWidth=744};
         var firstLine=true;
-        foreach(var line in info.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n')){document.Blocks.Add(new Paragraph(new Run(line)){FontSize=firstLine?22:13,FontWeight=firstLine||line.Contains(DocumentTotals.Total(info.Invoice.Tickets.Count,info.Invoice.Total),StringComparison.Ordinal)?FontWeights.Bold:FontWeights.Normal,Margin=new Thickness(0,0,0,7)});firstLine=false;}
+        var lines=info.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+        for(var index=0;index<lines.Length;index++)
+        {
+            var line=lines[index];
+            if(line.StartsWith("№ | Билеты и места |",StringComparison.Ordinal))
+            {
+                var table=new Table{CellSpacing=0,Margin=new Thickness(0,5,0,10)};
+                foreach(var width in new[]{35d,330,45,65,85,90})table.Columns.Add(new TableColumn{Width=new GridLength(width)});
+                var group=new TableRowGroup();table.RowGroups.Add(group);var header=true;
+                do
+                {
+                    var row=new TableRow();group.Rows.Add(row);
+                    foreach(var value in lines[index].Split('|'))row.Cells.Add(new TableCell(new Paragraph(new Run(value.Trim())){Margin=new Thickness(0)}){Padding=new Thickness(4),BorderBrush=Brushes.LightGray,BorderThickness=new Thickness(.5),FontSize=12,FontWeight=header?FontWeights.Bold:FontWeights.Normal,Background=header?Brushes.AliceBlue:Brushes.White});
+                    header=false;index++;
+                }while(index<lines.Length&&lines[index].Split('|').Length==6);
+                index--;document.Blocks.Add(table);continue;
+            }
+            var bold=firstLine||InvoiceDocuments.IsBusinessHeading(line)||line.Contains(DocumentTotals.Total(info.Invoice.Tickets.Count,info.Invoice.Total),StringComparison.Ordinal);
+            document.Blocks.Add(new Paragraph(new Run(line)){FontSize=firstLine?22:13,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,KeepWithNext=bold,Margin=new Thickness(0,0,0,7)});firstLine=false;
+        }
         return document;
     }
 }

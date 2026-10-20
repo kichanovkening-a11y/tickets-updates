@@ -41,7 +41,7 @@ public sealed partial class Store
     {
         sender=Required(sender,"От кого");using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         using(var old=Command(c,"SELECT sender FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId))
-        {old.Transaction=tx;var prior=old.ExecuteScalar() as string;if(prior is null)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,prior);}
+        {old.Transaction=tx;var prior=old.ExecuteScalar() as string;if(prior is null)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,prior);if(prior!=sender)CaptureIssueOrganization(c,tx,issueId,sender,true);}
         using var cmd=Command(c,"UPDATE issue_batch SET sender=$s WHERE id=$i AND event_id=$e","$s",sender,"$i",issueId,"$e",eventId);cmd.Transaction=tx;
         if(cmd.ExecuteNonQuery()!=1)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,sender);tx.Commit();
     }

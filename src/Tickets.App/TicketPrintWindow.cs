@@ -11,6 +11,8 @@ internal sealed class TicketPrintWindow:EditorWindow
 {
     private readonly long eventId;
     private readonly long[] seatIds;
+    private readonly long[] draftSeatIds=[];
+    private InvoiceInfo? originalOccupied;
     private readonly string recipient="",series="";
     private readonly long firstNumber;
     private readonly bool draft;
@@ -23,7 +25,13 @@ internal sealed class TicketPrintWindow:EditorWindow
     public TicketPrintWindow(Store store,long eventId,IReadOnlyCollection<long> seatIds,string recipient,string series,long firstNumber):base(store,"Печать билетов",1000,850)
     {
         this.eventId=eventId;this.seatIds=seatIds.ToArray();this.recipient=recipient;this.series=series;this.firstNumber=firstNumber;draft=true;
-        Initialize(Store.TicketPrintPreview(eventId,this.seatIds,recipient,series,firstNumber));
+        var selected=Store.Seats(eventId).Where(s=>this.seatIds.Contains(s.Id)).ToArray();
+        if(selected.Length!=this.seatIds.Length)throw new TicketException("Место не найдено в этом показе.");
+        draftSeatIds=selected.Where(s=>!s.TicketId.HasValue).Select(s=>s.Id).ToArray();
+        var occupied=selected.Where(s=>s.TicketId.HasValue).Select(s=>s.Id).ToArray();
+        if(occupied.Length>0)originalOccupied=Store.TicketReprint(eventId,occupied);
+        if(draftSeatIds.Length==0)throw new TicketException("Для ранее выданных мест откройте печать существующих билетов.");
+        Initialize(Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied));
     }
     public TicketPrintWindow(Store store,long eventId,IReadOnlyCollection<long> seatIds):base(store,"Повторная печать билетов",1000,850)
     {
@@ -36,16 +44,17 @@ internal sealed class TicketPrintWindow:EditorWindow
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(actions,Dock.Right);root.Children.Add(actions);
         InvoiceWindow.Square(actions,"Распечатать",Print,Brushes.SeaGreen);
         root.Children.Add(new ScrollViewer{Content=pages,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto});
-        status.Text=draft?"Предпросмотр. Билеты ещё не выданы. Выдача будет сохранена только после подтверждения печати в окне принтера.":"Повторная печать выданных билетов. Серии, номера и цены сохраняются.";
+        status.Text=draft?"Предпросмотр. Новые билеты будут выданы после подтверждения печати. Ранее выданные билеты останутся в исходных накладных.":"Печать билетов исходной накладной. Серии, номера, цены и привязка к накладной сохраняются.";
         Preview(info);
     }
     private void Preview(InvoiceInfo info)
     {
-        var document=BuildDocument(info,794,1123);pages.Children.Clear();
+        var document=BuildWithSources(info,794,1123);pages.Children.Clear();
         for(var i=0;i<document.Pages.Count;i++)pages.Children.Add(new DocumentPageView{DocumentPaginator=document.DocumentPaginator,PageNumber=i,Margin=new Thickness(0,0,0,12)});
     }
     private void Print()
     {
+        var submitted=false;
         try
         {
             var dialog=new PrintDialog();if(dialog.ShowDialog()!=true)return;
@@ -53,29 +62,51 @@ internal sealed class TicketPrintWindow:EditorWindow
             {
                 // Recheck the draft after the printer dialog. Issue performs the
                 // final transaction check and reads each current selected price.
-                var provisional=Store.TicketPrintPreview(eventId,seatIds,recipient,series,firstNumber);
+                if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
+                var provisional=Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied);
                 // Reject unusable paper settings before creating the issuance.
-                BuildDocument(provisional,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight).DocumentPaginator.ComputePageCount();
-                IssueId=Store.Issue(eventId,seatIds,recipient,series,firstNumber);
+                BuildWithSources(provisional,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight).DocumentPaginator.ComputePageCount();
+                IssueId=Store.Issue(eventId,draftSeatIds,recipient,series,firstNumber);
+                issuedSnapshot=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
                 status.Text=$"Выдача № {IssueId} сохранена. При ошибке печати повторная попытка использует те же билеты.";
             }
-            issuedSnapshot??=Store.Invoice(eventId,IssueId);
+            issuedSnapshot??=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
             var current=Store.TicketReprint(eventId,seatIds);
-            if(!current.Tickets.Select(t=>t.Id).SequenceEqual(issuedSnapshot.Tickets.Select(t=>t.Id)))
+            if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(issuedSnapshot.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
                 throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
             var info=issuedSnapshot;Preview(info);
-            var document=BuildDocument(info,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight);
-            dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);Printed=true;
+            var document=BuildWithSources(info,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight);
+            dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
+            Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());Printed=true;
             status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
         }
         catch(Exception ex)
         {
+            if(submitted){status.Text="Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message;MessageBox.Show(DialogOwner,status.Text+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);return;}
             if(IssueId>0)status.Text=$"Выдача № {IssueId} сохранена. Повторная печать использует те же серии и номера.";
             MessageBox.Show(DialogOwner,ex.Message,"Печать билетов",MessageBoxButton.OK,MessageBoxImage.Warning);
         }
     }
 
+    private static InvoiceInfo Combine(InvoiceInfo fresh,InvoiceInfo? occupied)
+        =>occupied is null?fresh:fresh with{Tickets=fresh.Tickets.Concat(occupied.Tickets).ToArray()};
+    private void ValidateSnapshot(InvoiceInfo snapshot)
+    {
+        var actual=Store.TicketReprint(eventId,snapshot.Tickets.Select(t=>t.SeatId).ToArray());
+        if(!actual.Tickets.Select(t=>t.Id).SequenceEqual(snapshot.Tickets.Select(t=>t.Id)))
+            throw new TicketException("Ранее выбранные билеты возвращены или заменены. Откройте актуальные билеты заново.");
+    }
+
+    private FixedDocument BuildWithSources(InvoiceInfo invoice,double pageWidth,double pageHeight)
+    {
+        var headers=new Dictionary<long,InvoiceInfo>();
+        foreach(var issue in invoice.Tickets.Where(t=>t.IssueId>0).GroupBy(t=>t.IssueId))
+        {var original=Store.Invoice(eventId,issue.Key);foreach(var ticket in issue)headers[ticket.Id]=original;}
+        return BuildDocumentCore(invoice,pageWidth,pageHeight,headers);
+    }
     internal static FixedDocument BuildDocument(InvoiceInfo invoice,double pageWidth=794,double pageHeight=1123)
+        =>BuildDocumentCore(invoice,pageWidth,pageHeight,null);
+    private static FixedDocument BuildDocumentCore(InvoiceInfo invoice,double pageWidth,double pageHeight,IReadOnlyDictionary<long,InvoiceInfo>? headers)
     {
         if(!double.IsFinite(pageWidth)||!double.IsFinite(pageHeight)||pageWidth<160||pageHeight<180)
             throw new TicketException("Печатная область принтера слишком мала для билета.");
@@ -91,6 +122,7 @@ internal sealed class TicketPrintWindow:EditorWindow
             for(var index=0;index<perPage&&offset+index<invoice.Tickets.Count;index++)
             {
                 var ticket=invoice.Tickets[offset+index];
+                var source=headers is not null&&headers.TryGetValue(ticket.Id,out var original)?original:invoice;
                 var form=new Grid{Margin=new Thickness(10)};
                 foreach(var weight in new[]{1.5,1.0,1.0,1.0,1.0,1.0})form.RowDefinitions.Add(new RowDefinition{Height=new GridLength(weight,GridUnitType.Star)});
                 void Line(int row,string text,double size,bool bold=false)
@@ -99,7 +131,7 @@ internal sealed class TicketPrintWindow:EditorWindow
                     var fit=new Viewbox{Child=label,Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Center};
                     Grid.SetRow(fit,row);form.Children.Add(fit);
                 }
-                Line(0,invoice.Title,20,true);Line(1,invoice.Venue,15);Line(2,invoice.EventDate,16,true);
+                Line(0,source.Title,20,true);Line(1,source.Venue,15);Line(2,source.EventDate,16,true);
                 Line(3,$"Сектор: {ticket.Sector} · ряд {ticket.Row} · место {ticket.Seat}",16,true);
                 Line(4,"Цена: "+InvoiceDocuments.Money(ticket.Amount),16);Line(5,"БИЛЕТ · "+ticket.Code,18,true);
                 var card=new Border{Width=width,Height=height,BorderBrush=Brushes.Black,BorderThickness=new Thickness(1),Background=Brushes.White,Child=form};

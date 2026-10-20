@@ -18,7 +18,7 @@ internal static class RecipientCreationChecks
             Require(new Store(s.Path).Recipients().Contains(name),"explicit creation did not persist restoration");
             Reject(()=>s.SaveRecipient("   "));Reject(()=>s.SaveRecipient(new string('я',201)));Reject(()=>s.SaveRecipient("Получатель\nстрока"));
         });
-        test("retired sender variants stay excluded without changing invoice snapshots",s=>{
+        test("sender variants remain available without changing historical snapshots",s=>{
             var e=s.Events().First(x=>s.Seats(x.Id).Any(y=>y.Available));
             var seat=s.Seats(e.Id).First(x=>x.Available).Id;
             var issue=s.Issue(e.Id,new[]{seat},"Получатель проверки отправителя","SENDER",1);
@@ -33,12 +33,12 @@ internal static class RecipientCreationChecks
                     """;cmd.ExecuteNonQuery();
             }
             var reopened=new Store(s.Path);
-            Require(reopened.Sender==Store.DefaultSender,"retired default sender persisted");
-            Require(!reopened.Senders().Any(x=>x.Contains("Баринов",StringComparison.OrdinalIgnoreCase)),"retired sender imported back into choices");
+            Require(reopened.Sender==retired,"selected sender not persisted");
+            Require(reopened.Senders().Contains("ИП Баринов А.С."),"required sender missing");
             Require(reopened.Invoice(e.Id,issue).Sender==retired,"historical invoice sender was rewritten");
             Require(reopened.Specifications().Single(x=>x.Recipient=="Получатель проверки отправителя").Sender=="ИП Баринов А.С.","historical specification sender was rewritten");
             reopened.UpdateInvoiceSender(e.Id,issue,"Другой отправитель");
-            Require(!reopened.Senders().Contains(retired),"remembering previous invoice sender restored retired choice");
+            Require(reopened.Senders().Contains(retired),"previous sender was removed");
             reopened.RemoveSenderChoice("Другой отправитель");
             Require(!new Store(s.Path).Senders().Contains("Другой отправитель"),"sender deletion was resurrected by invoice source");
         });

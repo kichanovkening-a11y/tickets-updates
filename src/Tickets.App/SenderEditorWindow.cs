@@ -1,0 +1,25 @@
+using System.Windows;
+using System.Windows.Controls;
+using Tickets.Core;
+
+namespace Tickets.App;
+
+internal sealed class SenderEditorWindow:EditorWindow
+{
+    public string CreatedName{get;private set;}="";
+    public SenderEditorWindow(Store store,string initial="",bool editExisting=false):base(store,editExisting?"Реквизиты отправителя":"Новый отправитель",860,780)
+    {
+        var form=new StackPanel{Margin=new Thickness(24)};
+        Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+        form.Children.Add(new TextBlock{Text=editExisting?"Реквизиты отправителя":"Новый отправитель",FontSize=23,FontWeight=FontWeights.SemiBold});
+        var name=Field(form,"Название отправителя",initial);name.IsReadOnly=editExisting;
+        var fields=new OrganizationDetailsForm(form,editExisting?Store.GetOrganizationDetails(initial,true):new());
+        form.Children.Add(new TextBlock{Text="Реквизиты сохранятся для новых выдач. Уже оформленные документы сохраняют свои реквизиты.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,8)});
+        var actions=new WrapPanel();form.Children.Add(actions);
+        var save=Button(actions,editExisting?"Сохранить":"Создать",()=>Try(()=>{
+            Store.SaveOrganizationDetails(name.Text,true,fields.Read(name.Text));CreatedName=Store.SaveSender(name.Text);Finish(true);
+        }));save.IsDefault=true;
+        var cancel=Button(actions,"Отмена",()=>Finish(false));cancel.Margin=new Thickness(10,10,0,0);cancel.IsCancel=true;
+        OnShown(()=>{name.Focus();name.SelectAll();});
+    }
+}

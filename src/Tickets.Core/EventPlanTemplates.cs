@@ -12,7 +12,7 @@ public sealed partial class Store
         EnsureEventPlanSources(c,tx);
         if(IsCatalogHidden(c,tx,"venue",venueId.ToString(System.Globalization.CultureInfo.InvariantCulture)))return;
         var events=new List<long>();
-        using(var cmd=Command(c,"SELECT id FROM event WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM event_plan_source x WHERE x.event_id=event.id) AND EXISTS(SELECT 1 FROM event_price p WHERE p.event_id=event.id) ORDER BY id","$v",venueId))
+        using(var cmd=Command(c,"SELECT id FROM event WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM event_plan_source x WHERE x.event_id=event.id) AND (EXISTS(SELECT 1 FROM event_price p WHERE p.event_id=event.id) OR EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=event.id)) ORDER BY id","$v",venueId))
         {
             cmd.Transaction=tx;using var r=cmd.ExecuteReader();while(r.Read())events.Add(r.GetInt64(0));
         }
@@ -40,7 +40,7 @@ public sealed partial class Store
             mapped.Transaction=tx;if(mapped.ExecuteScalar() is long id)return id;
         }
         long venue;string title,date;
-        using(var source=Command(c,"SELECT venue_id,title,legacy_date FROM event WHERE id=$e AND EXISTS(SELECT 1 FROM event_price WHERE event_id=$e)","$e",eventId))
+        using(var source=Command(c,"SELECT venue_id,title,legacy_date FROM event WHERE id=$e AND (EXISTS(SELECT 1 FROM event_price WHERE event_id=$e) OR EXISTS(SELECT 1 FROM event_seat_block WHERE event_id=$e))","$e",eventId))
         {
             source.Transaction=tx;using var r=source.ExecuteReader();
             if(!r.Read())throw new TicketException("У показа нет расценовки для копирования.");
@@ -51,10 +51,12 @@ public sealed partial class Store
         // an explicitly deleted template is not silently recreated from its shows.
         using var match=Command(c,"""
             SELECT p.id FROM pricing_plan p WHERE p.venue_id=$v
-            AND NOT EXISTS(SELECT 1 FROM event_price e WHERE e.event_id=$e AND NOT EXISTS(
+            AND NOT EXISTS(SELECT 1 FROM event_price e WHERE e.event_id=$e AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=e.seat_id) AND NOT EXISTS(
                 SELECT 1 FROM plan_price x WHERE x.plan_id=p.id AND x.seat_id=e.seat_id AND x.amount=e.amount))
             AND NOT EXISTS(SELECT 1 FROM plan_price x WHERE x.plan_id=p.id AND NOT EXISTS(
-                SELECT 1 FROM event_price e WHERE e.event_id=$e AND e.seat_id=x.seat_id AND e.amount=x.amount))
+                SELECT 1 FROM event_price e WHERE e.event_id=$e AND e.seat_id=x.seat_id AND e.amount=x.amount AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=e.seat_id)))
+            AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND NOT EXISTS(SELECT 1 FROM plan_seat_block x WHERE x.plan_id=p.id AND x.seat_id=b.seat_id))
+            AND NOT EXISTS(SELECT 1 FROM plan_seat_block x WHERE x.plan_id=p.id AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=x.seat_id))
             ORDER BY p.id LIMIT 1
             ""","$v",venue,"$e",eventId);match.Transaction=tx;
         long planId;
@@ -70,7 +72,8 @@ public sealed partial class Store
             }
             using var add=Command(c,"INSERT INTO pricing_plan(venue_id,name,name_key) VALUES($v,$n,$k) RETURNING id","$v",venue,"$n",name,"$k",CatalogText.Key(name));add.Transaction=tx;
             planId=Convert.ToInt64(add.ExecuteScalar());
-            using var copy=Command(c,"INSERT INTO plan_price(plan_id,seat_id,amount,color) SELECT $p,seat_id,amount,color FROM event_price WHERE event_id=$e","$p",planId,"$e",eventId);copy.Transaction=tx;copy.ExecuteNonQuery();
+            using var copy=Command(c,"INSERT INTO plan_price(plan_id,seat_id,amount,color) SELECT $p,seat_id,amount,color FROM event_price WHERE event_id=$e AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=event_price.seat_id)","$p",planId,"$e",eventId);copy.Transaction=tx;copy.ExecuteNonQuery();
+            using var blocks=Command(c,"INSERT INTO plan_seat_block(plan_id,seat_id) SELECT $p,seat_id FROM event_seat_block WHERE event_id=$e","$p",planId,"$e",eventId);blocks.Transaction=tx;blocks.ExecuteNonQuery();
         }
         using var link=Command(c,"INSERT INTO event_plan_source(event_id,plan_id) VALUES($e,$p)","$e",eventId,"$p",planId);link.Transaction=tx;link.ExecuteNonQuery();
         return planId;

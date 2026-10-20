@@ -12,7 +12,9 @@ public static class PricePalette
 {
     public static IReadOnlyList<string> Colors {get;}=Array.AsReadOnly(new[]{
         "#FF5252","#FFD600","#00E676","#2979FF","#E040FB","#FF9100","#00E5FF","#F50057",
-        "#76FF03","#651FFF","#1DE9B6","#FF6E40","#D500F9","#C6FF00","#448AFF","#FFAB40"});
+        "#76FF03","#651FFF","#1DE9B6","#FF6E40","#D500F9","#C6FF00","#448AFF","#FFAB40",
+        "#000000","#808080","#FF1744","#00B0FF","#FFEA00","#00C853","#AA00FF","#FF4081",
+        "#304FFE","#FF3D00","#64DD17","#00BFA5","#F9A825","#6200EA","#0091EA","#C51162"});
     public static string ForAmount(long amount)=>Colors[(int)((ulong)amount%(ulong)Colors.Count)];
     public static string NextAvailable(IEnumerable<string> used)=>Unused(new HashSet<string>(used,StringComparer.OrdinalIgnoreCase));
     internal static string Unused(ISet<string> used)

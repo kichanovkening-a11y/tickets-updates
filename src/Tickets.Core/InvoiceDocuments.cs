@@ -29,6 +29,8 @@ public static class InvoiceDocuments
             Paragraph("Мероприятие: "+invoice.Title,true),Paragraph("Дата и время: "+invoice.EventDate),
             Paragraph("Площадка: "+invoice.Venue),Paragraph("Отправитель: "+invoice.Sender),
             Paragraph("Получатель: "+invoice.Recipient),Paragraph(""));
+        body.Add(Paragraph("Реквизиты отправителя",true),Paragraph(BusinessDocumentTemplates.Requisites(invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender))),
+            Paragraph("Реквизиты получателя",true),Paragraph(BusinessDocumentTemplates.Requisites(invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient))));
         var widths=new[]{1300,800,1900,900,1100,1200,1400};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",
             new XElement(W+"tblW",new XAttribute(W+"w",widths.Sum()),new XAttribute(W+"type","dxa")),
@@ -52,9 +54,41 @@ public static class InvoiceDocuments
         var body=new XElement(W+"body");
         var total=DocumentTotals.Total(document.Invoice.Tickets.Count,document.Invoice.Total);
         var firstLine=true;
-        foreach(var line in document.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n'))
-        {body.Add(Paragraph(line,firstLine||line.Contains(total,StringComparison.Ordinal),firstLine?32:22));firstLine=false;}
+        var lines=document.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+        for(var index=0;index<lines.Length;index++)
+        {
+            var line=lines[index];
+            if(line.StartsWith("№ | Билеты и места |",StringComparison.Ordinal))
+            {
+                var rows=new List<string[]>();
+                do{rows.Add(lines[index].Split('|').Select(value=>value.Trim()).ToArray());index++;}
+                while(index<lines.Length&&lines[index].Split('|').Length==6);
+                index--;body.Add(BusinessTable(rows));continue;
+            }
+            var heading=firstLine||IsBusinessHeading(line);
+            var paragraph=Paragraph(line,heading||line.Contains(total,StringComparison.Ordinal),firstLine?30:20);
+            if(document.Kind==IssueDocumentKinds.Contract&&line=="6. Реквизиты и подписи сторон")paragraph.Element(W+"pPr")!.Add(new XElement(W+"pageBreakBefore"));
+            body.Add(paragraph);firstLine=false;
+        }
         SaveDocument(body,destination);
+    }
+    public static bool IsBusinessHeading(string line)=>System.Text.RegularExpressions.Regex.IsMatch(line,@"^\d+\. [^\d]")
+        ||line.StartsWith("Реквизиты ",StringComparison.Ordinal)||line is "Продавец" or "Покупатель" or "Поставщик и получатель платежа" or "Покупатель и плательщик" or "Грузоотправитель и поставщик" or "Грузополучатель и плательщик";
+    private static XElement BusinessTable(IReadOnlyList<string[]> rows)
+    {
+        var widths=new[]{450,4450,600,850,1150,1300};
+        var table=new XElement(W+"tbl",new XElement(W+"tblPr",
+            new XElement(W+"tblW",new XAttribute(W+"w",8800),new XAttribute(W+"type","dxa")),
+            new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),
+            new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"w",80),new XAttribute(W+"type","dxa")))),
+            new XElement(W+"tblBorders",new[]{"top","left","bottom","right","insideH","insideV"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"val","single"),new XAttribute(W+"sz",4),new XAttribute(W+"color","D9D9D9"))))),
+            new XElement(W+"tblGrid",widths.Select(width=>new XElement(W+"gridCol",new XAttribute(W+"w",width)))));
+        for(var r=0;r<rows.Count;r++)
+            table.Add(new XElement(W+"tr",new XElement(W+"trPr",r==0?new XElement(W+"tblHeader"):null),
+                rows[r].Select((value,c)=>new XElement(W+"tc",new XElement(W+"tcPr",
+                    new XElement(W+"tcW",new XAttribute(W+"w",widths[c]),new XAttribute(W+"type","dxa")),
+                    new XElement(W+"vAlign",new XAttribute(W+"val","center")),r==0?new XElement(W+"shd",new XAttribute(W+"fill","E8EDF3")):null),Paragraph(value,r==0,19)))));
+        return table;
     }
     public static void SaveSpecificationWord(SpecificationInfo specification,string destination)
     {
@@ -88,7 +122,7 @@ public static class InvoiceDocuments
         finally{if(File.Exists(temporary))File.Delete(temporary);}
     }
     private static XElement Paragraph(string text,bool bold=false,int size=22)=>new(W+"p",
-        new XElement(W+"pPr",new XElement(W+"spacing",new XAttribute(W+"after",100))),
+        new XElement(W+"pPr",new XElement(W+"spacing",new XAttribute(W+"after",80)),bold?new XElement(W+"keepNext"):null,text.Contains('\n')?new XElement(W+"keepLines"):null,new XElement(W+"widowControl")),
         new XElement(W+"r",new XElement(W+"rPr",new XElement(W+"rFonts",new XAttribute(W+"ascii","Arial"),new XAttribute(W+"hAnsi","Arial")),bold?new XElement(W+"b"):null,new XElement(W+"sz",new XAttribute(W+"val",size))),
             text.Replace("\r\n","\n").Replace('\r','\n').Split('\n').SelectMany((line,index)=>index==0
                 ?new XElement[]{new(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),line)}

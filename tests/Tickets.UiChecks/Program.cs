@@ -62,12 +62,12 @@ internal static class Program
             date.IsDropDownOpen=false;
             Exception? nestedError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
-                var pricing=app.Windows.Cast<Window>().Single(w=>w.Title=="Расценовки");
+                var pricing=app.Windows.Cast<Window>().Single(w=>w.Title=="Расценовка");
                 try
                 {
                     Check(((VenueInfo)Logical(pricing).OfType<ComboBox>().First().SelectedItem).Id==((VenueInfo)combos[1].SelectedItem).Id,"pricing creation uses chosen venue");
                     Logical(pricing).OfType<TextBox>().First().Text="UI test pricing";
-                    Click(pricing,"Назначить всему залу");Click(pricing,"Сохранить новую расценовку");
+                    Click(pricing,"Назначить всему залу");Click(pricing,"Сохранить");
                 }
                 catch(Exception ex){nestedError=ex;pricing.Close();}
             }));
@@ -138,7 +138,7 @@ internal static class Program
             var sixSeats=Enumerable.Range(0,6).Select(i=>new SeatInfo(i+1,"Партер",(i/3+1).ToString(),(i%3+1).ToString(),i%3*20,i/3*20,1000,"#00E676",null,"","",null)).ToArray();
             six.Load(sixSeats,Array.Empty<SectorInfo>(),true);Pump();sixWindow.Activate();six.Focus();
             Gesture(six,new Point(15,1),new Point(41,21));Check(six.Selected.Count==6,"partial rectangular overlap selects all six touched places");
-            Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");sixWindow.Close();
+            Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");CheckSeatRenderingAndContext(six,sixSeats);sixWindow.Close();
             var currentShowRow=performanceGroup.Items.OfType<TreeViewItem>().Single(i=>i.Tag is EventInfo e&&e.Id==eventId);
             Check(currentShowRow.Header is TextBlock selectedTitle&&Equals(selectedTitle.Foreground,Brushes.White)&&Equals(selectedTitle.Background,Brushes.DarkSlateBlue),"selected show text has contrast against its background");
             var hall=(Tickets.App.HallView)main.FindName("Hall");main.Activate();hall.Focus();hall.Fit();Pump();
@@ -161,11 +161,19 @@ internal static class Program
             Exception? inlineRecipientError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? creation=null;try{
                 creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="RecipientEditorWindow"&&w.IsVisible);
-                Logical(creation).OfType<TextBox>().Single().Text="Новый получатель формы";Click(creation,"Создать");
+                Logical(creation).OfType<TextBox>().First().Text="Новый получатель формы";Click(creation,"Создать");
             }catch(Exception ex){inlineRecipientError=ex;creation?.Close();}}));Click(main,"Создать получателя");if(inlineRecipientError is not null)throw inlineRecipientError;
             Check(((ComboBox)main.FindName("RecipientBox")).Text=="Новый получатель формы"&&store.Recipients().Contains("Новый получатель формы"),"recipient can be created and selected during issuance");
+            var senderBox=(ComboBox)main.FindName("SenderBox");senderBox.Text="UI sender created from main";
+            Exception? senderCreationError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? creation=null;try{
+                creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="SenderEditorWindow"&&w.IsVisible);
+                var inputs=Logical(creation).OfType<TextBox>().ToArray();Check(inputs.Length>1&&!inputs[0].IsReadOnly,"main sender creation includes editable name and requisites");
+                inputs[0].Text="UI sender created from main";Click(creation,"Создать");
+            }catch(Exception ex){senderCreationError=ex;creation?.Close();}}));Click(main,"Создать / изменить отправителя");if(senderCreationError is not null)throw senderCreationError;
+            Check(senderBox.Text=="UI sender created from main"&&store.Senders().Contains(senderBox.Text),"main sender creation persists and selects sender");senderBox.Text=Store.DefaultSender;
             ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
-            var summaryLabel=(TextBlock)main.FindName("SelectedSummary");Check(summaryLabel.FontSize>=24&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum are large bold red");
+            var summaryLabel=(TextBlock)main.FindName("SelectedSummary");Check(Math.Abs(summaryLabel.FontSize-16.8)<.01&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum retain bold red styling at 70 percent size");
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
             Exception? invoiceError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
@@ -211,7 +219,7 @@ internal static class Program
             Check(((TextBlock)main.FindName("IssuedRecipients")).Text.Contains("UI recipient"),"issued selection explicitly identifies recipient");
             var warning=((ListBox)main.FindName("SelectedList")).Items.Cast<object>().Single();
             Check(Equals(warning.GetType().GetProperty("AlertBrush")!.GetValue(warning),Brushes.Red),"occupied selected place is red in the selected list");
-            var printButton=(Button)main.FindName("PrintTicketsButton");Check(printButton.IsEnabled&&Equals(printButton.Content,"Повторная печать"),"issued places expose reprint without changing ticket numbers");
+            var printButton=(Button)main.FindName("PrintTicketsButton");Check(printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"issued but unprinted places expose initial printing without changing ticket numbers");
             hall.SetSelection(new[]{seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI print preview only";Pump();
             Check(printButton.IsVisible&&printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"primary ticket printing action is visible and available");
             var ticketPrintType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.TicketPrintWindow")!;Exception? ticketPreviewError=null;
@@ -221,6 +229,26 @@ internal static class Program
                 Check(store.History(eventId).Count==3,"opening print preview creates no issuance");
             }catch(Exception ex){ticketPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(ticketPreviewError is not null)throw ticketPreviewError;
             Check(store.History(eventId).Count==3&&!store.Recipients().Contains("UI print preview only"),"closing ticket print preview reserves neither seats nor recipient");
+            var originalInvoice=store.Invoice(eventId,store.Issues(eventId).Single().Id);
+            hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
+            Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
+            Exception? mixedPreviewError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
+                previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
+                var occupied=(InvoiceInfo)ticketPrintType.GetField("originalOccupied",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(previewWindow)!;
+                Check(occupied.Tickets.Count==1&&occupied.Tickets[0]==originalInvoice.Tickets.Single(t=>t.SeatId==seatIds[0]),"mixed preview retains occupied ticket identity, price, series and invoice");
+                var page=Logical(previewWindow).OfType<DocumentPageView>().First().DocumentPaginator.GetPage(0).Visual;
+                Check(Visual(page).OfType<Border>().Count()==2,"mixed preview renders both free and occupied ticket cards");
+            }catch(Exception ex){mixedPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(mixedPreviewError is not null)throw mixedPreviewError;
+            var invoiceAfterPreview=store.Invoice(eventId,originalInvoice.Id);
+            Check(store.History(eventId).Count==3&&store.Issues(eventId).Count==1&&invoiceAfterPreview.Tickets.SequenceEqual(originalInvoice.Tickets)&&invoiceAfterPreview.Sender==originalInvoice.Sender&&!store.Recipients().Contains("UI mixed preview only")&&store.Seats(eventId).Single(s=>s.Id==seatIds[3]).Available,"closing mixed preview preserves original invoice and leaves free seat unissued");
+            var extensionType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.InvoiceExtensionWindow")!;
+            var extension=(Window)Activator.CreateInstance(extensionType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object[]{store,eventId,originalInvoice.Id},null)!;extension.Show();Pump();
+            var extensionHall=Logical(extension).OfType<Tickets.App.HallView>().Single();var extendButton=Logical(extension).OfType<Button>().Single(b=>Equals(b.Content,"Дополнить накладную"));
+            Check(extensionHall.ActualWidth>100&&extensionHall.ActualHeight>100&&!extendButton.IsEnabled,"invoice extension renders hall and requires a selection");
+            extensionHall.SetSelection(new[]{seatIds[0]});Check(!extendButton.IsEnabled,"invoice extension rejects occupied seat selection");
+            extensionHall.SetSelection(new[]{seatIds[3]});Check(extendButton.IsEnabled&&Logical(extension).OfType<TextBlock>().Any(t=>t.Text.Contains("Мест: 1")),"invoice extension enables one free priced seat and updates summary");
+            extensionHall.SetSelection(new[]{seatIds[0],seatIds[3]});Check(!extendButton.IsEnabled,"invoice extension rejects mixed occupied and free selection");extension.Close();
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},true);
             typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});hall.SetSelection(new[]{seatIds[3]});
             Check(Equals(((Button)main.FindName("SaleStateButton")).Content,"Вернуть в продажу")&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot issue or print and expose restore action");
@@ -253,7 +281,7 @@ internal static class Program
             Exception? newRecipientError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? creation=null;try{
                 creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="RecipientEditorWindow"&&w.IsVisible);
-                Logical(creation).OfType<TextBox>().Single().Text="UI stand-alone recipient";Click(creation,"Создать");
+                Logical(creation).OfType<TextBox>().First().Text="UI stand-alone recipient";Click(creation,"Создать");
             }catch(Exception ex){newRecipientError=ex;creation?.Close();}}));Click(recipientsWindow,"Создать получателя");if(newRecipientError is not null)throw newRecipientError;
             Check(store.Recipients().Contains("UI stand-alone recipient"),"new recipient saves before any ticket issuance");
             var orgList=Logical(recipientsWindow).OfType<ListBox>().Single();
@@ -307,7 +335,9 @@ internal static class Program
                         try{
                             var pricing=Inline("PriceEditorWindow");priceWindow=(Window)pricing.Tag;
                             Check(app.Windows.Cast<Window>().Count(w=>w.IsVisible)==1,"nested pricing form remains inside main window");
-                            Logical(pricing).OfType<TextBox>().First().Text="Embedded pricing";Click(pricing,"Назначить всему залу");Click(pricing,"Сохранить новую расценовку");
+                            Logical(pricing).OfType<TextBox>().First().Text="Embedded pricing";Click(pricing,"Назначить всему залу");
+                            Check(!Logical(pricing).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить")&&b.IsVisible),"embedded pricing saves from header rather than a duplicate form action");
+                            Visual(main).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")&&b.IsVisible).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                         }catch(Exception ex){priceError=ex;priceWindow?.Close();}
                     }));
                     Click(content,"Создать");if(priceError is not null)throw priceError;
@@ -353,15 +383,39 @@ internal static class Program
     [DllImport("user32.dll",CharSet=CharSet.Unicode)] private static extern int GetWindowText(IntPtr window,System.Text.StringBuilder text,int count);
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x,int y);
     [DllImport("user32.dll")] private static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
-    private static void Gesture(Tickets.App.HallView hall,Point from,Point to)
+    private static void Gesture(Tickets.App.HallView hall,Point from,Point to,bool right=false)
     {
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
         void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");WaitForInput();}
-        Position(from);mouse_event(2,0,0,0,UIntPtr.Zero);WaitForInput();
-        Position(to);mouse_event(4,0,0,0,UIntPtr.Zero);WaitForInput();
+        Position(from);mouse_event(right?8u:2u,0,0,0,UIntPtr.Zero);WaitForInput();
+        Position(to);mouse_event(right?16u:4u,0,0,0,UIntPtr.Zero);WaitForInput();
         Console.WriteLine($"Mouse gesture {from} -> {to}; selected: {string.Join(',',hall.Selected)}");
+    }
+    private static void CheckSeatRenderingAndContext(Tickets.App.HallView hall,SeatInfo[] source)
+    {
+        var states=new[]{source[0] with{Number="",Row="",X=0,Y=0,TicketId=101,IsReserved=false,IsPrinted=false},
+            source[1] with{Number="",Row="",X=24,Y=0,TicketId=102,IsReserved=false,IsPrinted=true},
+            source[2] with{Number="",Row="",X=48,Y=0,TicketId=103,IsReserved=true,IsPrinted=false}};
+        hall.Load(states,Array.Empty<SectorInfo>(),true);Pump();
+        var drawing=(DrawingGroup)typeof(Tickets.App.HallView).GetField("drawing",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(hall)!;
+        var visual=new DrawingVisual();using(var dc=visual.RenderOpen()){dc.PushTransform(new ScaleTransform(8,8));dc.DrawDrawing(drawing);}
+        var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap(520,144,96,96,PixelFormats.Pbgra32);bitmap.Render(visual);
+        var pixels=new byte[520*144*4];bitmap.CopyPixels(pixels,520*4,0);
+        int Count(int seat,Func<byte,byte,byte,bool> match)
+        {
+            var count=0;for(var y=16;y<112;y++)for(var x=seat*192+16;x<seat*192+112;x++){var i=(y*520+x)*4;if(pixels[i+3]==255&&match(pixels[i+2],pixels[i+1],pixels[i]))count++;}return count;
+        }
+        Check(Count(0,(r,g,b)=>r<20&&g<20&&b<20)>1000&&Count(0,(r,g,b)=>r>220&&g>220&&b>220)>500,"invoice-only occupied seat renders black with dense white hatching");
+        Check(Count(1,(r,g,b)=>r>230&&g<20&&b<20)>1000&&Count(1,(r,g,b)=>r<20&&g<20&&b<20)>500,"issued and printed seat renders red with dense black hatching");
+        Check(Count(2,(r,g,b)=>r<20&&g<20&&b<20)>1000&&Count(2,(r,g,b)=>r>220&&g>220&&b>220)>500,"reserved seat renders black with white hatching");
+        Check(pixels[(64*520+136)*4+3]==0,"seat hatching remains clipped inside seat bounds");
+        var contexts=new List<long>();hall.SeatContextRequested+=(id,_)=>contexts.Add(id);var offsetField=typeof(Tickets.App.HallView).GetField("offset",BindingFlags.Instance|BindingFlags.NonPublic)!;
+        var before=(Vector)offsetField.GetValue(hall)!;Gesture(hall,new Point(8,8),new Point(8,8),true);
+        Check(contexts.SequenceEqual(new[]{states[0].Id})&&((Vector)offsetField.GetValue(hall)!)==before,"stationary right click requests seat context without panning");
+        Gesture(hall,new Point(8,8),new Point(38,8),true);
+        Check(contexts.Count==1&&((Vector)offsetField.GetValue(hall)!)!=before&&hall.Selected.Count==0,"right drag pans without opening seat context or changing selection");
     }
     private static void WaitForInput()
     {

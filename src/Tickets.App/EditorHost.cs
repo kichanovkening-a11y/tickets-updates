@@ -42,7 +42,9 @@ public partial class MainWindow
         var panel=new DockPanel();card.Child=panel;page.Children.Add(card);
         var title=new DockPanel{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
         var close=new Button{Content="Закрыть",Margin=new Thickness(8)};close.Click+=(_,_)=>editor.Close();DockPanel.SetDock(close,Dock.Right);title.Children.Add(close);
-        title.Children.Add(new TextBlock{Text=editor.Title,FontSize=21,FontWeight=FontWeights.Bold,Margin=new Thickness(15),VerticalAlignment=VerticalAlignment.Center});
+        if(editor is PriceEditorWindow priceEditor&&priceEditor.HeaderSaveAction is not null)
+        {var save=new Button{Content="Сохранить",Margin=new Thickness(8)};save.Click+=(_,_)=>priceEditor.HeaderSaveAction();title.Children.Add(save);}
+        else title.Children.Add(new TextBlock{Text=editor.Title,FontSize=21,FontWeight=FontWeights.Bold,Margin=new Thickness(15),VerticalAlignment=VerticalAlignment.Center});
         var content=new ContentControl{Content=body,Tag=editor,HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch};panel.Children.Add(content);
         var previous=Keyboard.FocusedElement;if(editorStack.TryPeek(out var prior))prior.IsEnabled=false;
         editorStack.Push(page);hostedEditors[page]=editor;DialogLayer.Children.Add(page);DialogLayer.Visibility=Visibility.Visible;MainContent.IsEnabled=false;

@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); }
 
     private SqliteConnection Open()
     {
@@ -46,11 +46,12 @@ public sealed partial class Store
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,coalesce(t.amount,p.amount),coalesce(pc.color,p.color,'#CBD5E1'),
-              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number,b.seat_id IS NOT NULL
+              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number,b.seat_id IS NOT NULL,t.issue_id,ts.printed_at,coalesce(ts.state,'issued')
             FROM event e JOIN seat s ON s.venue_id=e.venue_id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
             LEFT JOIN event_price p ON p.event_id=e.id AND p.seat_id=s.id
             LEFT JOIN ticket t ON t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL
+            LEFT JOIN ticket_state ts ON ts.ticket_id=t.id
             LEFT JOIN price_color pc ON pc.amount=coalesce(t.amount,p.amount)
             LEFT JOIN event_seat_block b ON b.event_id=e.id AND b.seat_id=s.id
             WHERE e.id=$e ORDER BY z.y,z.x,s.y,s.x,s.id
@@ -58,7 +59,7 @@ public sealed partial class Store
         using var r=cmd.ExecuteReader(); var result=new List<SeatInfo>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),
             r.GetDouble(4),r.GetDouble(5),r.IsDBNull(6)?null:r.GetInt64(6),r.GetString(7),
-            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11),r.GetBoolean(12)));
+            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11),r.GetBoolean(12),r.IsDBNull(13)?null:r.GetInt64(13),!r.IsDBNull(14),r.GetString(15)=="reserved"));
         return result;
     }
 
@@ -76,14 +77,15 @@ public sealed partial class Store
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT t.id,s.id,z.name,s.row_label,s.number,t.recipient,t.series,t.number,t.amount,
-              t.issued_at,t.returned_at,t.issue_id FROM ticket t JOIN seat s ON s.id=t.seat_id
+              t.issued_at,t.returned_at,t.issue_id,ts.printed_at,coalesce(ts.state,'issued') FROM ticket t JOIN seat s ON s.id=t.seat_id
+            LEFT JOIN ticket_state ts ON ts.ticket_id=t.id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
             WHERE t.event_id=$e ORDER BY t.id DESC
             ""","$e",eventId);
         using var r=cmd.ExecuteReader(); var result=new List<TicketInfo>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),
             r.GetString(4),r.GetString(5),r.GetString(6),r.GetInt64(7),r.GetInt64(8),r.GetString(9),
-            r.IsDBNull(10)?null:r.GetString(10),r.GetInt64(11)));
+            r.IsDBNull(10)?null:r.GetString(10),r.GetInt64(11),r.IsDBNull(12)?null:r.GetString(12),r.GetString(13)=="reserved"));
         return result;
     }
 
@@ -99,6 +101,9 @@ public sealed partial class Store
     }
 
     public long Issue(long eventId, IReadOnlyCollection<long> seats, string recipient, string series, long firstNumber, IReadOnlyDictionary<long,long>? prices=null)
+        => IssueCore(eventId,seats,recipient,series,firstNumber,prices,false);
+
+    private long IssueCore(long eventId, IReadOnlyCollection<long> seats, string recipient, string series, long firstNumber, IReadOnlyDictionary<long,long>? prices, bool reserved)
     {
         recipient=Required(recipient,"Получатель"); series=Series(series);
         if(recipient.Length is 0 or >200) throw new TicketException("Укажите получателя (до 200 символов).");
@@ -120,6 +125,11 @@ public sealed partial class Store
                 ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series,"$sender",DefaultSender);batch.Transaction=tx;
             var result=batch.ExecuteScalar();if(result is null)throw new TicketException("Показ не найден.");
             var issueId=Convert.ToInt64(result);
+            using(var senderQuery=Command(c,"SELECT sender FROM issue_batch WHERE id=$i","$i",issueId))
+            {
+                senderQuery.Transaction=tx;
+                CaptureIssueOrganizations(c,tx,issueId,Convert.ToString(senderQuery.ExecuteScalar())!,recipient);
+            }
             foreach(var sid in seats)
             {
                 using var check=Command(c,"""
@@ -140,6 +150,8 @@ public sealed partial class Store
                     ""","$e",eventId,"$s",sid,"$r",recipient,"$series",series,"$n",n,
                     "$a",actualAmount,"$time",timestamp,"$issue",issueId);
                 insert.Transaction=tx; insert.ExecuteNonQuery();
+                using var state=Command(c,"INSERT INTO ticket_state(ticket_id,state) VALUES(last_insert_rowid(),$state)","$state",reserved?"reserved":"issued");
+                state.Transaction=tx;state.ExecuteNonQuery();
                 if(n<long.MaxValue) n++;
             }
             AddRecipient(c,tx,recipient);tx.Commit();return issueId;

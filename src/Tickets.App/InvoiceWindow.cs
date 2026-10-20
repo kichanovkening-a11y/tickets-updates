@@ -11,6 +11,7 @@ internal sealed class InvoiceWindow : EditorWindow
     private readonly long eventId,issueId;
     private readonly ComboBox senderBox=new(){IsEditable=true,IsTextSearchEnabled=true,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
     private readonly TextBlock savedStatus=new(){TextTrimming=TextTrimming.CharacterEllipsis,Margin=new Thickness(0,3,0,3),FontSize=12};
+    private readonly Button printTickets,extendInvoice;
     private readonly FlowDocumentScrollViewer reader=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     public InvoiceWindow(Store store,long eventId,long issueId,bool print=false):base(store,$"Накладная № {issueId}",1000,850)
     {
@@ -24,13 +25,25 @@ internal sealed class InvoiceWindow : EditorWindow
             IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
             Refresh();
         })));
-        var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());header.Children.Add(senderRow);
+        var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});header.Children.Add(senderRow);
         senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
+        var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
+        Button(senderActions,"+ Отправитель",()=>Try(()=>EditSender(false)));
+        Button(senderActions,"Реквизиты",()=>Try(()=>EditSender(true)));
+        Button(header,"Обновить реквизиты документа",()=>Try(()=>{PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);Refresh();}));
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
-        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);Grid.SetRow(actions,1);root.Children.Add(actions);
+        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRow(actionsScroll,1);root.Children.Add(actionsScroll);
         Square(actions,"Сохранить",()=>Try(()=>{PersistSender();Refresh();}),Brushes.SteelBlue);
         Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
+        printTickets=Button(actions,"Печать билетов",()=>Try(()=>{
+            PersistSender();var seats=Store.Invoice(eventId,issueId).Tickets.Where(t=>t.ReturnedAt is null).Select(t=>t.SeatId).ToArray();
+            if(seats.Length==0)throw new TicketException("В накладной нет выданных билетов для печати.");
+            new TicketPrintWindow(Store,eventId,seats).ShowDialog();Refresh();
+        }));printTickets.Width=112;printTickets.Height=112;printTickets.Content=new TextBlock{Text="Печать билетов",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center};
+        extendInvoice=Button(actions,"Дополнить накладную",()=>Try(()=>{
+            PersistSender();new InvoiceExtensionWindow(Store,eventId,issueId).ShowDialog();Refresh();
+        }));extendInvoice.Width=112;extendInvoice.Height=112;extendInvoice.Content=new TextBlock{Text="Дополнить накладную",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center};
         Grid.SetRow(reader,1);root.Children.Add(reader);Refresh();
         Closing+=(_,e)=>{
             try{PersistSender();Refresh();}
@@ -45,9 +58,17 @@ internal sealed class InvoiceWindow : EditorWindow
     private void Refresh()
     {
         var invoice=Store.Invoice(eventId,issueId);reader.Document=Document(invoice);
+        printTickets.IsEnabled=invoice.Tickets.Any(t=>t.ReturnedAt is null);
+        extendInvoice.IsEnabled=!Store.IsEventArchived(eventId)&&invoice.Tickets.Any(t=>t.ReturnedAt is null)&&!invoice.Tickets.Any(t=>t.ReturnedAt is null&&t.IsReserved);
         try{Store.SaveAllDocuments(eventId,issueId);savedStatus.Text="Документы сохранены: "+Store.DocumentsDirectory;}
         catch(Exception ex){savedStatus.Text="Выдача сохранена в базе. "+ex.Message;}
         savedStatus.ToolTip=savedStatus.Text;
+    }
+    private void EditSender(bool existing)
+    {
+        var editor=new SenderEditorWindow(Store,existing?senderBox.Text:"",existing);
+        if(editor.ShowDialog()!=true)return;
+        senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);Refresh();
     }
     private void PersistSender()=>Store.UpdateInvoiceSender(eventId,issueId,senderBox.Text);
     private void Print()

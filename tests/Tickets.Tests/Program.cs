@@ -314,6 +314,10 @@ Test("41-ticket complete document package uses recipient and exact totals",s=>{
     var directory=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-docqa");Directory.CreateDirectory(directory);
     foreach(var file in s.SaveAllDocuments(e.Id,issue))File.Copy(file,System.IO.Path.Combine(directory,System.IO.Path.GetFileName(file)),true);
 });
+BusinessDocumentChecks.Register(Test);
+TicketLifecycleChecks.Register(Test);
+PricingEditorChecks.Register(Test);
+SenderRequisitesChecks.Register(Test);
 PackageDocumentsChecks.Register(Test);
 CatalogDeletionChecks.Register(Test);
 PricingChecks.Register(Test);

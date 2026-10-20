@@ -32,6 +32,19 @@ void Reject(Action action)
     }
     throw new Exception("seed has no event with 3 priced seats");
 }
+Test("multiple showing dates save atomically and reject conflicts", s => {
+    var venue=s.CreateHall("Multi-date hall","",new[]{new DraftSeat{Row="1",Number="1",X=0,Y=0}});
+    var plan=s.SavePlan(venue,"multi-date plan",s.VenueSeats(venue).Select(x=>new PriceValue(x.Id,500,"#FF0000")).ToArray());
+    var performance=s.SavePerformance("Multi-date performance");
+    var method=typeof(Store).GetMethod("CreateEvents",new[]{typeof(long),typeof(long),typeof(long),typeof(IReadOnlyList<DateTime>)});
+    Check(method is not null,"batch date creation is missing");
+    List<long> Save(params DateTime[] dates){try{return (List<long>)method!.Invoke(s,new object[]{performance,venue,plan,dates})!;}catch(System.Reflection.TargetInvocationException ex) when(ex.InnerException is TicketException){throw ex.InnerException;}}
+    var date=new DateTime(2030,1,2,19,30,15);var ids=Save(date,date.AddDays(1));
+    Check(ids.Count==2&&ids.All(id=>s.Seats(id).Single().Amount==500));
+    Reject(()=>Save(date.AddDays(2),date));
+    Check(s.Events().Count(e=>e.VenueId==venue)==2,"conflicting batch must roll back its first insert");
+    Reject(()=>Save(date.AddDays(3),date.AddDays(3)));Reject(()=>Save());
+});
 Test("real imported halls, labels and no legacy tickets", s => {
     var c = Choice(s); Check(s.Events().Count > 100); Check(s.Seats(c.Event).Count > 100);
     Check(s.Events().All(e => e.IssuedCount == 0));

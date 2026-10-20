@@ -7,6 +7,7 @@ public sealed class HallRowLayout
     public string Label {get;set;}="1";
     public int SeatCount {get;set;}=20;
     public int AisleAfter {get;set;}
+    public string FirstSeat {get;set;}="";
 }
 
 /// <summary>Builds draft seats once. Subsequent editing and deletion never regenerate their labels or positions.</summary>
@@ -15,6 +16,13 @@ public static class HallLayout
     public static string Label(string first,int offset)
     {
         first=first.Trim();
+        if(first.Contains(','))
+        {
+            var parts=first.Split(',').Select(x=>x.Trim()).ToArray();
+            if(parts.Any(string.IsNullOrWhiteSpace))throw new TicketException("Перечислите подписи через запятую, например А, 1.");
+            if(offset<0)throw new TicketException("Смещение номера не может быть отрицательным.");
+            return offset<parts.Length-1?parts[offset]:Label(parts[^1],offset-parts.Length+1);
+        }
         if(offset<0)throw new TicketException("Смещение номера не может быть отрицательным.");
         if(long.TryParse(first,NumberStyles.None,CultureInfo.InvariantCulture,out var number))
         {
@@ -48,8 +56,11 @@ public static class HallLayout
         for(var r=0;r<rows.Count;r++)
         {
             var row=rows[r];
+            var start=string.IsNullOrWhiteSpace(row.FirstSeat)?firstSeat:row.FirstSeat;
+            var labels=Enumerable.Range(0,row.SeatCount).Select(i=>Label(start,i)).ToArray();
+            if(labels.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=labels.Length)throw new TicketException($"В ряду {row.Label} повторяются подписи мест.");
             for(var c=0;c<row.SeatCount;c++)result.Add(new DraftSeat{Sector=sector,Row=row.Label.Trim(),
-                Number=Label(firstSeat,reverse?row.SeatCount-1-c:c),X=c*20+(row.AisleAfter>0&&c>=row.AisleAfter?36:0),Y=y+r*22});
+                Number=labels[reverse?row.SeatCount-1-c:c],X=c*20+(row.AisleAfter>0&&c>=row.AisleAfter?36:0),Y=y+r*22});
         }
         return result;
     }

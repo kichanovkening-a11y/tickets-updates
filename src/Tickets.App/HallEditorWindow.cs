@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using Tickets.Core;
@@ -14,13 +15,13 @@ internal sealed class HallEditorWindow : EditorWindow
     private readonly HallView preview=new();
     private readonly DataGrid table=new(){IsReadOnly=false,AutoGenerateColumns=false,SelectionMode=DataGridSelectionMode.Extended,CanUserAddRows=false,CanUserDeleteRows=false};
     private readonly ObservableCollection<HallRowLayout> rowLayouts=[];
-    private readonly DataGrid rowTable=new(){IsReadOnly=false,AutoGenerateColumns=false,CanUserAddRows=false,CanUserDeleteRows=false,Height=210,Margin=new Thickness(0,10,0,0)};
+    private readonly DataGrid rowTable=new(){IsReadOnly=false,AutoGenerateColumns=false,CanUserAddRows=false,CanUserDeleteRows=false,Margin=new Thickness(0,10,0,0)};
     private readonly TabControl tabs=new();
     private readonly TextBlock summary=new(){Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap};
     private readonly Dictionary<int,HallRowLayout> spareRows=[];
     private TextBox? countInput,firstLabelInput;
     private sealed record HallState(List<DraftSeat> Seats,List<HallRowLayout> Rows,int[] Selected,Dictionary<int,HallRowLayout> Spare,string CountText,string FirstLabel);
-    private static HallRowLayout CloneRow(HallRowLayout row)=>new(){Label=row.Label,SeatCount=row.SeatCount,AisleAfter=row.AisleAfter};
+    private static HallRowLayout CloneRow(HallRowLayout row)=>new(){Label=row.Label,SeatCount=row.SeatCount,AisleAfter=row.AisleAfter,FirstSeat=row.FirstSeat};
     private readonly Stack<HallState> history=[];
     private Button? undo;
     private HallState? pendingTableEdit;
@@ -49,14 +50,31 @@ internal sealed class HallEditorWindow : EditorWindow
     public HallEditorWindow(Store store,VenueInfo? copy=null):base(store,"Создание зала")
     {
         if(copy is not null) foreach(var s in store.HallDraft(copy.Id)) seats.Add(s);
-        var grid=new Grid{Margin=new Thickness(16)}; grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(280)}); grid.ColumnDefinitions.Add(new ColumnDefinition()); Content=grid;
-        var form=new StackPanel{Margin=new Thickness(0,0,15,0)};
-        grid.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
-        var name=Field(form,"Название зала",copy is null?"":copy.Name+" (копия)");
-        var address=Field(form,"Адрес",copy?.Address??"");
+        var grid=new Grid{Margin=new Thickness(16)}; grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(320)}); grid.ColumnDefinitions.Add(new ColumnDefinition()); Content=grid;
+        var sidebar=new DockPanel{Margin=new Thickness(0,0,12,0)};grid.Children.Add(sidebar);
+        var footer=new StackPanel();DockPanel.SetDock(footer,Dock.Bottom);sidebar.Children.Add(footer);
+        var settings=new TabControl();sidebar.Children.Add(settings);
+        var metadata=new StackPanel{Margin=new Thickness(6)};
+        settings.Items.Add(new TabItem{Header="Зал",Content=metadata});
+        var form=new StackPanel{Margin=new Thickness(6)};
+        settings.Items.Add(new TabItem{Header="Сектор",Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}});
+        var movement=new StackPanel{Margin=new Thickness(6)};
+        settings.Items.Add(new TabItem{Header="Сдвиг",Content=new ScrollViewer{Content=movement,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}});
+        var rowPanel=new DockPanel{Margin=new Thickness(10)};
+        var rowHeader=new StackPanel();DockPanel.SetDock(rowHeader,Dock.Top);rowPanel.Children.Add(rowHeader);
+        var builtSector=seats.Count>0;
+        var name=Field(metadata,"Название зала",copy is null?"":copy.Name+" (копия)");
+        var address=Field(metadata,"Адрес",copy?.Address??"");
         var sector=Field(form,"Сектор","Партер");
         var rows=Field(form,"Количество рядов","10"); var places=Field(form,"Мест в каждом ряду","20");
-        var firstRow=Field(form,"Первый ряд: число / латиница / кириллица","1"); var firstSeat=Field(form,"Первое место: число / латиница / кириллица","1");
+        var sizing=new UniformGrid{Columns=2};
+        var rowsLabel=form.Children[form.Children.Count-4];var rowsBox=form.Children[form.Children.Count-3];
+        var placesLabel=form.Children[form.Children.Count-2];var placesBox=form.Children[form.Children.Count-1];
+        form.Children.Remove(rowsLabel);form.Children.Remove(rowsBox);form.Children.Remove(placesLabel);form.Children.Remove(placesBox);
+        var rowSizing=new StackPanel{Margin=new Thickness(0,0,8,0)};var seatSizing=new StackPanel();
+        rowSizing.Children.Add(rowsLabel);rowSizing.Children.Add(rowsBox);seatSizing.Children.Add(placesLabel);seatSizing.Children.Add(placesBox);
+        sizing.Children.Add(rowSizing);sizing.Children.Add(seatSizing);form.Children.Add(sizing);
+        var firstRow=Field(form,"Ряды: начало или А, 1","1"); var firstSeat=Field(form,"Места: начало или А, 1","1");
         countInput=rows;firstLabelInput=firstRow;
         HallState? countEdit=null,labelEdit=null;
         rows.GotKeyboardFocus+=(_,_)=>{countEdit=Capture();};
@@ -65,10 +83,10 @@ internal sealed class HallEditorWindow : EditorWindow
         firstRow.LostKeyboardFocus+=(_,_)=>{if(labelEdit is not null&&labelEdit.FirstLabel!=firstRow.Text)Remember(labelEdit);labelEdit=null;};
         var reverse=new CheckBox{Content="Нумерация справа налево",Margin=new Thickness(0,10,0,0)}; form.Children.Add(reverse);
         var aisle=Field(form,"Проход после места по порядку (0 — нет)","0");
-        form.Children.Add(new TextBlock{Text="Настройка каждого ряда: подпись, мест, проход",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,0)});
-        foreach(var (header,path,width) in new[]{("Ряд","Label",65),("Мест","SeatCount",65),("Проход","AisleAfter",75)})
+        rowHeader.Children.Add(new TextBlock{Text="Задайте подпись, число мест и проход для каждого ряда. В колонке «Начало мест» можно указать А, 1 — сначала А, затем 1, 2… Пустая ячейка использует общую настройку слева.",TextWrapping=TextWrapping.Wrap});
+        foreach(var (header,path,width) in new[]{("Ряд","Label",85),("Мест","SeatCount",85),("Проход","AisleAfter",95),("Начало мест","FirstSeat",155)})
             rowTable.Columns.Add(new DataGridTextColumn{Header=header,Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.LostFocus},Width=width});
-        rowTable.ItemsSource=rowLayouts;form.Children.Add(rowTable);
+        rowTable.ItemsSource=rowLayouts;rowPanel.Children.Add(rowTable);
         void SyncRows(bool relabel=false)
         {
             if(!int.TryParse(rows.Text,out var count)||count is <1 or >200)return;
@@ -84,15 +102,16 @@ internal sealed class HallEditorWindow : EditorWindow
             catch(TicketException) { /* An incomplete first label is validated when adding the sector. */ }
         }
         rows.TextChanged+=(_,_)=>{if(!restoring)SyncRows();};firstRow.TextChanged+=(_,_)=>{if(!restoring)SyncRows(true);};
-        Button(form,"Применить мест и проход ко всем рядам",()=>Try(()=>{
+        Button(rowHeader,"Применить ко всем рядам",()=>Try(()=>{
             if(!CommitEdits())return;
             var count=Number(places,1,300);var gap=Number(aisle,0,count);
             Remember();foreach(var row in rowLayouts){row.SeatCount=count;row.AisleAfter=gap;}
             rowTable.Items.Refresh();
         }));
         SyncRows();
-        Button(form,"Добавить сектор",()=>Try(()=>{
-            if(!CommitEdits())return;
+        void AddSector()
+        {
+            if(!CommitEdits())throw new TicketException("Исправьте настройки рядов.");
             var count=Number(rows,1,200);SyncRows();
             HallLayout.Label(firstRow.Text,0);
             if(rowLayouts.Count!=count)throw new TicketException("Проверьте настройку рядов.");
@@ -100,25 +119,27 @@ internal sealed class HallEditorWindow : EditorWindow
             var added=HallLayout.Generate(sector.Text,rowLayouts.ToArray(),firstSeat.Text,reverse.IsChecked==true,y);
             if(seats.Count+added.Count>50000)throw new TicketException("Максимум 50 000 мест в одном зале.");
             Remember();foreach(var seat in added)seats.Add(seat);
-            Refresh();
-        }));
-        var dx=Field(form,"Сдвиг выбранных по X","0"); var dy=Field(form,"Сдвиг выбранных по Y","0");
-        Button(form,"Сдвинуть выбранные места",()=>Try(()=>{
+            Refresh();tabs.SelectedIndex=0;builtSector=true;
+        }
+        Button(footer,"Добавить сектор",()=>Try(AddSector));
+        var dx=Field(movement,"Сдвиг выбранных по X","0"); var dy=Field(movement,"Сдвиг выбранных по Y","0");
+        Button(movement,"Сдвинуть выбранные места",()=>Try(()=>{
             if(!double.TryParse(dx.Text,out var x)||!double.TryParse(dy.Text,out var y)||!double.IsFinite(x)||!double.IsFinite(y)) throw new TicketException("Введите числовой сдвиг.");
             var selected=Selection(); if(selected.Count==0) throw new TicketException("Выберите места на схеме или в таблице.");
             Remember();foreach(var s in selected){s.X+=x;s.Y+=y;} Refresh();
         }));
-        Button(form,"Удалить выбранные места",()=>Try(DeleteSelected));
-        undo=Button(form,"Шаг назад",()=>Try(Undo));undo.IsEnabled=false;
+        Button(movement,"Удалить выбранные места",()=>Try(DeleteSelected));
+        undo=Button(movement,"Шаг назад",()=>Try(Undo));undo.IsEnabled=false;
         grid.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Z&&Keyboard.Modifiers==ModifierKeys.Control&&Keyboard.FocusedElement is not TextBox){Try(Undo);e.Handled=true;}};
-        Button(form,"Сохранить как новый зал",()=>Try(()=>{
+        Button(footer,"Сохранить как новый зал",()=>Try(()=>{
             if(!CommitEdits())return;
+            if(seats.Count==0&&!builtSector)AddSector();
             CreatedId=store.CreateHall(name.Text,address.Text,seats.ToArray()); Finish(true);
         }));
-        form.Children.Add(summary);
-        form.Children.Add(new TextBlock{Text="В таблице рядов настройте каждый ряд отдельно. Проход — после места по порядку, 0 — нет. На схеме выберите места щелчками или рамкой и нажмите Del: оставшиеся подписи и координаты сохраняются. Ряды, номера и координаты можно менять в таблице «Места». Зал сохраняется новой копией.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,0)});
+        footer.Children.Add(summary);
+        metadata.Children.Add(new TextBlock{Text="1. Заполните название и настройки сектора.\n2. Во вкладке «Ряды» уточните мест и проход для каждого ряда.\n3. Нажмите «Добавить сектор» — появится схема. Если зал ещё пуст, «Сохранить» построит первый сектор автоматически.\n\n«А, 1» означает А, 1, 2, 3… Для буквенной последовательности укажите просто А.",TextWrapping=TextWrapping.Wrap,FontSize=14,Margin=new Thickness(0,12,0,0)});
         var area=new DockPanel(); Grid.SetColumn(area,1); grid.Children.Add(area);
-        var toolbar=new StackPanel{Orientation=Orientation.Horizontal}; DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
+        var toolbar=new WrapPanel(); DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
         Button(toolbar,"Весь зал",()=>preview.Fit()); Button(toolbar,"Обновить схему",()=>Try(()=>Refresh()));
         Button(toolbar,"Удалить выбранные (Del)",()=>Try(DeleteSelected));
         preview.KeyDown+=(_,e)=>{if(e.Key==Key.Delete){Try(DeleteSelected);e.Handled=true;}};
@@ -134,10 +155,10 @@ internal sealed class HallEditorWindow : EditorWindow
             };
         }
         table.ItemsSource=seats;
-        tabs.Items.Add(new TabItem{Header="Схема",Content=preview}); tabs.Items.Add(new TabItem{Header="Места — редактирование",Content=table}); area.Children.Add(tabs);
+        tabs.Items.Add(new TabItem{Header="Схема",Content=preview}); tabs.Items.Add(new TabItem{Header="Ряды",Content=rowPanel}); tabs.Items.Add(new TabItem{Header="Места — редактирование",Content=table}); area.Children.Add(tabs);
         OnShown(()=>Refresh());
     }
-    private List<DraftSeat> Selection()=>tabs.SelectedIndex==1?table.SelectedItems.Cast<DraftSeat>().ToList():
+    private List<DraftSeat> Selection()=>tabs.SelectedIndex==2?table.SelectedItems.Cast<DraftSeat>().ToList():
         preview.Selected.Where(id=>id>0&&id<=seats.Count).Select(id=>seats[(int)id-1]).ToList();
     private void DeleteSelected()
     {

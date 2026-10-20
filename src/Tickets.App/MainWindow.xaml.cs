@@ -101,9 +101,9 @@ public partial class MainWindow : Window
     private void FindEventClick(object sender,RoutedEventArgs e) { SearchBox.Focus(); SearchBox.SelectAll(); }
     private void UpdateClick(object sender,RoutedEventArgs e)=>Run(()=>new UpdateWindow(store).ShowDialog());
     private void CloseClick(object sender,RoutedEventArgs e)=>Close();
-    private void PerformancesClick(object sender,RoutedEventArgs e)=>Run(()=>{new PerformanceWindow(store).ShowDialog();RefreshCatalogNavigation();});
+    private void PerformancesClick(object sender,RoutedEventArgs e)=>Run(()=>{var catalog=new PerformanceWindow(store);catalog.ShowDialog();RefreshCatalogNavigation();if(catalog.SelectedEventId!=0){SearchBox.Clear();ApplyFilter();SelectEvent(catalog.SelectedEventId);}});
     private void NewHallClick(object sender,RoutedEventArgs e)=>Run(()=>new HallEditorWindow(store).ShowDialog());
-    private void PricesClick(object sender,RoutedEventArgs e)=>Run(()=>new PriceEditorWindow(store).ShowDialog());
+    private void PricesClick(object sender,RoutedEventArgs e)=>Run(()=>new PricingDirectoryWindow(store).ShowDialog());
     private void NewEventClick(object sender,RoutedEventArgs e)=>Run(()=>{
         var dialog=new EventEditorWindow(store);
         if(dialog.ShowDialog()==true){ReadEventCatalog();SearchBox.Clear();ApplyFilter();SelectEvent(dialog.CreatedId);}
@@ -115,11 +115,14 @@ public partial class MainWindow : Window
         var buttons=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,12)};DockPanel.SetDock(buttons,Dock.Top);panel.Children.Add(buttons);
         var add=new Button{Content="Создать зал"};add.Click+=(_,_)=>Run(()=>{new HallEditorWindow(store).ShowDialog();list.ItemsSource=store.Venues();});buttons.Children.Add(add);
         var edit=new Button{Content="Открыть / изменить копию"};edit.Click+=(_,_)=>Run(()=>{if(list.SelectedItem is VenueInfo v){new HallEditorWindow(store,v).ShowDialog();list.ItemsSource=store.Venues();}});buttons.Children.Add(edit);
-        var delete=new Button{Content="Удалить площадку"};delete.Click+=(_,_)=>Run(()=>{
+        var delete=new MenuItem{Header="Удалить"};delete.Click+=(_,_)=>Run(()=>{
             if(list.SelectedItem is not VenueInfo selected)throw new TicketException("Выберите площадку.");
             if(MessageBox.Show(window.DialogOwnerForHost,$"Удалить «{selected.Name}» из справочника? Выдачи и документы сохранятся в истории.","Удаление площадки",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             store.DeleteVenue(selected.Id);list.ItemsSource=store.Venues();
-        });buttons.Children.Add(delete);
+        });
+        list.ContextMenu=new ContextMenu();list.ContextMenu.Items.Add(delete);
+        list.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject source&&ItemsControl.ContainerFromElement(list,source) is ListBoxItem item)item.IsSelected=true;else e.Handled=true;};
+        list.ContextMenuOpening+=(_,e)=>{if(list.SelectedItem is not VenueInfo)e.Handled=true;};
         panel.Children.Add(list);window.ShowDialog();RefreshCatalogNavigation();
     });
     private void LoadEvent(bool fit)

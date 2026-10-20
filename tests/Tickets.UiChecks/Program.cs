@@ -35,6 +35,12 @@ internal static class Program
             Check(actions.Count>=15,"main actions found");
             Check(!actions.Any(b=>Equals(b.Content,"Спецификации")||Equals(b.Content,"Свернуть")||Equals(b.Content,"В окно")),"main toolbar omits duplicate window controls and specifications");
             Check(actions.Where(b=>b.IsVisible).All(b=>b.ActualWidth==200&&b.ActualHeight==44),"all main action buttons have equal rendered size");
+            foreach(var button in actions.Where(b=>b.IsVisible))
+            {
+                var label=Visual(button).OfType<TextBlock>().FirstOrDefault();if(label is null)continue;
+                var bounds=label.TransformToAncestor(button).TransformBounds(new Rect(0,0,label.ActualWidth,label.ActualHeight));
+                Check(bounds.Left>=-1&&bounds.Top>=-1&&bounds.Right<=button.ActualWidth+1&&bounds.Bottom<=button.ActualHeight+1,"button text fits fixed dimensions: "+button.Content);
+            }
             store.SavePerformance("ТЕАТР Поисковый спектакль UI");
             var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EventEditorWindow")!;
             var editor=(Window)Activator.CreateInstance(type,store)!;editor.Show();Pump();
@@ -67,7 +73,9 @@ internal static class Program
             }));
             Click(editor,"Создать");Pump();if(nestedError is not null)throw nestedError;
             Check(combos[2].SelectedItem is PlanInfo plan&&plan.Name=="UI test pricing","new pricing selected after nested editor saves");
-            editor.Close();
+            Click(editor,"Добавить дату");date.SelectedDate=date.SelectedDate!.Value.AddDays(1);combos[3].Text="20";combos[4].Text="45";combos[5].Text="12";Click(editor,"Добавить дату");
+            var dateList=Logical(editor).OfType<ListBox>().Single();Check(dateList.Items.Count==2,"multiple showing dates accumulate in one editor");
+            Check(dateList.Items.Cast<DateTime>().Any(d=>d.Hour==20&&d.Minute==45&&d.Second==12),"each added date retains its own hours minutes and seconds");editor.Close();
             var hallType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.HallEditorWindow")!;
             var hallEditor=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;
             Exception? hallError=null;
@@ -92,6 +100,22 @@ internal static class Program
             var editedHall=store.Venues().Single(v=>v.Name=="UI row hall");var remaining=store.HallDraft(editedHall.Id);
             Check(remaining.Count==39&&remaining.Where(x=>x.Row=="А").Select(x=>x.Number).Contains("4")&&!remaining.Where(x=>x.Row=="А").Any(x=>x.Number=="1"),"drawing deletion preserves surviving seat labels");
             Check(remaining.Single(x=>x.Row=="А"&&x.Number=="4").X==60,"drawing deletion preserves original seat coordinates");
+            var automaticHall=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;
+            Exception? automaticError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
+                var inputs=Logical(automaticHall).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
+                inputs[0].Text="UI mixed automatic hall";inputs[3].Text="3";inputs[5].Text="А, 1";inputs[6].Text="А, 1";
+                var layoutGrid=Logical(automaticHall).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
+                foreach(var row in layoutGrid.Items.Cast<HallRowLayout>()){row.SeatCount=3;row.AisleAfter=0;}
+                var save=Logical(automaticHall).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить как новый зал"));
+                Check(save.IsVisible,"save hall is visible without scrolling");
+                Click(automaticHall,"Сохранить как новый зал");
+            }catch(Exception ex){automaticError=ex;automaticHall.Close();}}));
+            automaticHall.ShowDialog();Pump();if(automaticError is not null)throw automaticError;
+            var mixedHall=store.Venues().Single(v=>v.Name=="UI mixed automatic hall");
+            var mixedSeats=store.HallDraft(mixedHall.Id);
+            Check(mixedSeats.Count==9&&mixedSeats.Select(x=>x.Row).Distinct().OrderBy(x=>x).SequenceEqual(new[]{"1","2","А"}),"save builds configured first sector without a separate add action");
+            Check(mixedSeats.Where(x=>x.Row=="А").OrderBy(x=>x.X).Select(x=>x.Number).SequenceEqual(new[]{"А","1","2"}),"mixed seat labels preserve drawing order");
             var specType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.SpecificationWindow")!;
             var specWindow=(Window)Activator.CreateInstance(specType,store,"UI organization")!;specWindow.Show();Pump();
             var specFields=Logical(specWindow).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToArray();specFields[^1].Text="Билеты: Партер, ряд А. Условия согласованы.";
@@ -185,7 +209,31 @@ internal static class Program
             var recipientsWindow=(Window)Activator.CreateInstance(recipientsType,store)!;recipientsWindow.Show();Pump();
             Logical(recipientsWindow).OfType<TextBox>().Single().Text="ui rec";Pump();
             Check(Logical(recipientsWindow).OfType<ListBox>().Single().Items.Count==1,"organization directory searches significant word prefixes");
-            Check(Logical(recipientsWindow).OfType<TreeView>().Single().Items.Count>0,"organization directory opens all its issuance history");recipientsWindow.Close();
+            Check(Logical(recipientsWindow).OfType<TreeView>().Single().Items.Count>0,"organization directory opens all its issuance history");
+            var orgList=Logical(recipientsWindow).OfType<ListBox>().Single();
+            Check(!Logical(recipientsWindow).OfType<Button>().Any(b=>Equals(b.Content,"Удалить получателя")),"recipient deletion has no extra action button");
+            Check(orgList.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Удалить")),"recipient deletion is available through context menu");recipientsWindow.Close();
+            var directoryType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PricingDirectoryWindow")!;
+            var pricingDirectory=(Window)Activator.CreateInstance(directoryType,store)!;pricingDirectory.Show();Pump();
+            var directoryTree=Logical(pricingDirectory).OfType<TreeView>().Single();
+            Check(directoryTree.SelectedItem is null&&directoryTree.Items.OfType<TreeViewItem>().All(i=>!i.IsExpanded),"pricing starts with collapsed venue list and no automatic venue");
+            var venueNode=directoryTree.Items.OfType<TreeViewItem>().Single(i=>i.Tag is VenueInfo v&&v.Id==venueId);venueNode.IsSelected=true;Pump();
+            Check(venueNode.IsExpanded&&venueNode.Items.OfType<TreeViewItem>().All(i=>i.Tag is PlanInfo p&&p.VenueId==venueId),"selecting venue reveals only that venue pricing plans");
+            var pricingLeaf=venueNode.Items.OfType<TreeViewItem>().Single(i=>i.Tag is PlanInfo p&&p.Id==planId);
+            Check(pricingLeaf.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Удалить")),"pricing deletion uses context menu");
+            Exception? directoryError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? selectedPricing=null;try{
+                selectedPricing=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="PriceEditorWindow"&&w.IsVisible);
+                Check(Logical(selectedPricing).OfType<TextBox>().First().Text=="UI plan (копия)","selected pricing plan loads directly in its editor");
+                Check(!Logical(selectedPricing).OfType<CheckBox>().Any(c=>Equals(c.Content,"Расценовки всех площадок")),"cross-venue pricing switch removed");
+            }catch(Exception ex){directoryError=ex;}finally{selectedPricing?.Close();}}));
+            pricingLeaf.IsSelected=true;if(directoryError is not null)throw directoryError;pricingDirectory.Close();
+            var performanceDirectoryType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PerformanceWindow")!;
+            var performanceDirectory=(Window)Activator.CreateInstance(performanceDirectoryType,store)!;performanceDirectory.Show();Pump();
+            var performanceTree=Logical(performanceDirectory).OfType<TreeView>().Single();
+            var activePerformance=performanceTree.Items.OfType<TreeViewItem>().Single(i=>i.Tag is PerformanceInfo p&&p.Title=="UI event");activePerformance.IsSelected=true;Pump();
+            Check(activePerformance.IsExpanded&&activePerformance.Items.OfType<TreeViewItem>().Any(i=>i.Tag is EventInfo e&&e.Id==eventId),"performance directory opens its active showing list");
+            Check(activePerformance.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Удалить"))&&!Logical(performanceDirectory).OfType<Button>().Any(b=>Equals(b.Content,"Удалить спектакль")),"performance deletion uses context menu without extra button");performanceDirectory.Close();
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Прошедшие")==true),"past performances have a single expandable section");
             var recipients=(ComboBox)main.FindName("RecipientBox");recipients.Text="СТС";Pump();
             Check(recipients.Items.Cast<string>().Any(n=>n.Contains("СТС")),"recipient search includes imported organizations");recipients.IsDropDownOpen=false;

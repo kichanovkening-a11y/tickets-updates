@@ -16,7 +16,8 @@ internal sealed class RecipientsWindow:EditorWindow
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
     private readonly TextBlock count=new(){Margin=new Thickness(0,5,0,10)};
     private List<RecipientDirectoryInfo> directory=[];
-    private readonly Button specification,open,delete;
+    private readonly Button specification,open;
+    private readonly MenuItem delete;
 
     public RecipientsWindow(Store store):base(store,"Получатели / организации",1100,780)
     {
@@ -39,11 +40,18 @@ internal sealed class RecipientsWindow:EditorWindow
         specification=Button(actions,"Спецификация",()=>Try(()=>{
             if(organizations.SelectedItem is RecipientDirectoryInfo organization)new SpecificationWindow(Store,organization.Name).ShowDialog();
         }));specification.Margin=new Thickness(0,0,10,0);
-        delete=Button(actions,"Удалить получателя",()=>Try(()=>{
-            if(organizations.SelectedItem is not RecipientDirectoryInfo organization)throw new TicketException("Выберите организацию.");
-            if(MessageBox.Show(DialogOwner,$"Удалить получателя «{organization.Name}» из справочника?\n\nОн исчезнет из списка для новых выдач. Уже выданные билеты, накладные и история сохранятся.","Удалить получателя",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+        delete=new MenuItem{Header="Удалить"};
+        delete.Click+=(_,_)=>Try(()=>{
+            if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
+            if(MessageBox.Show(DialogOwner,$"Удалить получателя «{organization.Name}» из справочника?\n\nУже выданные билеты, накладные и история сохранятся.","Удалить получателя",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
             Store.DeleteRecipient(organization.Name);directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
-        }));delete.Margin=new Thickness(0);
+        });
+        organizations.ContextMenu=new ContextMenu();organizations.ContextMenu.Items.Add(delete);
+        organizations.PreviewMouseRightButtonDown+=(_,e)=>{
+            if(e.OriginalSource is DependencyObject source&&ItemsControl.ContainerFromElement(organizations,source) is ListBoxItem item){item.IsSelected=true;item.Focus();}
+            else e.Handled=true;
+        };
+        organizations.ContextMenuOpening+=(_,e)=>{if(organizations.SelectedItem is not RecipientDirectoryInfo {IsDeleted:false})e.Handled=true;};
         right.Children.Add(history);
         search.TextChanged+=(_,_)=>Try(Filter);
         organizations.SelectionChanged+=(_,_)=>Try(ShowHistory);
@@ -64,7 +72,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private void ShowHistory()
     {
         history.Items.Clear();open.IsEnabled=false;
-        var organization=organizations.SelectedItem as RecipientDirectoryInfo;specification.IsEnabled=organization is not null;delete.IsEnabled=organization is not null;
+        var organization=organizations.SelectedItem as RecipientDirectoryInfo;specification.IsEnabled=organization is not null;delete.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
         var issues=Store.RecipientHistory(organization.Name);

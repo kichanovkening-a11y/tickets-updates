@@ -57,27 +57,6 @@ internal class EditorWindow : Window
     }
 }
 
-internal sealed class PerformanceWindow : EditorWindow
-{
-    public PerformanceWindow(Store store):base(store,"Спектакли",650,600)
-    {
-        var panel=new StackPanel{Margin=new Thickness(24)}; Content=new ScrollViewer{Content=panel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
-        panel.Children.Add(new TextBlock{Text="Спектакли",FontSize=23,FontWeight=FontWeights.SemiBold});
-        var name=Field(panel,"Название нового спектакля");
-        var list=new ListBox{Height=330,Margin=new Thickness(0,20,0,0),DisplayMemberPath="Title",ItemsSource=store.Performances()};
-        Button(panel,"Создать спектакль",()=>Try(()=>{store.SavePerformance(name.Text); list.ItemsSource=store.Performances(); name.Clear();}));
-        panel.Children.Add(list);
-        var delete=Button(panel,"Удалить спектакль",()=>Try(()=>{
-            if(list.SelectedItem is not PerformanceInfo performance)throw new TicketException("Выберите спектакль.");
-            if(MessageBox.Show(DialogOwner,$"Удалить спектакль «{performance.Title}» из справочника?\n\nСпектакль и его показы переместятся в раздел «Удалённые из справочников». Выданные билеты, документы и возвраты останутся доступны.","Удалить спектакль",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
-            store.DeletePerformance(performance.Id);
-            list.ItemsSource=store.Performances();
-            if(list.Items.Count>0)list.SelectedIndex=0;
-        }));
-        delete.IsEnabled=false;list.SelectionChanged+=(_,_)=>delete.IsEnabled=list.SelectedItem is PerformanceInfo;
-    }
-}
-
 internal sealed class PriceEditorWindow : EditorWindow
 {
     private readonly HallView preview=new();
@@ -86,14 +65,14 @@ internal sealed class PriceEditorWindow : EditorWindow
     private sealed record PriceState(Dictionary<long,PriceValue> Prices,long[] Selected,string Name);
     private sealed record PlanChoice(PlanInfo Plan,string Name);
     public long CreatedId{get;private set;}
-    public PriceEditorWindow(Store store,long? venueId=null):base(store,"Расценовки")
+    public PriceEditorWindow(Store store,long? venueId=null):this(store,venueId,null){}
+    public PriceEditorWindow(Store store,long? venueId,long? planId):base(store,"Расценовки")
     {
         var grid=new Grid{Margin=new Thickness(16)}; grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});grid.ColumnDefinitions.Add(new ColumnDefinition());Content=grid;
         var form=new StackPanel{Margin=new Thickness(0,0,15,0)}; grid.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         var venue=Combo(form,"Зал",store.Venues(),"Name");
         if(venueId.HasValue) venue.SelectedItem=venue.Items.Cast<VenueInfo>().FirstOrDefault(v=>v.Id==venueId.Value);
         var plans=Combo(form,"Существующая расценовка",Array.Empty<PlanInfo>(),"Name");
-        var allVenues=new CheckBox{Content="Расценовки всех площадок",Margin=new Thickness(0,10,0,0)};form.Children.Add(allVenues);
         var oldEvent=Combo(form,"Или цены существующего показа",Array.Empty<EventInfo>(),"Caption");
         var name=Field(form,"Название новой расценовки");
         var history=new Stack<PriceState>();
@@ -107,7 +86,8 @@ internal sealed class PriceEditorWindow : EditorWindow
             name.Text=state.Name;Refresh();preview.SetSelection(state.Selected);refreshCategory();if(undo is not null)undo.IsEnabled=history.Count>0;
         }
         var copied=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)};
-        Button(form,"Загрузить выбранную расценовку",()=>Try(()=>{
+        void LoadSelectedPlan()
+        {
             if(plans.SelectedItem is not PlanChoice choice) throw new TicketException("Выберите расценовку.");
             var p=choice.Plan;
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
@@ -115,14 +95,8 @@ internal sealed class PriceEditorWindow : EditorWindow
             if(values.Count==0)throw new TicketException("В выбранной расценовке нет цен для совпадающих мест этого зала.");
             Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;name.Text=p.Name+" (копия)";
             copied.Text=$"Загружено цен: {values.Count} из {seats.Count} мест. Сохраните под новым названием.";Refresh();refreshCategory();
-        }));
-        var deletePlan=Button(form,"Удалить расценовку",()=>Try(()=>{
-            if(plans.SelectedItem is not PlanChoice choice)throw new TicketException("Выберите расценовку.");
-            if(MessageBox.Show(DialogOwner,$"Удалить расценовку «{choice.Name}» из справочника?\n\nОна исчезнет из списка для новых показов. Существующие показы, цены билетов и история сохранятся.","Удалить расценовку",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
-            store.DeletePlan(choice.Plan.Id);LoadPlans();
-            copied.Text="Расценовка удалена из справочника. Текущий набор цен можно сохранить как новую расценовку.";
-        }));
-        deletePlan.IsEnabled=false;plans.SelectionChanged+=(_,_)=>deletePlan.IsEnabled=plans.SelectedItem is PlanChoice;
+        }
+        Button(form,"Загрузить выбранную расценовку",()=>Try(LoadSelectedPlan));
         Button(form,"Взять цены из показа",()=>Try(()=>{
             if(oldEvent.SelectedItem is not EventInfo e)throw new TicketException("Выберите показ.");
             Remember();prices.Clear();foreach(var s in store.Seats(e.Id).Where(s=>s.Amount.HasValue))prices[s.Id]=new(s.Id,s.Amount!.Value,s.Color);
@@ -183,19 +157,19 @@ internal sealed class PriceEditorWindow : EditorWindow
         {
             if(venue.SelectedItem is not VenueInfo v)return;
             var selectedId=(plans.SelectedItem as PlanChoice)?.Plan.Id;
-            var venues=store.Venues().ToDictionary(item=>item.Id,item=>item.Name);
-            var items=allVenues.IsChecked==true?store.AllPlans():store.Plans(v.Id);
-            plans.ItemsSource=items.Select(p=>new PlanChoice(p,allVenues.IsChecked==true?$"{p.Name} · {venues.GetValueOrDefault(p.VenueId,"Зал")}":p.Name)).ToList();
+            plans.ItemsSource=store.Plans(v.Id).Select(p=>new PlanChoice(p,p.Name)).ToList();
             plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==selectedId)??plans.Items.Cast<PlanChoice>().FirstOrDefault();
         }
-        allVenues.Checked+=(_,_)=>Try(LoadPlans);allVenues.Unchecked+=(_,_)=>Try(LoadPlans);
         void LoadVenue()
         {
             if(venue.SelectedItem is not VenueInfo v)return;
             seats=store.VenueSeats(v.Id);prices.Clear();history.Clear();if(undo is not null)undo.IsEnabled=false;copied.Text="";LoadPlans();oldEvent.ItemsSource=store.Events().Where(e=>e.VenueId==v.Id).ToList();
             if(oldEvent.Items.Count>0)oldEvent.SelectedIndex=0;Refresh(true);
         }
-        venue.SelectionChanged+=(_,_)=>Try(LoadVenue);OnShown(()=>Try(LoadVenue));
+        venue.SelectionChanged+=(_,_)=>Try(LoadVenue);OnShown(()=>Try(()=>{
+            LoadVenue();
+            if(planId.HasValue){plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==planId.Value);LoadSelectedPlan();}
+        }));
     }
     private void Refresh(bool fit=false)
     {
@@ -209,12 +183,14 @@ internal sealed class PriceEditorWindow : EditorWindow
 internal sealed class EventEditorWindow : EditorWindow
 {
     public long CreatedId{get;private set;}
-    public EventEditorWindow(Store store):base(store,"Новый показ",650,650)
+    public EventEditorWindow(Store store):this(store,null){}
+    public EventEditorWindow(Store store,long? performanceId):base(store,"Новый показ",650,780)
     {
         FontSize=16.9;FontWeight=FontWeights.Bold;
         var form=new StackPanel{Margin=new Thickness(25)};Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         var performances=store.Performances();
         var performance=Combo(form,"Спектакль — введите начало значимого слова",performances,"Title");
+        if(performanceId.HasValue)performance.SelectedItem=performances.FirstOrDefault(p=>p.Id==performanceId.Value);
         performance.FontWeight=FontWeights.SemiBold;performance.IsEditable=true;performance.IsTextSearchEnabled=false;performance.StaysOpenOnEdit=true;
         var filtering=false;
         performance.AddHandler(TextBox.TextChangedEvent,new TextChangedEventHandler((_,e)=>{
@@ -260,11 +236,26 @@ internal sealed class EventEditorWindow : EditorWindow
             var box=Combo(group,title,Enumerable.Range(0,count).Select(n=>n.ToString("00")),"");box.IsEditable=true;box.IsTextSearchEnabled=false;box.Width=100;box.SelectedIndex=selected;return box;
         }
         var hours=Part("Часы",24,19);var minutes=Part("Минуты",60,0);var seconds=Part("Секунды",60,0);
+        var dates=new System.Collections.ObjectModel.ObservableCollection<DateTime>();
+        var dateList=new ListBox{ItemsSource=dates,Height=100,Margin=new Thickness(0,10,0,0),ItemStringFormat="dd.MM.yyyy HH:mm:ss"};
+        Button(form,"Добавить дату",()=>Try(()=>{
+            if(date.SelectedDate is null)throw new TicketException("Выберите дату.");
+            var showing=date.SelectedDate.Value.Date+CatalogText.Time(hours.Text,minutes.Text,seconds.Text);
+            if(dates.Contains(showing))throw new TicketException("Такая дата и время уже добавлены.");
+            dates.Add(showing);dateList.SelectedItem=showing;
+        }));
+        form.Children.Add(dateList);
+        var removeDate=new MenuItem{Header="Удалить дату"};removeDate.Click+=(_,_)=>{if(dateList.SelectedItem is DateTime d)dates.Remove(d);};
+        dateList.ContextMenu=new ContextMenu();dateList.ContextMenu.Items.Add(removeDate);
+        dateList.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject source&&ItemsControl.ContainerFromElement(dateList,source) is ListBoxItem item)item.IsSelected=true;};
+        dateList.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Delete&&dateList.SelectedItem is DateTime d){dates.Remove(d);e.Handled=true;}};
+        form.Children.Add(new TextBlock{Text="Добавьте все даты в список. Удаление даты — правой кнопкой или Delete. Если список пуст, создаётся один показ на выбранную дату.",TextWrapping=TextWrapping.Wrap,FontSize=14,Margin=new Thickness(0,6,0,0)});
         Button(form,"Создать показ",()=>Try(()=>{
-            if(performance.SelectedItem is not PerformanceInfo p||performance.Text!=p.Title||venue.SelectedItem is not VenueInfo v||plan.SelectedItem is not PlanInfo r||date.SelectedDate is null)
-                throw new TicketException("Выберите спектакль, зал, расценовку и дату. Если расценовок нет, сначала создайте её.");
-            var t=CatalogText.Time(hours.Text,minutes.Text,seconds.Text);
-            CreatedId=store.CreateEvent(p.Id,v.Id,r.Id,date.SelectedDate.Value.Date+t);Finish(true);
+            if(performance.SelectedItem is not PerformanceInfo p||performance.Text!=p.Title||venue.SelectedItem is not VenueInfo v||plan.SelectedItem is not PlanInfo r)
+                throw new TicketException("Выберите спектакль, зал и расценовку. Если расценовок нет, сначала создайте её.");
+            if(dates.Count==0&&date.SelectedDate is null)throw new TicketException("Выберите дату.");
+            var showingDates=dates.Count>0?dates.ToArray():new[]{date.SelectedDate!.Value.Date+CatalogText.Time(hours.Text,minutes.Text,seconds.Text)};
+            CreatedId=store.CreateEvents(p.Id,v.Id,r.Id,showingDates)[0];Finish(true);
         }));
     }
 }

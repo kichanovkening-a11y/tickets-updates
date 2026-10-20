@@ -150,7 +150,12 @@ public sealed partial class Store
         catch(SqliteException ex) when(ex.SqliteErrorCode==19) { throw new TicketException("Расценовка с таким названием уже есть. Сохраните под новым названием."); }
     }
     public long CreateEvent(long performanceId,long venueId,long planId,DateTime date)
+        =>CreateEvents(performanceId,venueId,planId,new[]{date})[0];
+    public List<long> CreateEvents(long performanceId,long venueId,long planId,IReadOnlyList<DateTime> dates)
     {
+        if(dates.Count is <1 or >500)throw new TicketException("Добавьте от 1 до 500 дат показа.");
+        var normalized=dates.Select(d=>new DateTime(d.Year,d.Month,d.Day,d.Hour,d.Minute,d.Second)).ToArray();
+        if(normalized.Distinct().Count()!=normalized.Length)throw new TicketException("В списке повторяется дата и время показа.");
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
         using var title=Command(c,"SELECT title FROM performance WHERE id=$p","$p",performanceId); title.Transaction=tx;
         var name=title.ExecuteScalar() as string ?? throw new TicketException("Выберите спектакль.");
@@ -159,6 +164,9 @@ public sealed partial class Store
         if(IsCatalogHidden(c,tx,"plan",planId.ToString(CultureInfo.InvariantCulture))) throw new TicketException("Расценовка удалена из справочника.");
         using var check=Command(c,"SELECT count(*) FROM pricing_plan WHERE id=$p AND venue_id=$v","$p",planId,"$v",venueId); check.Transaction=tx;
         if(Convert.ToInt32(check.ExecuteScalar())!=1) throw new TicketException("Выберите расценовку этого зала.");
+        var ids=new List<long>();
+        foreach(var date in normalized.OrderBy(d=>d))
+        {
         using var add=Command(c,"INSERT INTO event(venue_id,title,starts_at,legacy_date) VALUES($v,$n,$d,$l) RETURNING id",
             "$v",venueId,"$n",name,"$d",date.ToString("yyyy-MM-ddTHH:mm:ss",CultureInfo.InvariantCulture),"$l",date.ToString("dd.MM.yyyy HH:mm:ss",CultureInfo.InvariantCulture));
         add.Transaction=tx;long id;
@@ -166,6 +174,8 @@ public sealed partial class Store
         catch(SqliteException ex) when(ex.SqliteErrorCode==19&&ex.Message.Contains("event_slot_conflict"))
         {throw new TicketException("На этой сцене уже есть показ в выбранную дату и время.");}
         using var prices=Command(c,"INSERT INTO event_price SELECT $e,seat_id,amount,color FROM plan_price WHERE plan_id=$p","$e",id,"$p",planId);
-        prices.Transaction=tx; prices.ExecuteNonQuery(); tx.Commit(); return id;
+        prices.Transaction=tx; prices.ExecuteNonQuery();ids.Add(id);
+        }
+        tx.Commit();return ids;
     }
 }

@@ -55,7 +55,9 @@ internal static class Program
             Check(combos[2].SelectedItem is PlanInfo plan&&plan.Name=="UI test pricing","new pricing selected after nested editor saves");
             editor.Close();
             var hallType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.HallEditorWindow")!;
-            var hallEditor=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;hallEditor.Show();Pump();
+            var hallEditor=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;
+            Exception? hallError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
             var hallFields=Logical(hallEditor).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
             hallFields[0].Text="UI row hall";hallFields[3].Text="20";hallFields[5].Text="А";
             var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
@@ -65,6 +67,8 @@ internal static class Program
             Click(hallEditor,"Добавить сектор");Pump();
             var draftPreview=Logical(hallEditor).OfType<Tickets.App.HallView>().Single();draftPreview.Selected.UnionWith(new long[]{1,2,3});
             Click(hallEditor,"Удалить выбранные (Del)");Click(hallEditor,"Сохранить как новый зал");
+            }catch(Exception ex){hallError=ex;hallEditor.Close();}}));
+            hallEditor.ShowDialog();Pump();if(hallError is not null)throw hallError;
             var editedHall=store.Venues().Single(v=>v.Name=="UI row hall");var remaining=store.HallDraft(editedHall.Id);
             Check(remaining.Count==39&&remaining.Where(x=>x.Row=="А").Select(x=>x.Number).Contains("4")&&!remaining.Where(x=>x.Row=="А").Any(x=>x.Number=="1"),"drawing deletion preserves surviving seat labels");
             Check(remaining.Single(x=>x.Row=="А"&&x.Number=="4").X==60,"drawing deletion preserves original seat coordinates");

@@ -31,13 +31,18 @@ public sealed partial class Store
     {
         sender=Required(sender,"От кого");directory=System.IO.Path.GetFullPath(directory.Trim());Directory.CreateDirectory(directory);
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        using(var prior=Command(c,"SELECT value FROM document_setting WHERE name='sender'"))
+        {prior.Transaction=tx;if(prior.ExecuteScalar() is string previous)RememberSender(c,tx,previous);}
         foreach(var pair in new[]{("sender",sender),("directory",directory)})
-        {using var cmd=Command(c,"INSERT INTO document_setting(name,value) VALUES($n,$v) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$n",pair.Item1,"$v",pair.Item2);cmd.Transaction=tx;cmd.ExecuteNonQuery();}tx.Commit();
+        {using var cmd=Command(c,"INSERT INTO document_setting(name,value) VALUES($n,$v) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$n",pair.Item1,"$v",pair.Item2);cmd.Transaction=tx;cmd.ExecuteNonQuery();}RememberSender(c,tx,sender);tx.Commit();
     }
     public void UpdateInvoiceSender(long eventId,long issueId,string sender)
     {
-        sender=Required(sender,"От кого");using var c=Open();using var cmd=Command(c,"UPDATE issue_batch SET sender=$s WHERE id=$i AND event_id=$e","$s",sender,"$i",issueId,"$e",eventId);
-        if(cmd.ExecuteNonQuery()!=1)throw new TicketException("Выдача не найдена в этом мероприятии.");
+        sender=Required(sender,"От кого");using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        using(var old=Command(c,"SELECT sender FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId))
+        {old.Transaction=tx;var prior=old.ExecuteScalar() as string;if(prior is null)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,prior);}
+        using var cmd=Command(c,"UPDATE issue_batch SET sender=$s WHERE id=$i AND event_id=$e","$s",sender,"$i",issueId,"$e",eventId);cmd.Transaction=tx;
+        if(cmd.ExecuteNonQuery()!=1)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,sender);tx.Commit();
     }
     public string SaveInvoiceDocument(long eventId,long issueId)
     {
@@ -57,7 +62,7 @@ public sealed partial class Store
         using var cmd=Command(c,"""
             INSERT INTO specification(recipient,recipient_key,sender,title,body,updated_at) VALUES($r,$k,$s,$t,$b,$u)
             ON CONFLICT(recipient_key) DO UPDATE SET recipient=excluded.recipient,sender=excluded.sender,title=excluded.title,body=excluded.body,updated_at=excluded.updated_at RETURNING id
-            ""","$r",recipient,"$k",CatalogText.Key(recipient),"$s",sender,"$t",title,"$b",body,"$u",timestamp);cmd.Transaction=tx;var id=Convert.ToInt64(cmd.ExecuteScalar());AddRecipient(c,tx,recipient);tx.Commit();
+            ""","$r",recipient,"$k",CatalogText.Key(recipient),"$s",sender,"$t",title,"$b",body,"$u",timestamp);cmd.Transaction=tx;var id=Convert.ToInt64(cmd.ExecuteScalar());AddRecipient(c,tx,recipient);RememberSender(c,tx,sender);tx.Commit();
         return new(id,recipient,sender,title,body,timestamp);
     }
     public string SaveSpecificationDocument(SpecificationInfo specification)

@@ -1,17 +1,14 @@
 <Window x:Class="Tickets.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:Tickets.App"
-        Title="Билеты · 0.6.0" Width="1420" Height="880" MinWidth="800" MinHeight="500" WindowStartupLocation="CenterScreen" WindowState="Maximized" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True">
+        Title="Билеты · 0.7.0" Width="1420" Height="880" MinWidth="800" MinHeight="500" WindowStartupLocation="CenterScreen" WindowState="Maximized" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True">
   <Grid>
   <DockPanel x:Name="MainContent">
     <Border DockPanel.Dock="Top" Background="#152C46" Padding="20,14">
       <DockPanel LastChildFill="True">
         <TextBlock x:Name="AppBrand" DockPanel.Dock="Left" Text="БИЛЕТЫ" Foreground="White" FontSize="22" FontWeight="Bold" Margin="0,0,20,0" VerticalAlignment="Center"/>
         <WrapPanel HorizontalAlignment="Right">
-          <Button Content="Спецификации" Click="SpecificationsClick" Margin="0,3,6,3"/>
           <Button Content="Настройки" Click="SettingsClick" Margin="0,3,6,3"/>
           <Button Content="Главная" Click="HomeClick" Margin="0,3,6,3"/>
           <Button Content="Обновление" Click="UpdateClick" Margin="0,3,6,3"/>
-          <Button Content="Свернуть" Click="MinimizeClick" Margin="0,3,6,3"/>
-          <Button x:Name="MaximizeButton" Content="В окно" Click="MaximizeClick" Margin="0,3,6,3"/>
           <Button Content="Закрыть" Click="CloseClick" Margin="0,3,0,3"/>
         </WrapPanel>
       </DockPanel>

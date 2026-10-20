@@ -14,7 +14,18 @@ public partial class MainWindow
     public bool SeparateWindows{get;set;}
     private string WindowSettingsPath=>Path.Combine(Path.GetDirectoryName(store.Path)!,"window-mode.txt");
     private readonly Stack<Grid> editorStack=new();
-    private void ReadWindowSettings()=>SeparateWindows=File.Exists(WindowSettingsPath)&&File.ReadAllText(WindowSettingsPath).Trim()=="separate";
+    private readonly Dictionary<Grid,EditorWindow> hostedEditors=[];
+    private void ReadWindowSettings()
+    {
+        SeparateWindows=File.Exists(WindowSettingsPath)&&File.ReadAllText(WindowSettingsPath).Trim()=="separate";
+        Closing+=(_,e)=>{
+            foreach(var page in editorStack.ToArray())
+            {
+                if(!hostedEditors.TryGetValue(page,out var editor)||editor.HasClosedForHost)continue;
+                editor.Close();if(!editor.HasClosedForHost){e.Cancel=true;return;}
+            }
+        };
+    }
     private void SettingsClick(object sender,RoutedEventArgs e)=>Run(()=>new SettingsWindow(store,this).ShowDialog());
     internal void SaveWindowSettings(bool separate)
     {
@@ -34,7 +45,7 @@ public partial class MainWindow
         title.Children.Add(new TextBlock{Text=editor.Title,FontSize=21,FontWeight=FontWeights.Bold,Margin=new Thickness(15),VerticalAlignment=VerticalAlignment.Center});
         var content=new ContentControl{Content=body,Tag=editor,HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch};panel.Children.Add(content);
         var previous=Keyboard.FocusedElement;if(editorStack.TryPeek(out var prior))prior.IsEnabled=false;
-        editorStack.Push(page);DialogLayer.Children.Add(page);DialogLayer.Visibility=Visibility.Visible;MainContent.IsEnabled=false;
+        editorStack.Push(page);hostedEditors[page]=editor;DialogLayer.Children.Add(page);DialogLayer.Visibility=Visibility.Visible;MainContent.IsEnabled=false;
         KeyboardNavigation.SetTabNavigation(page,KeyboardNavigationMode.Cycle);
         page.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Escape){e.Handled=true;editor.Close();}};
         var frame=new DispatcherFrame();EventHandler closed=(_,_)=>frame.Continue=false;editor.Closed+=closed;
@@ -44,7 +55,7 @@ public partial class MainWindow
         }
         finally
         {
-            editor.Closed-=closed;content.Content=null;DialogLayer.Children.Remove(page);editorStack.Pop();
+            editor.Closed-=closed;hostedEditors.Remove(page);content.Content=null;DialogLayer.Children.Remove(page);editorStack.Pop();
             if(editorStack.TryPeek(out var previousPage))previousPage.IsEnabled=true;
             else{DialogLayer.Visibility=Visibility.Collapsed;MainContent.IsEnabled=true;}
             if(previous is UIElement element&&element.IsEnabled)element.Focus();

@@ -9,13 +9,14 @@ namespace Tickets.App;
 internal sealed class RecipientsWindow:EditorWindow
 {
     private readonly TextBox search=new();
+    private readonly CheckBox showDeleted=new(){Content="Показать удалённых",Margin=new Thickness(0,5,0,5)};
     private readonly ListBox organizations=new(){DisplayMemberPath=nameof(RecipientDirectoryInfo.Caption),HorizontalContentAlignment=HorizontalAlignment.Stretch};
     private readonly TreeView history=new();
     private readonly TextBlock heading=new(){FontSize=21,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
     private readonly TextBlock count=new(){Margin=new Thickness(0,5,0,10)};
     private List<RecipientDirectoryInfo> directory=[];
-    private readonly Button specification,open;
+    private readonly Button specification,open,delete;
 
     public RecipientsWindow(Store store):base(store,"Получатели / организации",1100,780)
     {
@@ -28,6 +29,7 @@ internal sealed class RecipientsWindow:EditorWindow
         filter.Children.Add(new TextBlock{Text="Поиск организации",FontWeight=FontWeights.SemiBold});
         search.Margin=new Thickness(0,6,0,0);filter.Children.Add(search);
         filter.Children.Add(new TextBlock{Text="Начните вводить значимые слова названия",TextWrapping=TextWrapping.Wrap,FontSize=15.6,Margin=new Thickness(0,5,0,0)});
+        filter.Children.Add(showDeleted);showDeleted.Checked+=(_,_)=>{directory=Store.RecipientDirectory(true);Filter();};showDeleted.Unchecked+=(_,_)=>{directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();};
         filter.Children.Add(count);left.Children.Add(organizations);
         var splitter=new GridSplitter{Width=5,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Stretch};Grid.SetColumn(splitter,1);root.Children.Add(splitter);
         var right=new DockPanel();Grid.SetColumn(right,2);root.Children.Add(right);
@@ -36,13 +38,18 @@ internal sealed class RecipientsWindow:EditorWindow
         open=Button(actions,"Открыть выдачу",()=>Try(OpenSelected));open.Margin=new Thickness(0,0,10,0);
         specification=Button(actions,"Спецификация",()=>Try(()=>{
             if(organizations.SelectedItem is RecipientDirectoryInfo organization)new SpecificationWindow(Store,organization.Name).ShowDialog();
-        }));specification.Margin=new Thickness(0);
+        }));specification.Margin=new Thickness(0,0,10,0);
+        delete=Button(actions,"Удалить получателя",()=>Try(()=>{
+            if(organizations.SelectedItem is not RecipientDirectoryInfo organization)throw new TicketException("Выберите организацию.");
+            if(MessageBox.Show(DialogOwner,$"Удалить получателя «{organization.Name}» из справочника?\n\nОн исчезнет из списка для новых выдач. Уже выданные билеты, накладные и история сохранятся.","Удалить получателя",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+            Store.DeleteRecipient(organization.Name);directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
+        }));delete.Margin=new Thickness(0);
         right.Children.Add(history);
         search.TextChanged+=(_,_)=>Try(Filter);
         organizations.SelectionChanged+=(_,_)=>Try(ShowHistory);
         history.SelectedItemChanged+=(_,_)=>open.IsEnabled=history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo};
         history.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter&&history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo}){e.Handled=true;Try(OpenSelected);}};
-        directory=Store.RecipientDirectory();Filter();
+        directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
     }
 
     private void Filter()
@@ -57,7 +64,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private void ShowHistory()
     {
         history.Items.Clear();open.IsEnabled=false;
-        var organization=organizations.SelectedItem as RecipientDirectoryInfo;specification.IsEnabled=organization is not null;
+        var organization=organizations.SelectedItem as RecipientDirectoryInfo;specification.IsEnabled=organization is not null;delete.IsEnabled=organization is not null;
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
         var issues=Store.RecipientHistory(organization.Name);
@@ -96,6 +103,6 @@ internal sealed class RecipientsWindow:EditorWindow
     {
         if(history.SelectedItem is not TreeViewItem {Tag:RecipientIssueInfo item})return;
         new InvoiceWindow(Store,item.Issue.EventId,item.Issue.Id).ShowDialog();
-        directory=Store.RecipientDirectory();Filter();
+        directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
     }
 }

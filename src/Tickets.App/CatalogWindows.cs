@@ -16,12 +16,14 @@ internal class EditorWindow : Window
         Store=store; Title=title; Owner=Application.Current.MainWindow; WindowStartupLocation=WindowStartupLocation.CenterOwner;
         Width=Math.Min(width,SystemParameters.WorkArea.Width); Height=Math.Min(height,SystemParameters.WorkArea.Height);
         MinWidth=Math.Min(650,Width); MinHeight=Math.Min(450,Height);
-        Loaded+=(_,_)=>NotifyShown();
+        Loaded+=(_,_)=>NotifyShown();Closed+=(_,_)=>HasClosedForHost=true;
     }
+    internal bool HasClosedForHost{get;private set;}
     internal bool IsInline{get;set;}
     internal bool? InlineResult{get;private set;}
     private Action? shown;
     private bool wasShown;
+    internal Window DialogOwnerForHost=>DialogOwner;
     protected Window DialogOwner=>IsInline?Application.Current.MainWindow:this;
     protected void OnShown(Action action)=>shown+=action;
     internal void NotifyShown(){if(wasShown)return;wasShown=true;shown?.Invoke();}
@@ -65,6 +67,14 @@ internal sealed class PerformanceWindow : EditorWindow
         var list=new ListBox{Height=330,Margin=new Thickness(0,20,0,0),DisplayMemberPath="Title",ItemsSource=store.Performances()};
         Button(panel,"Создать спектакль",()=>Try(()=>{store.SavePerformance(name.Text); list.ItemsSource=store.Performances(); name.Clear();}));
         panel.Children.Add(list);
+        var delete=Button(panel,"Удалить спектакль",()=>Try(()=>{
+            if(list.SelectedItem is not PerformanceInfo performance)throw new TicketException("Выберите спектакль.");
+            if(MessageBox.Show(DialogOwner,$"Удалить спектакль «{performance.Title}» из справочника?\n\nСпектакль и его показы переместятся в раздел «Удалённые из справочников». Выданные билеты, документы и возвраты останутся доступны.","Удалить спектакль",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+            store.DeletePerformance(performance.Id);
+            list.ItemsSource=store.Performances();
+            if(list.Items.Count>0)list.SelectedIndex=0;
+        }));
+        delete.IsEnabled=false;list.SelectionChanged+=(_,_)=>delete.IsEnabled=list.SelectedItem is PerformanceInfo;
     }
 }
 
@@ -106,6 +116,13 @@ internal sealed class PriceEditorWindow : EditorWindow
             Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;name.Text=p.Name+" (копия)";
             copied.Text=$"Загружено цен: {values.Count} из {seats.Count} мест. Сохраните под новым названием.";Refresh();refreshCategory();
         }));
+        var deletePlan=Button(form,"Удалить расценовку",()=>Try(()=>{
+            if(plans.SelectedItem is not PlanChoice choice)throw new TicketException("Выберите расценовку.");
+            if(MessageBox.Show(DialogOwner,$"Удалить расценовку «{choice.Name}» из справочника?\n\nОна исчезнет из списка для новых показов. Существующие показы, цены билетов и история сохранятся.","Удалить расценовку",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+            store.DeletePlan(choice.Plan.Id);LoadPlans();
+            copied.Text="Расценовка удалена из справочника. Текущий набор цен можно сохранить как новую расценовку.";
+        }));
+        deletePlan.IsEnabled=false;plans.SelectionChanged+=(_,_)=>deletePlan.IsEnabled=plans.SelectedItem is PlanChoice;
         Button(form,"Взять цены из показа",()=>Try(()=>{
             if(oldEvent.SelectedItem is not EventInfo e)throw new TicketException("Выберите показ.");
             Remember();prices.Clear();foreach(var s in store.Seats(e.Id).Where(s=>s.Amount.HasValue))prices[s.Id]=new(s.Id,s.Amount!.Value,s.Color);

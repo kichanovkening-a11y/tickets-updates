@@ -39,12 +39,21 @@ public static class InvoiceDocuments
             values.Select((text,i)=>new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",widths[i]),new XAttribute(W+"type","dxa")),
                 new XElement(W+"vAlign",new XAttribute(W+"val","top")),header?new XElement(W+"shd",new XAttribute(W+"fill","E8EDF3")):null),Paragraph(text,header,20))));
         table.Add(TableRow(Headers,true));foreach(var row in Rows(invoice))table.Add(TableRow(row,false));body.Add(table);
-        body.Add(Paragraph($"Всего билетов: {invoice.Tickets.Count} ({RussianWords.Quantity(invoice.Tickets.Count)}).",true),
-            Paragraph($"Сумма выдачи: {Money(invoice.Total)} ({RussianWords.Money(invoice.Total)}).",true));
+        body.Add(Paragraph(DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total)),
+            Paragraph(DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),true));
         if(invoice.ActiveCount!=invoice.Tickets.Count)
             body.Add(Paragraph($"Возвращено: {invoice.Tickets.Count-invoice.ActiveCount} ({RussianWords.Quantity(invoice.Tickets.Count-invoice.ActiveCount)})."),
                 Paragraph($"Осталось на руках: {invoice.ActiveCount} ({RussianWords.Quantity(invoice.ActiveCount)}), на сумму {Money(invoice.ActiveTotal)} ({RussianWords.Money(invoice.ActiveTotal)})."));
         body.Add(Paragraph(""),Paragraph("Передал: ____________________    Получил: ____________________"));
+        SaveDocument(body,destination);
+    }
+    public static void SaveIssueDocumentWord(IssueDocumentInfo document,string destination)
+    {
+        var body=new XElement(W+"body");
+        var total=DocumentTotals.Total(document.Invoice.Tickets.Count,document.Invoice.Total);
+        var firstLine=true;
+        foreach(var line in document.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n'))
+        {body.Add(Paragraph(line,firstLine||line.Contains(total,StringComparison.Ordinal),firstLine?32:22));firstLine=false;}
         SaveDocument(body,destination);
     }
     public static void SaveSpecificationWord(SpecificationInfo specification,string destination)

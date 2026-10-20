@@ -1,8 +1,8 @@
 namespace Tickets.Core;
 
-public sealed record RecipientDirectoryInfo(string Name,int IssueCount,int TicketCount,int ReturnedCount)
+public sealed record RecipientDirectoryInfo(string Name,int IssueCount,int TicketCount,int ReturnedCount,bool IsDeleted=false)
 {
-    public string Caption=>$"{Name} · выдач: {IssueCount}";
+    public string Caption=>$"{Name}{(IsDeleted?" · удалён":"")} · выдач: {IssueCount}";
 }
 
 public sealed record RecipientIssueInfo(IssueInfo Issue,string Title,string Venue,string EventDate,string SortDate)
@@ -13,14 +13,17 @@ public sealed record RecipientIssueInfo(IssueInfo Issue,string Title,string Venu
 
 public sealed partial class Store
 {
-    public List<RecipientDirectoryInfo> RecipientDirectory()
+    public List<RecipientDirectoryInfo> RecipientDirectory(bool includeDeleted=false)
     {
         var history=ReadRecipientHistory();
         var groups=history.GroupBy(x=>CatalogText.Key(x.Issue.Recipient)).ToDictionary(g=>g.Key,g=>g.ToList());
-        return Recipients().Concat(history.Select(x=>x.Issue.Recipient))
+        var hidden=HiddenCatalogKeys("recipient");
+        using var c=Open();using var cmd=Command(c,"SELECT name FROM recipient ORDER BY name COLLATE NOCASE");
+        using var r=cmd.ExecuteReader();var names=new List<string>();while(r.Read())names.Add(r.GetString(0));
+        return names.Concat(history.Select(x=>x.Issue.Recipient)).Where(name=>includeDeleted||!hidden.Contains(CatalogText.Key(name)))
             .GroupBy(CatalogText.Key).Select(g=>{
                 groups.TryGetValue(g.Key,out var issues);
-                return new RecipientDirectoryInfo(g.First(),issues?.Count??0,issues?.Sum(x=>x.Issue.Count)??0,issues?.Sum(x=>x.Issue.ReturnedCount)??0);
+                return new RecipientDirectoryInfo(g.First(),issues?.Count??0,issues?.Sum(x=>x.Issue.Count)??0,issues?.Sum(x=>x.Issue.ReturnedCount)??0,hidden.Contains(g.Key));
             }).OrderBy(x=>x.Name,StringComparer.CurrentCultureIgnoreCase).ToList();
     }
 

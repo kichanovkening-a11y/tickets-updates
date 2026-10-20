@@ -52,11 +52,12 @@ public sealed partial class Store
     }
     private static void AddRecipient(SqliteConnection c,SqliteTransaction tx,string name)
     {
+        using var restore=Command(c,"DELETE FROM catalog_hidden WHERE kind='recipient' AND entity_key=$k","$k",CatalogText.Key(name));restore.Transaction=tx;restore.ExecuteNonQuery();
         using var cmd=Command(c,"INSERT OR IGNORE INTO recipient(name,name_key) VALUES($n,$k)","$n",name,"$k",CatalogText.Key(name));cmd.Transaction=tx;cmd.ExecuteNonQuery();
     }
     public List<string> Recipients(string search="")
     {
         using var c=Open();using var cmd=Command(c,"SELECT name FROM recipient ORDER BY name COLLATE NOCASE");using var read=cmd.ExecuteReader();var names=new List<string>();
-        var query=CatalogText.Key(search);while(read.Read()){var name=read.GetString(0);if(SearchText.Matches(name,query))names.Add(name);}return names;
+        var query=CatalogText.Key(search);var hidden=HiddenCatalogKeys("recipient");while(read.Read()){var name=read.GetString(0);if(!hidden.Contains(CatalogText.Key(name))&&SearchText.Matches(name,query))names.Add(name);}return names;
     }
 }

@@ -33,6 +33,7 @@ internal static class Program
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.Show();Pump();
             var actions=Logical(main).OfType<Button>().ToList();
             Check(actions.Count>=15,"main actions found");
+            Check(!actions.Any(b=>Equals(b.Content,"Спецификации")||Equals(b.Content,"Свернуть")||Equals(b.Content,"В окно")),"main toolbar omits duplicate window controls and specifications");
             Check(actions.Where(b=>b.IsVisible).All(b=>b.ActualWidth==200&&b.ActualHeight==44),"all main action buttons have equal rendered size");
             store.SavePerformance("ТЕАТР Поисковый спектакль UI");
             var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EventEditorWindow")!;
@@ -132,18 +133,35 @@ internal static class Program
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                 var window=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Накладная №"));
                 try{
-                    var document=Logical(window).OfType<FlowDocumentReader>().Single().Document;
+                    var document=Logical(window).OfType<FlowDocumentScrollViewer>().Single().Document;
                     var text=new TextRange(document.ContentStart,document.ContentEnd).Text;
                     Check(text.Contains("UI recipient")&&text.Contains("369"),"invoice opens immediately with actual prices and correct total");
-                    var returnList=Logical(window).OfType<ListBox>().Single();returnList.SelectedIndex=0;
-                    var senderField=Logical(window).OfType<TextBox>().Single();senderField.Text="UI sender";Click(window,"Сохранить в Word");
-                    Check(returnList.SelectedItems.Count==1,"saving sender preserves tickets selected for return");
-                    Check(store.Invoice(eventId,store.Issues(eventId).Single().Id).Sender=="UI sender","edited invoice sender persists");
+                    Check(!Logical(window).OfType<ListBox>().Any(),"invoice has no return-ticket list");
+                    Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить как…")),"invoice has no duplicate Save As action");
+                    var squareSave=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить"));var squarePrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Распечатать"));
+                    Check(squareSave.Width==squareSave.Height&&squarePrint.Width==squarePrint.Height&&squareSave.Width==112,"save and print are prominent square buttons");
+                    Check(Logical(window).OfType<FlowDocumentScrollViewer>().Single().ActualHeight>400,"invoice preview uses enlarged content area");
+                    var senderField=Logical(window).OfType<ComboBox>().Single();Check(senderField.IsEditable&&senderField.Items.Contains(Store.DefaultSender),"invoice sender supports saved choice and manual entry");
+                    senderField.Text="UI sender";Click(window,"Сохранить");
+                    var issuedId=store.Issues(eventId).Single().Id;
+                    Check(store.Invoice(eventId,issuedId).Sender=="UI sender","edited invoice sender persists");
+                    Check(store.PrepareIssueDocuments(eventId,issuedId).Count==4&&store.PrepareIssueDocuments(eventId,issuedId).All(d=>d.Invoice.Recipient=="UI recipient"&&d.Body.Contains("UI recipient")),"all four documents are automatically prepared for invoice recipient");
+                    Check(text.Contains(DocumentTotals.Summary(3,369))&&text.Contains(DocumentTotals.Total(3,369)),"invoice totals use shared two-line format");
+                    Exception? documentError=null;
+                    app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                        var form=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Договор · выдача №"));
+                        try{
+                            var rendered=Logical(form).OfType<FlowDocumentScrollViewer>().Single().Document;Check(new TextRange(rendered.ContentStart,rendered.ContentEnd).Text.Contains("UI recipient"),"contract preview substitutes actual recipient");
+                            Logical(form).OfType<TabControl>().Single().SelectedIndex=1;Logical(form).OfType<TextBox>().Single().Text="Договор для {recipient}. Отправитель: {sender}.";Click(form,"Сохранить шаблон");
+                            Check(store.DocumentTemplate(IssueDocumentKinds.Contract).Contains("{recipient}"),"document template saves for later issuances");
+                        }catch(Exception ex){documentError=ex;}finally{form.Close();}
+                    }));Click(window,"Договор");if(documentError is not null)throw documentError;
                     var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
                     Check(paginator.PageCount>=1&&paginator.GetPage(0).Visual is not null,"invoice paginates for printing");
                     Check(text.Contains(Store.DefaultSender)&&text.Contains("триста шестьдесят девять рублей")&&!text.Contains("ТЕСТ 000001"),"invoice has sender and words without ticket serials");
                     Check(Directory.GetFiles(Path.Combine(store.DocumentsDirectory,"Накладные"),"*.docx").Length==1,"invoice automatically saves Word inside program data");
-                    Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить в Word")),"Word save action available");
+                    Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить")),"Word save action available");
+                    Check(IssueDocumentKinds.All.All(k=>File.Exists(Path.Combine(store.DocumentsDirectory,IssueDocumentKinds.Name(k),$"{IssueDocumentKinds.Name(k)}-{issuedId}.docx"))),"all supporting documents automatically save Word");
                 }catch(Exception ex){invoiceError=ex;}finally{window.Close();}
             }));
             issueButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(invoiceError is not null)throw invoiceError;
@@ -200,6 +218,16 @@ internal static class Program
             }));Click(main,"Новый показ");
             ((TextBox)main.FindName("SearchBox")).Text="no-such-performance-unique";Pump();
             Check(((Grid)main.FindName("Workspace")).Visibility==Visibility.Collapsed&&!((Button)main.FindName("IssueButton")).IsEnabled,"empty search clears previous show and issuance context");
+            main.SeparateWindows=false;
+            var hostType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EditorWindow")!;
+            var guardEditor=(Window)Activator.CreateInstance(hostType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object[]{store,"Проверка закрытия",650d,450d},null)!;guardEditor.Content=new StackPanel();
+            var refuseClose=true;guardEditor.Closing+=(_,e)=>e.Cancel=refuseClose;
+            Exception? closeError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                try{main.Close();Check(main.IsVisible&&((Grid)main.FindName("DialogLayer")).Visibility==Visibility.Visible,"main-window close respects embedded editor cancellation");}
+                catch(Exception ex){closeError=ex;}
+                finally{refuseClose=false;guardEditor.Close();}
+            }));hostType.GetMethod("ShowDialog",BindingFlags.Instance|BindingFlags.Public|BindingFlags.DeclaredOnly)!.Invoke(guardEditor,null);if(closeError is not null)throw closeError;
             main.Close();Console.WriteLine("PASS complete catalog navigation, embedded forms, selection and invoices");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}

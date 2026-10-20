@@ -218,7 +218,7 @@ Test("Word invoice contains exact issuance tickets totals and escaped text",s=>{
     writer!.GetMethod("SaveWord")!.Invoke(null,new object[]{invoice,file});
     using var archive=ZipFile.OpenRead(file);Check(archive.GetEntry("[Content_Types].xml")!=null&&archive.GetEntry("_rels/.rels")!=null);
     using var stream=archive.GetEntry("word/document.xml")!.Open();var xml=System.Xml.Linq.XDocument.Load(stream);var text=string.Join(" ",xml.Descendants().Where(e=>e.Name.LocalName=="t").Select(e=>e.Value));
-    Check(text.Contains(invoice.Recipient)&&text.Contains(invoice.Title)&&text.Contains(invoice.Total.ToString("N0",System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))));
+    Check(text.Contains(invoice.Recipient)&&text.Contains(invoice.Title)&&text.Contains(DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total))&&text.Contains(DocumentTotals.Total(invoice.Tickets.Count,invoice.Total)));
     Check(invoice.Tickets.All(t=>!text.Contains(t.Code)&&text.Contains(t.Sector)&&text.Contains(t.Row)&&text.Contains(t.Seat)));
     File.Copy(file,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-sample.docx"),true);
     var many=invoice with{Tickets=Enumerable.Range(1,85).Select(n=>invoice.Tickets[0] with{Number=n,Row=n.ToString(),Seat="1"}).ToList()};
@@ -289,6 +289,15 @@ Test("plan copying matches labeled places across halls without changing source",
     Check(!copied.Any(p=>s.VenueSeats(second).Single(x=>x.Id==p.SeatId).Row=="Е"),"letter Ё must remain a distinct seat row");
     Check(s.PlanPrices(plan).Select(p=>p.SeatId).SequenceEqual(seats.Select(x=>x.Id)));Check(s.AllPlans().Any(p=>p.Id==plan));
 });
+Test("41-ticket complete document package uses recipient and exact totals",s=>{
+    var e=s.Events().First(e=>s.Seats(e.Id).Count(x=>x.Available)>=41);var ids=s.Seats(e.Id).Where(x=>x.Available).Take(41).Select(x=>x.Id).ToArray();
+    var issue=s.Issue(e.Id,ids,"ООО \"Пупкин\"","DOC41",1,ids.ToDictionary(id=>id,id=>1000L));
+    var docs=s.PrepareIssueDocuments(e.Id,issue);Check(docs.Count==4&&docs.All(d=>d.Body.Contains("ООО \"Пупкин\"")&&d.Body.Contains(DocumentTotals.Total(41,41000))));
+    var directory=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-docqa");Directory.CreateDirectory(directory);
+    foreach(var file in s.SaveAllDocuments(e.Id,issue))File.Copy(file,System.IO.Path.Combine(directory,System.IO.Path.GetFileName(file)),true);
+});
+PackageDocumentsChecks.Register(Test);
+CatalogDeletionChecks.Register(Test);
 PricingChecks.Register(Test);
 RecipientHistoryChecks.Register(Test);
 SqliteConnection.ClearAllPools();

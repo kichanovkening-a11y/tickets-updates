@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); }
 
     private SqliteConnection Open()
     {
@@ -23,17 +23,20 @@ public sealed partial class Store
         return cmd;
     }
 
-    public List<EventInfo> Events()
+    public List<EventInfo> Events(bool includeDeleted=false)
     {
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT e.id,e.venue_id,e.title,v.name,e.legacy_date,e.starts_at,
               (SELECT count(*) FROM seat s WHERE s.venue_id=e.venue_id),
               (SELECT count(*) FROM ticket t WHERE t.event_id=e.id AND t.returned_at IS NULL)
-            FROM event e JOIN venue v ON v.id=e.venue_id ORDER BY e.starts_at DESC,e.id DESC
-            """);
+            FROM event e JOIN venue v ON v.id=e.venue_id
+            WHERE $all=1 OR NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='venue' AND h.entity_key=CAST(e.venue_id AS TEXT))
+            ORDER BY e.starts_at DESC,e.id DESC
+            ""","$all",includeDeleted?1:0);
         using var r=cmd.ExecuteReader(); var result=new List<EventInfo>();
-        while(r.Read()) result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),
+        var hidden=HiddenCatalogKeys("performance");
+        while(r.Read()) if(includeDeleted||!hidden.Contains(CatalogText.Key(r.GetString(2)))) result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),
             r.GetString(4),r.GetString(5),r.GetInt32(6),r.GetInt32(7)));
         return result;
     }
@@ -108,6 +111,7 @@ public sealed partial class Store
         try
         {
             using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+            RequireActiveEvent(c,tx,eventId);
             var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
             using var batch=Command(c,"""
                 INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date,sender)

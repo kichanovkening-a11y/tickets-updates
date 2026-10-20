@@ -21,7 +21,7 @@ public sealed partial class Store
     {
         using var c=Open(); using var version=Command(c,"PRAGMA user_version");
         var v=Convert.ToInt32(version.ExecuteScalar());
-        if(v>6) throw new TicketException("База создана более новой программой. Обновите программу.");
+        if(v>7) throw new TicketException("База создана более новой программой. Обновите программу.");
         if(v>=2) return;
         var copy=Path+".before-v2.db";
         if(!System.IO.File.Exists(copy))
@@ -56,7 +56,7 @@ public sealed partial class Store
     }
     public List<VenueInfo> Venues()
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT id,name,address FROM venue ORDER BY name");
+        using var c=Open(); using var cmd=Command(c,"SELECT id,name,address FROM venue WHERE NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='venue' AND h.entity_key=CAST(venue.id AS TEXT)) ORDER BY name");
         using var r=cmd.ExecuteReader(); var list=new List<VenueInfo>();
         while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2))); return list;
     }
@@ -64,13 +64,16 @@ public sealed partial class Store
     {
         using var c=Open(); using var cmd=Command(c,"SELECT id,title FROM performance ORDER BY title");
         using var r=cmd.ExecuteReader(); var list=new List<PerformanceInfo>();
-        while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1))); return list;
+        var hidden=HiddenCatalogKeys("performance");
+        while(r.Read()) if(!hidden.Contains(CatalogText.Key(r.GetString(1)))) list.Add(new(r.GetInt64(0),r.GetString(1))); return list;
     }
     public long SavePerformance(string title)
     {
         title=Required(title,"Спектакль"); var key=title.Normalize().ToUpperInvariant(); using var c=Open();
-        using var cmd=Command(c,"INSERT OR IGNORE INTO performance(title,name_key) VALUES($n,$k)","$n",title,"$k",key); cmd.ExecuteNonQuery();
-        using var find=Command(c,"SELECT id FROM performance WHERE name_key=$k","$k",key); return Convert.ToInt64(find.ExecuteScalar());
+        using var tx=c.BeginTransaction(deferred:false);
+        using var restore=Command(c,"DELETE FROM catalog_hidden WHERE kind='performance' AND entity_key=$k","$k",CatalogText.Key(title)); restore.Transaction=tx; restore.ExecuteNonQuery();
+        using var cmd=Command(c,"INSERT OR IGNORE INTO performance(title,name_key) VALUES($n,$k)","$n",title,"$k",key); cmd.Transaction=tx; cmd.ExecuteNonQuery();
+        using var find=Command(c,"SELECT id FROM performance WHERE name_key=$k","$k",key); find.Transaction=tx; var id=Convert.ToInt64(find.ExecuteScalar()); tx.Commit(); return id;
     }
     public List<DraftSeat> HallDraft(long venueId)=>VenueSeats(venueId).Select(s=>new DraftSeat{
         Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y}).ToList();
@@ -103,7 +106,7 @@ public sealed partial class Store
     }
     public List<PlanInfo> Plans(long venueId)
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT id,venue_id,name FROM pricing_plan WHERE venue_id=$v ORDER BY name","$v",venueId);
+        using var c=Open(); using var cmd=Command(c,"SELECT id,venue_id,name FROM pricing_plan WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE (h.kind='plan' AND h.entity_key=CAST(pricing_plan.id AS TEXT)) OR (h.kind='venue' AND h.entity_key=CAST(pricing_plan.venue_id AS TEXT))) ORDER BY name","$v",venueId);
         using var r=cmd.ExecuteReader(); var list=new List<PlanInfo>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
     }
     public List<PriceValue> PlanPrices(long planId)
@@ -128,6 +131,7 @@ public sealed partial class Store
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
         try
         {
+            RequireActiveVenue(c,tx,venueId);
             using(var existing=Command(c,"SELECT name FROM pricing_plan WHERE venue_id=$v","$v",venueId))
             {
                 existing.Transaction=tx;using var read=existing.ExecuteReader();
@@ -150,6 +154,9 @@ public sealed partial class Store
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
         using var title=Command(c,"SELECT title FROM performance WHERE id=$p","$p",performanceId); title.Transaction=tx;
         var name=title.ExecuteScalar() as string ?? throw new TicketException("Выберите спектакль.");
+        RequireActiveVenue(c,tx,venueId);
+        if(IsCatalogHidden(c,tx,"performance",CatalogText.Key(name))) throw new TicketException("Спектакль удалён из справочника.");
+        if(IsCatalogHidden(c,tx,"plan",planId.ToString(CultureInfo.InvariantCulture))) throw new TicketException("Расценовка удалена из справочника.");
         using var check=Command(c,"SELECT count(*) FROM pricing_plan WHERE id=$p AND venue_id=$v","$p",planId,"$v",venueId); check.Transaction=tx;
         if(Convert.ToInt32(check.ExecuteScalar())!=1) throw new TicketException("Выберите расценовку этого зала.");
         using var add=Command(c,"INSERT INTO event(venue_id,title,starts_at,legacy_date) VALUES($v,$n,$d,$l) RETURNING id",

@@ -12,8 +12,10 @@ public partial class MainWindow : Window
 {
     private readonly Store store;
     private List<EventInfo> events=[];
+    private List<EventInfo> archivedEvents=[];
     private EventInfo? current;
     private bool ready;
+    private bool currentArchived;
     private readonly Stack<PriceChange> priceUndo=[];
 
     public MainWindow(Store store)
@@ -29,10 +31,9 @@ public partial class MainWindow : Window
         Height=Math.Min(880,workArea.Height);
         MinWidth=Math.Min(800,workArea.Width);
         MinHeight=Math.Min(500,workArea.Height);
-        StateChanged+=(_,_)=>MaximizeButton.Content=WindowState==WindowState.Maximized?"В окно":"Развернуть";
         Hall.SelectionChanged+=UpdateSelection;
         Loaded+=(_,_)=>Run(()=> {
-            events=store.Events(); ready=true; ApplyFilter();RefreshRecipients();
+            ReadEventCatalog(); ready=true; ApplyFilter();RefreshRecipients();
             HomeSummary.Text=$"В базе мероприятий: {events.Count}. Старые выдачи не переносились.";
             ShowHome();
             UpdateNumber();
@@ -68,6 +69,13 @@ public partial class MainWindow : Window
             var old=new TreeViewItem{Header=$"Прошедшие ({past.Sum(g=>g.Shows.Count)})",Foreground=Brushes.Gray,FontWeight=FontWeights.Bold};
             foreach(var group in past)old.Items.Add(Group(group,true));EventsList.Items.Add(old);
         }
+        var deleted=archivedEvents.Where(x=>SearchText.Matches(x.Title+" "+x.Venue+" "+x.Date,q)).ToList();
+        if(deleted.Count>0)
+        {
+            var archive=new TreeViewItem{Header=$"Удалённые из справочников ({deleted.Count})",Foreground=Brushes.Gray};
+            foreach(var group in deleted.GroupBy(x=>CatalogText.Key(x.Title)).OrderBy(g=>g.First().Title))archive.Items.Add(Group(new PerformanceShows(group.First().Title,group.OrderBy(x=>x.SortDate).ToList()),true));
+            EventsList.Items.Add(archive);
+        }
         if(id.HasValue)SelectEvent(id.Value);
         StatusText.Text=$"Мероприятий: {filtered.Count} · База: {store.Path}";
     }
@@ -91,16 +99,14 @@ public partial class MainWindow : Window
     }
     private void HomeClick(object sender,RoutedEventArgs e) { current=null;foreach(var row in EventRows())row.IsSelected=false;ShowHome(); }
     private void FindEventClick(object sender,RoutedEventArgs e) { SearchBox.Focus(); SearchBox.SelectAll(); }
-    private void MinimizeClick(object sender,RoutedEventArgs e)=>WindowState=WindowState.Minimized;
-    private void MaximizeClick(object sender,RoutedEventArgs e)=>WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;
     private void UpdateClick(object sender,RoutedEventArgs e)=>Run(()=>new UpdateWindow(store).ShowDialog());
     private void CloseClick(object sender,RoutedEventArgs e)=>Close();
-    private void PerformancesClick(object sender,RoutedEventArgs e)=>Run(()=>new PerformanceWindow(store).ShowDialog());
+    private void PerformancesClick(object sender,RoutedEventArgs e)=>Run(()=>{new PerformanceWindow(store).ShowDialog();RefreshCatalogNavigation();});
     private void NewHallClick(object sender,RoutedEventArgs e)=>Run(()=>new HallEditorWindow(store).ShowDialog());
     private void PricesClick(object sender,RoutedEventArgs e)=>Run(()=>new PriceEditorWindow(store).ShowDialog());
     private void NewEventClick(object sender,RoutedEventArgs e)=>Run(()=>{
         var dialog=new EventEditorWindow(store);
-        if(dialog.ShowDialog()==true){events=store.Events();SearchBox.Clear();ApplyFilter();SelectEvent(dialog.CreatedId);}
+        if(dialog.ShowDialog()==true){ReadEventCatalog();SearchBox.Clear();ApplyFilter();SelectEvent(dialog.CreatedId);}
     });
     private void HallsClick(object sender,RoutedEventArgs e)=>Run(()=>{
         var window=new EditorWindow(store,"Залы",750,600);
@@ -109,11 +115,17 @@ public partial class MainWindow : Window
         var buttons=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,12)};DockPanel.SetDock(buttons,Dock.Top);panel.Children.Add(buttons);
         var add=new Button{Content="Создать зал"};add.Click+=(_,_)=>Run(()=>{new HallEditorWindow(store).ShowDialog();list.ItemsSource=store.Venues();});buttons.Children.Add(add);
         var edit=new Button{Content="Открыть / изменить копию"};edit.Click+=(_,_)=>Run(()=>{if(list.SelectedItem is VenueInfo v){new HallEditorWindow(store,v).ShowDialog();list.ItemsSource=store.Venues();}});buttons.Children.Add(edit);
-        panel.Children.Add(list);window.ShowDialog();
+        var delete=new Button{Content="Удалить площадку"};delete.Click+=(_,_)=>Run(()=>{
+            if(list.SelectedItem is not VenueInfo selected)throw new TicketException("Выберите площадку.");
+            if(MessageBox.Show(window.DialogOwnerForHost,$"Удалить «{selected.Name}» из справочника? Выдачи и документы сохранятся в истории.","Удаление площадки",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
+            store.DeleteVenue(selected.Id);list.ItemsSource=store.Venues();
+        });buttons.Children.Add(delete);
+        panel.Children.Add(list);window.ShowDialog();RefreshCatalogNavigation();
     });
     private void LoadEvent(bool fit)
     {
         if(current is null) return;
+        currentArchived=store.IsEventArchived(current.Id);
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;
         EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Выдано: {seats.Count(s=>s.TicketId.HasValue)}";
@@ -140,15 +152,16 @@ public partial class MainWindow : Window
         var selected=Hall.SelectedSeats;
         SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0)}).ToList();
         IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Выдано: {g.Key} — мест: {g.Count()}"));
+        var archived=currentArchived;
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
         SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
-        IssueButton.IsEnabled=current is not null && selected.Count>0 && free==selected.Count &&
+        IssueButton.IsEnabled=!archived && current is not null && selected.Count>0 && free==selected.Count &&
             !string.IsNullOrWhiteSpace(RecipientBox.Text) && !string.IsNullOrWhiteSpace(SeriesBox.Text) &&
             long.TryParse(NumberBox.Text,out var n) && n>0;
-        ApplyPriceButton.IsEnabled=selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
-        UndoPriceButton.IsEnabled=priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
+        ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
+        UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
         ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
-        SelectionHint.Text=selected.Count==0?"Клик добавляет место, повторный клик снимает его. Протяните левой кнопкой, чтобы добавить несколько мест.":
+        SelectionHint.Text=archived?"Показ удалён из рабочих списков. Доступны просмотр накладных и возврат мест на схеме.":selected.Count==0?"Клик добавляет место, повторный клик снимает его. Протяните левой кнопкой, чтобы добавить несколько мест.":
             free==selected.Count?"Все выбранные места доступны для выдачи.":
             issued==selected.Count?"Выбраны выданные билеты. Их можно вернуть.":
             "Для выдачи выберите только свободные места с ценой. Для возврата — только выданные.";
@@ -160,7 +173,6 @@ public partial class MainWindow : Window
         if(!ready) return;
         NumberBox.Text=store.NextNumber(SeriesBox.Text).ToString(CultureInfo.InvariantCulture); UpdateSelection();
     }
-    private void SpecificationsClick(object sender,RoutedEventArgs e)=>Run(()=>new SpecificationWindow(store,RecipientBox.Text).ShowDialog());
     private void TogglePriceClick(object sender,RoutedEventArgs e){PriceEditorPanel.Visibility=PriceEditorPanel.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;if(PriceEditorPanel.Visibility==Visibility.Visible)PriceBox.Focus();}
     private void PriceAmountChanged(object sender,TextChangedEventArgs e)
     {
@@ -185,7 +197,18 @@ public partial class MainWindow : Window
         if(!priceUndo.TryPeek(out var change)||current?.Id!=change.EventId)throw new TicketException("В этом показе нет изменений цены для отмены.");
         store.UndoPriceChange(change);priceUndo.Pop();LoadEvent(false);StatusText.Text="Последнее изменение цены отменено.";
     });
-    private void RecipientsClick(object sender,RoutedEventArgs e)=>Run(()=>new RecipientsWindow(store).ShowDialog());
+    private void RecipientsClick(object sender,RoutedEventArgs e)=>Run(()=>{new RecipientsWindow(store).ShowDialog();
+        if(!store.Recipients().Contains(RecipientBox.Text)){RecipientBox.SelectedItem=null;RecipientBox.Text="";}RefreshRecipients();
+    });
+    private void ReadEventCatalog()
+    {
+        events=store.Events();var active=events.Select(e=>e.Id).ToHashSet();archivedEvents=store.Events(true).Where(e=>!active.Contains(e.Id)).ToList();
+    }
+    private void RefreshCatalogNavigation()
+    {
+        ReadEventCatalog();ApplyFilter();
+        if(current is not null&&!events.Any(e=>e.Id==current.Id)){current=null;Hall.Load([],[],true);HistoryGrid.ItemsSource=null;ShowHome();}
+    }
     private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
     private void IssueSelected(bool print)
     {
@@ -218,7 +241,7 @@ public partial class MainWindow : Window
         if(MessageBox.Show(this,$"Вернуть билеты: {ids.Length}? Места снова станут свободными.","Возврат",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes) return;
         var eventId=current!.Id;var issueIds=store.History(eventId).Where(t=>ids.Contains(t.Id)).Select(t=>t.IssueId).Distinct().ToArray();
         store.Return(ids); LoadEvent(false); StatusText.Text=$"Возвращено билетов: {ids.Length}. Записи сохранены в журнале.";
-        foreach(var issue in issueIds)try{store.SaveInvoiceDocument(eventId,issue);}catch(Exception ex){StatusText.Text+=" Не удалось обновить Word: "+ex.Message;}
+        foreach(var issue in issueIds)try{store.SaveAllDocuments(eventId,issue);}catch(Exception ex){StatusText.Text+=" Не удалось обновить Word: "+ex.Message;}
     }
     private void BackupClick(object sender,RoutedEventArgs e)=>Run(()=> {
         var dialog=new SaveFileDialog {Filter="База билетов (*.db)|*.db",FileName=$"tickets-{DateTime.Now:yyyy-MM-dd-HHmm}.db"};

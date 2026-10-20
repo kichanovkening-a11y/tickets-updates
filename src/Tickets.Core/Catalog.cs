@@ -21,7 +21,7 @@ public sealed partial class Store
     {
         using var c=Open(); using var version=Command(c,"PRAGMA user_version");
         var v=Convert.ToInt32(version.ExecuteScalar());
-        if(v>3) throw new TicketException("База создана более новой программой. Обновите программу.");
+        if(v>4) throw new TicketException("База создана более новой программой. Обновите программу.");
         if(v>=2) return;
         var copy=Path+".before-v2.db";
         if(!System.IO.File.Exists(copy))
@@ -145,7 +145,10 @@ public sealed partial class Store
         if(Convert.ToInt32(check.ExecuteScalar())!=1) throw new TicketException("Выберите расценовку этого зала.");
         using var add=Command(c,"INSERT INTO event(venue_id,title,starts_at,legacy_date) VALUES($v,$n,$d,$l) RETURNING id",
             "$v",venueId,"$n",name,"$d",date.ToString("yyyy-MM-ddTHH:mm:ss",CultureInfo.InvariantCulture),"$l",date.ToString("dd.MM.yyyy HH:mm:ss",CultureInfo.InvariantCulture));
-        add.Transaction=tx; var id=Convert.ToInt64(add.ExecuteScalar());
+        add.Transaction=tx;long id;
+        try{id=Convert.ToInt64(add.ExecuteScalar());}
+        catch(SqliteException ex) when(ex.SqliteErrorCode==19&&ex.Message.Contains("event_slot_conflict"))
+        {throw new TicketException("На этой сцене уже есть показ в выбранную дату и время.");}
         using var prices=Command(c,"INSERT INTO event_price SELECT $e,seat_id,amount,color FROM plan_price WHERE plan_id=$p","$e",id,"$p",planId);
         prices.Transaction=tx; prices.ExecuteNonQuery(); tx.Commit(); return id;
     }

@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); EnsureScheduling(); }
 
     private SqliteConnection Open()
     {
@@ -133,7 +133,7 @@ public sealed partial class Store
                 insert.Transaction=tx; insert.ExecuteNonQuery();
                 if(n<long.MaxValue) n++;
             }
-            tx.Commit();return issueId;
+            AddRecipient(c,tx,recipient);tx.Commit();return issueId;
         }
         catch(SqliteException ex) when(ex.SqliteErrorCode==19)
         { throw new TicketException("Серия и номер уже использованы. Выдача отменена целиком; выберите следующий номер или другую серию."); }

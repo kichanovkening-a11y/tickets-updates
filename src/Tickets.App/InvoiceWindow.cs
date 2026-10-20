@@ -25,11 +25,11 @@ internal sealed class InvoiceWindow : EditorWindow
         Button(returns,"Вернуть выбранные билеты",()=>Try(()=>{
             var ids=tickets.SelectedItems.Cast<ReturnRow>().Select(t=>t.Id).ToArray();
             if(ids.Length==0)throw new TicketException("Выберите билеты для возврата.");
-            if(MessageBox.Show(this,$"Вернуть билеты: {ids.Length}?","Возврат",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
+            if(MessageBox.Show(DialogOwner,$"Вернуть билеты: {ids.Length}?","Возврат",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             Store.Return(ids);Refresh();
         }));
         root.Children.Add(reader);Refresh();
-        if(print)Loaded+=(_,_)=>Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>Try(Print)));
+        if(print)OnShown(()=>Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>Try(Print))));
     }
     private sealed record ReturnRow(long Id,string Label);
     private void Refresh()
@@ -40,7 +40,7 @@ internal sealed class InvoiceWindow : EditorWindow
     private void Save()
     {
         var dialog=new SaveFileDialog{Filter="Документ Word (*.docx)|*.docx",DefaultExt=".docx",AddExtension=true,FileName=$"Накладная-{issueId}.docx"};
-        if(dialog.ShowDialog(this)==true)InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),dialog.FileName);
+        if(dialog.ShowDialog(DialogOwner)==true)InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),dialog.FileName);
     }
     private void Print()
     {

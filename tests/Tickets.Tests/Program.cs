@@ -224,6 +224,31 @@ Test("Word invoice contains exact issuance tickets totals and escaped text",s=>{
     var many=invoice with{Tickets=Enumerable.Range(1,85).Select(n=>invoice.Tickets[0] with{Number=n,Seat=n.ToString()}).ToList()};
     InvoiceDocuments.SaveWord(many,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-many.docx"));
 });
+Test("same venue and instant cannot be booked twice",s=>{
+    var venue=s.CreateHall("Schedule venue","",new[]{new DraftSeat{Row="1",Number="1"}});var seat=s.VenueSeats(venue)[0];
+    var plan=s.SavePlan(venue,"Schedule plan",new[]{new PriceValue(seat.Id,100,"#112233")});var perf=s.SavePerformance("Schedule show");var date=new DateTime(2030,1,1,19,20,21);
+    s.CreateEvent(perf,venue,plan,date);Reject(()=>s.CreateEvent(perf,venue,plan,date));
+    var other=s.SavePerformance("Different show");Reject(()=>s.CreateEvent(other,venue,plan,date));
+    s.CreateEvent(perf,venue,plan,date.AddSeconds(1));
+});
+Test("recipient directory is shared searchable and survives returns",s=>{
+    var method=typeof(Store).GetMethod("Recipients");Check(method is not null,"recipient directory missing");
+    var c=Choice(s);s.Issue(c.Event,new[]{c.Seats[0]},"Новая Ёлка Организация","R",1);
+    s.Return(s.History(c.Event).Select(t=>t.Id).ToArray());
+    var names=(IEnumerable<string>)method!.Invoke(new Store(s.Path),new object[]{"елка"})!;
+    Check(names.Contains("Новая Ёлка Организация"));
+});
+Test("schedule groups by performance with chronological upcoming and accessible past",s=>{
+    EventInfo Show(long id,string title,string date)=>new(id,1,title,"Зал",date,date,10,0);
+    var now=new DateTime(2030,1,1,12,0,0);var data=new[]{Show(1,"Ёлка","2030-01-02T19:00:00"),Show(2,"Ёлка","2030-01-01T19:00:00"),Show(3,"Ёлка","2029-12-31T19:00:00"),Show(4,"Концерт","2030-01-03T19:00:00")};
+    var upcoming=EventSchedule.Groups(data,false,now);Check(upcoming.Count==2&&upcoming[0].Shows.Select(e=>e.Id).SequenceEqual(new long[]{2,1}));
+    var past=EventSchedule.Groups(data,true,now);Check(past.Single().Shows.Single().Id==3);
+    Check(EventSchedule.Groups(data,false,now,"елка").Single().Shows.Count==2);
+});
+Test("editable clock accepts seconds and rejects invalid times",s=>{
+    Check(CatalogText.Time("7","08","09")==new TimeSpan(7,8,9));Reject(()=>CatalogText.Time("24","0","0"));Reject(()=>CatalogText.Time("1","60","0"));Reject(()=>CatalogText.Time("1","0","60"));Reject(()=>CatalogText.Time("","0","0"));
+    Check(s.Recipients().Count>=90&&s.Recipients("СТС").Count>0,"legacy organizations absent");
+});
 SqliteConnection.ClearAllPools();
 Directory.Delete(root,true);
 Console.WriteLine($"{total-failed}/{total} passed");

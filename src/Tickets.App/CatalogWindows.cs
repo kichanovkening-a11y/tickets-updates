@@ -9,16 +9,27 @@ namespace Tickets.App;
 internal class EditorWindow : Window
 {
     protected readonly Store Store;
-    protected EditorWindow(Store store,string title,double width=1100,double height=760)
+    internal EditorWindow(Store store,string title,double width=1100,double height=760)
     {
         Store=store; Title=title; Owner=Application.Current.MainWindow; WindowStartupLocation=WindowStartupLocation.CenterOwner;
         Width=Math.Min(width,SystemParameters.WorkArea.Width); Height=Math.Min(height,SystemParameters.WorkArea.Height);
         MinWidth=Math.Min(650,Width); MinHeight=Math.Min(450,Height);
+        Loaded+=(_,_)=>NotifyShown();
     }
+    internal bool IsInline{get;set;}
+    internal bool? InlineResult{get;private set;}
+    private Action? shown;
+    private bool wasShown;
+    protected Window DialogOwner=>IsInline?Application.Current.MainWindow:this;
+    protected void OnShown(Action action)=>shown+=action;
+    internal void NotifyShown(){if(wasShown)return;wasShown=true;shown?.Invoke();}
+    public new bool? ShowDialog()=>Application.Current.MainWindow is MainWindow main?main.PresentEditor(this):base.ShowDialog();
+    internal bool? ShowSeparateDialog()=>base.ShowDialog();
+    protected void Finish(bool result){if(IsInline){InlineResult=result;Close();}else DialogResult=result;}
     protected void Try(Action action)
     {
         try { action(); }
-        catch(Exception ex) { MessageBox.Show(this,ex.Message,"Билеты",MessageBoxButton.OK,MessageBoxImage.Information); }
+        catch(Exception ex) { MessageBox.Show(DialogOwner,ex.Message,"Билеты",MessageBoxButton.OK,MessageBoxImage.Information); }
     }
     protected static TextBox Field(Panel panel,string label,string value="")
     {
@@ -95,7 +106,7 @@ internal sealed class HallEditorWindow : EditorWindow
         Button(form,"Удалить выбранные места",()=>{foreach(var s in Selection())seats.Remove(s);Refresh();});
         Button(form,"Сохранить как новый зал",()=>Try(()=>{
             if(!CommitEdits())return;
-            CreatedId=store.CreateHall(name.Text,address.Text,seats.ToArray()); DialogResult=true;
+            CreatedId=store.CreateHall(name.Text,address.Text,seats.ToArray()); Finish(true);
         }));
         form.Children.Add(summary);
         form.Children.Add(new TextBlock{Text="Ряды, номера и координаты можно менять в таблице «Места». Существующий зал сохраняется новой копией.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,0)});
@@ -106,7 +117,7 @@ internal sealed class HallEditorWindow : EditorWindow
             table.Columns.Add(new DataGridTextColumn{Header=header,Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.LostFocus},Width=width});
         table.ItemsSource=seats;
         tabs.Items.Add(new TabItem{Header="Схема",Content=preview}); tabs.Items.Add(new TabItem{Header="Места — редактирование",Content=table}); area.Children.Add(tabs);
-        Loaded+=(_,_)=>Refresh();
+        OnShown(Refresh);
     }
     private List<DraftSeat> Selection()=>tabs.SelectedIndex==1?table.SelectedItems.Cast<DraftSeat>().ToList():
         preview.Selected.Where(id=>id>0&&id<=seats.Count).Select(id=>seats[(int)id-1]).ToList();
@@ -114,7 +125,7 @@ internal sealed class HallEditorWindow : EditorWindow
     {
         if(!CommitEdits())return;table.Items.Refresh();
         if(seats.Any(s=>!double.IsFinite(s.X)||!double.IsFinite(s.Y)||string.IsNullOrWhiteSpace(s.Sector)||string.IsNullOrWhiteSpace(s.Row)||string.IsNullOrWhiteSpace(s.Number)))
-        {MessageBox.Show(this,"Заполните сектор, ряд, место и корректные координаты в таблице.","Зал");return;}
+        {MessageBox.Show(DialogOwner,"Заполните сектор, ряд, место и корректные координаты в таблице.","Зал");return;}
         var view=seats.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,0,"#7AA8D9",null,"","",null)).ToList();
         preview.Load(view,seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(x=>x.X),g.Min(x=>x.Y)-26)).ToList(),true);
         summary.Text=$"Мест: {seats.Count} · Секторов: {seats.Select(s=>s.Sector).Distinct().Count()}";
@@ -122,7 +133,7 @@ internal sealed class HallEditorWindow : EditorWindow
     private bool CommitEdits()
     {
         if(table.CommitEdit(DataGridEditingUnit.Cell,true)&&table.CommitEdit(DataGridEditingUnit.Row,true))return true;
-        MessageBox.Show(this,"Исправьте ошибку в таблице: координаты X и Y должны быть числами.","Зал");return false;
+        MessageBox.Show(DialogOwner,"Исправьте ошибку в таблице: координаты X и Y должны быть числами.","Зал");return false;
     }
 }
 
@@ -165,7 +176,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         Button(form,"Убрать цену у выбранных",()=>{foreach(var id in preview.Selected)prices.Remove(id);Refresh();});
         Button(form,"Сохранить новую расценовку",()=>Try(()=>{
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
-            CreatedId=store.SavePlan(v.Id,name.Text,prices.Values.ToArray());DialogResult=true;
+            CreatedId=store.SavePlan(v.Id,name.Text,prices.Values.ToArray());Finish(true);
         }));
         form.Children.Add(new TextBlock{Text="Цены сохраняются отдельным вариантом. Уже созданные показы и выданные билеты не изменяются.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);var toolbar=new StackPanel{Orientation=Orientation.Horizontal};DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
@@ -176,7 +187,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             seats=store.VenueSeats(v.Id);prices.Clear();plans.ItemsSource=store.Plans(v.Id);oldEvent.ItemsSource=store.Events().Where(e=>e.VenueId==v.Id).ToList();
             if(plans.Items.Count>0)plans.SelectedIndex=0;if(oldEvent.Items.Count>0)oldEvent.SelectedIndex=0;Refresh(true);
         }
-        venue.SelectionChanged+=(_,_)=>Try(LoadVenue);Loaded+=(_,_)=>Try(LoadVenue);
+        venue.SelectionChanged+=(_,_)=>Try(LoadVenue);OnShown(()=>Try(LoadVenue));
     }
     private void Refresh(bool fit=false)
     {
@@ -192,6 +203,7 @@ internal sealed class EventEditorWindow : EditorWindow
     public long CreatedId{get;private set;}
     public EventEditorWindow(Store store):base(store,"Новый показ",650,650)
     {
+        FontSize=16.9;FontWeight=FontWeights.SemiBold;
         var form=new StackPanel{Margin=new Thickness(25)};Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         var performance=Combo(form,"Спектакль",store.Performances(),"Title");
         var venue=Combo(form,"Площадка / зал",store.Venues(),"Name");
@@ -203,21 +215,28 @@ internal sealed class EventEditorWindow : EditorWindow
         void LoadPlans(){if(venue.SelectedItem is VenueInfo v){plan.ItemsSource=store.Plans(v.Id);if(plan.Items.Count>0)plan.SelectedIndex=0;}}
         createPlan.Click+=(_,_)=>Try(()=>{
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
-            var editor=new PriceEditorWindow(store,v.Id){Owner=this};
+            var editor=new PriceEditorWindow(store,v.Id);
             if(editor.ShowDialog()==true){LoadPlans();plan.SelectedItem=plan.Items.Cast<PlanInfo>().FirstOrDefault(p=>p.Id==editor.CreatedId);}
         });
         venue.SelectionChanged+=(_,_)=>Try(LoadPlans);LoadPlans();
-        form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});var date=new DatePicker{SelectedDate=DateTime.Today,CalendarStyle=(Style)Application.Current.FindResource(typeof(Calendar))};form.Children.Add(date);
+        form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});
+        var dateRow=new Grid();dateRow.ColumnDefinitions.Add(new ColumnDefinition());dateRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});form.Children.Add(dateRow);
+        var date=new DatePicker{SelectedDate=DateTime.Today,CalendarStyle=(Style)Application.Current.FindResource(typeof(Calendar)),FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
+        date.Loaded+=(_,_)=>{date.ApplyTemplate();if(date.Template.FindName("PART_Button",date) is UIElement button)button.Visibility=Visibility.Collapsed;};dateRow.Children.Add(date);
+        var calendarButton=new Button{Content="Календарь",Margin=new Thickness(0)};Grid.SetColumn(calendarButton,1);dateRow.Children.Add(calendarButton);calendarButton.Click+=(_,_)=>date.IsDropDownOpen=!date.IsDropDownOpen;
         form.Children.Add(new TextBlock{Text="Время",Margin=new Thickness(0,12,0,5)});
-        var timeRow=new StackPanel{Orientation=Orientation.Horizontal};form.Children.Add(timeRow);
-        var hours=Combo(timeRow,"Часы",Enumerable.Range(0,24).Select(n=>n.ToString("00")),"");
-        var minutes=Combo(timeRow,"Минуты",Enumerable.Range(0,60).Select(n=>n.ToString("00")),"");
-        hours.Width=85;minutes.Width=85;minutes.Margin=new Thickness(12,0,0,0);hours.SelectedIndex=19;minutes.SelectedIndex=0;
+        var timeRow=new WrapPanel();form.Children.Add(timeRow);
+        ComboBox Part(string title,int count,int selected)
+        {
+            var group=new StackPanel{Margin=new Thickness(0,0,15,0)};timeRow.Children.Add(group);
+            var box=Combo(group,title,Enumerable.Range(0,count).Select(n=>n.ToString("00")),"");box.IsEditable=true;box.IsTextSearchEnabled=false;box.Width=100;box.SelectedIndex=selected;return box;
+        }
+        var hours=Part("Часы",24,19);var minutes=Part("Минуты",60,0);var seconds=Part("Секунды",60,0);
         Button(form,"Создать показ",()=>Try(()=>{
             if(performance.SelectedItem is not PerformanceInfo p||venue.SelectedItem is not VenueInfo v||plan.SelectedItem is not PlanInfo r||date.SelectedDate is null)
                 throw new TicketException("Выберите спектакль, зал, расценовку и дату. Если расценовок нет, сначала создайте её.");
-            var t=new TimeSpan(hours.SelectedIndex,minutes.SelectedIndex,0);
-            CreatedId=store.CreateEvent(p.Id,v.Id,r.Id,date.SelectedDate.Value.Date+t);DialogResult=true;
+            var t=CatalogText.Time(hours.Text,minutes.Text,seconds.Text);
+            CreatedId=store.CreateEvent(p.Id,v.Id,r.Id,date.SelectedDate.Value.Date+t);Finish(true);
         }));
     }
 }

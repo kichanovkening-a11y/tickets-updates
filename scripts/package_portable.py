@@ -6,7 +6,7 @@ import zipfile
 root, output = map(Path, sys.argv[1:])
 for item in ['Data/tickets.db', 'Data/session.lock']:
     (root/item).unlink(missing_ok=True)
-for path in (root/'Data').glob('*.before-v2.db'):
+for path in (root/'Data').glob('*.before-v*.db'):
     path.unlink()
 for directory in ['Backups', '.updates']:
     if (root/directory).exists():

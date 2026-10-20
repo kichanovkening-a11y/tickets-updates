@@ -19,7 +19,8 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();
+        InitializeComponent();ReadWindowSettings();
+        RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
         var appVersion=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
         Title="Билеты · "+appVersion;AppBrand.Text="БИЛЕТЫ · "+appVersion;
         var workArea=SystemParameters.WorkArea;
@@ -30,7 +31,7 @@ public partial class MainWindow : Window
         StateChanged+=(_,_)=>MaximizeButton.Content=WindowState==WindowState.Maximized?"В окно":"Развернуть";
         Hall.SelectionChanged+=UpdateSelection;
         Loaded+=(_,_)=>Run(()=> {
-            events=store.Events(); ready=true; ApplyFilter();
+            events=store.Events(); ready=true; ApplyFilter();RefreshRecipients();
             HomeSummary.Text=$"В базе мероприятий: {events.Count}. Старые выдачи не переносились.";
             ShowHome();
             UpdateNumber();
@@ -48,14 +49,32 @@ public partial class MainWindow : Window
     {
         var id=current?.Id; var q=Normalize(SearchBox.Text.Trim());
         var filtered=events.Where(x=>Normalize(x.Title+" "+x.Venue+" "+x.Date).Contains(q)).ToList();
-        EventsList.ItemsSource=filtered;
-        EventsList.SelectedItem=filtered.FirstOrDefault(x=>x.Id==id);
+        EventsList.Items.Clear();var now=DateTime.Now;
+        TreeViewItem Group(PerformanceShows group,bool past)
+        {
+            var title=new TextBlock{Text=group.Title,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,MaxWidth=205};
+            var root=new TreeViewItem{Header=title,Foreground=past?Brushes.Gray:Brushes.Black,Margin=new Thickness(0,5,0,5)};
+            foreach(var show in group.Shows)
+            {
+                var label=new TextBlock{Text=show.Date+"\n"+show.Venue,TextWrapping=TextWrapping.Wrap,MaxWidth=180,Margin=new Thickness(0,6,0,6)};
+                root.Items.Add(new TreeViewItem{Header=label,Tag=show,Foreground=past?Brushes.Gray:Brushes.SteelBlue});
+            }
+            return root;
+        }
+        foreach(var group in EventSchedule.Groups(filtered,false,now))EventsList.Items.Add(Group(group,false));
+        var past=EventSchedule.Groups(filtered,true,now);if(past.Count>0)
+        {
+            var old=new TreeViewItem{Header=$"Прошедшие ({past.Sum(g=>g.Shows.Count)})",Foreground=Brushes.Gray,FontWeight=FontWeights.SemiBold};
+            foreach(var group in past)old.Items.Add(Group(group,true));EventsList.Items.Add(old);
+        }
+        if(id.HasValue)SelectEvent(id.Value);
         StatusText.Text=$"Мероприятий: {filtered.Count} · База: {store.Path}";
     }
-    private void EventChanged(object sender,SelectionChangedEventArgs e)
+    private void EventChanged(object sender,RoutedPropertyChangedEventArgs<object> e)
     {
         if(!ready) return;
-        current=EventsList.SelectedItem as EventInfo;
+        if(EventsList.SelectedItem is TreeViewItem group&&group.Tag is not EventInfo)return;
+        current=(EventsList.SelectedItem as TreeViewItem)?.Tag as EventInfo;
         if(current is null)
         {
             EventTitle.Text="Выберите мероприятие"; EventSubtitle.Text="";
@@ -69,7 +88,7 @@ public partial class MainWindow : Window
     {
         HomePanel.Visibility=Visibility.Visible; Workspace.Visibility=Visibility.Collapsed;
     }
-    private void HomeClick(object sender,RoutedEventArgs e) { EventsList.SelectedItem=null; ShowHome(); }
+    private void HomeClick(object sender,RoutedEventArgs e) { current=null;foreach(var row in EventRows())row.IsSelected=false;ShowHome(); }
     private void FindEventClick(object sender,RoutedEventArgs e) { SearchBox.Focus(); SearchBox.SelectAll(); }
     private void MinimizeClick(object sender,RoutedEventArgs e)=>WindowState=WindowState.Minimized;
     private void MaximizeClick(object sender,RoutedEventArgs e)=>WindowState=WindowState==WindowState.Maximized?WindowState.Normal:WindowState.Maximized;
@@ -80,10 +99,10 @@ public partial class MainWindow : Window
     private void PricesClick(object sender,RoutedEventArgs e)=>Run(()=>new PriceEditorWindow(store).ShowDialog());
     private void NewEventClick(object sender,RoutedEventArgs e)=>Run(()=>{
         var dialog=new EventEditorWindow(store);
-        if(dialog.ShowDialog()==true){events=store.Events();SearchBox.Clear();ApplyFilter();EventsList.SelectedItem=events.FirstOrDefault(x=>x.Id==dialog.CreatedId);}
+        if(dialog.ShowDialog()==true){events=store.Events();SearchBox.Clear();ApplyFilter();SelectEvent(dialog.CreatedId);}
     });
     private void HallsClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        var window=new Window{Owner=this,Title="Залы",Width=Math.Min(750,SystemParameters.WorkArea.Width),Height=Math.Min(600,SystemParameters.WorkArea.Height),WindowStartupLocation=WindowStartupLocation.CenterOwner};
+        var window=new EditorWindow(store,"Залы",750,600);
         var panel=new DockPanel{Margin=new Thickness(20)};window.Content=panel;
         var list=new ListBox{ItemsSource=store.Venues(),DisplayMemberPath="Name"};
         var buttons=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,12)};DockPanel.SetDock(buttons,Dock.Top);panel.Children.Add(buttons);
@@ -99,7 +118,7 @@ public partial class MainWindow : Window
         EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Выдано: {seats.Count(s=>s.TicketId.HasValue)}";
         issuePrices.Clear();PriceBox.Clear();
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
-        HistoryGrid.ItemsSource=store.Issues(current.Id);
+        HistoryGrid.ItemsSource=store.Issues(current.Id);RefreshRecipients();
         LegendPanel.Children.Clear();
         foreach(var price in seats.Where(s=>s.Amount.HasValue).GroupBy(s=>s.Amount).OrderBy(s=>s.Key))
             AddLegend(price.Key+" ₽",HallView.SeatBrush(price.First().Color));

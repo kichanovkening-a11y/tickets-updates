@@ -22,21 +22,23 @@ internal static class Program
         try
         {
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
-            var main=new Tickets.App.MainWindow(store);app.MainWindow=main;main.Show();Pump();
+            var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.Show();Pump();
             var actions=Logical(main).OfType<Button>().ToList();
             Check(actions.Count>=15,"main actions found");
             Check(actions.Where(b=>b.IsVisible).All(b=>b.ActualWidth==200&&b.ActualHeight==44),"all main action buttons have equal rendered size");
             var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EventEditorWindow")!;
             var editor=(Window)Activator.CreateInstance(type,store)!;editor.Show();Pump();
             var combos=Logical(editor).OfType<ComboBox>().ToList();
-            Check(combos.Count==5,"performance, venue, pricing, hours and minutes selectors");
-            Check(combos[3].Items.Count==24&&combos[4].Items.Count==60,"complete hours and minutes ranges");
+            Check(combos.Count==6,"performance, venue, pricing, hours minutes and seconds selectors");
+            Check(combos[3].Items.Count==24&&combos[4].Items.Count==60&&combos[5].Items.Count==60,"complete hours and minutes ranges");
             Check(combos[3].SelectedItem?.ToString()=="19"&&combos[4].SelectedItem?.ToString()=="00","default time is 19:00");
-            var date=Logical(editor).OfType<DatePicker>().Single();date.IsDropDownOpen=true;Pump();
+            Check(Math.Abs(editor.FontSize-16.9)<.01&&editor.FontWeight==FontWeights.SemiBold,"event form typography is larger and heavier");
+            Check(combos.Skip(3).All(c=>c.IsEditable),"hours minutes and seconds accept manual input");
+            var date=Logical(editor).OfType<DatePicker>().Single();Check(date.FontSize==26,"date text is doubled");Click(editor,"Календарь");Pump();
             var popup=(Popup)date.Template.FindName("PART_Popup",date);
             var calendar=Visual(popup.Child).OfType<Calendar>().Single();
-            Check(calendar.LayoutTransform is ScaleTransform scale&&scale.ScaleX==2&&scale.ScaleY==2,"opened calendar is doubled");
-            Check(calendar.DesiredSize.Width>=300,"calendar popup has enlarged layout bounds");
+            Check(calendar.LayoutTransform.Value.IsIdentity,"calendar remains at normal size");
+            Check(calendar.DesiredSize.Width<300,"calendar popup has original layout bounds");
             date.IsDropDownOpen=false;
             Exception? nestedError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
@@ -58,7 +60,9 @@ internal static class Program
             var seatIds=store.VenueSeats(venueId).Select(s=>s.Id).ToArray();
             var planId=store.SavePlan(venueId,"UI plan",seatIds.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
             var eventId=store.CreateEvent(store.SavePerformance("UI event"),venueId,planId,DateTime.Today.AddHours(19));
-            var events=(ListBox)main.FindName("EventsList");events.ItemsSource=store.Events();events.SelectedItem=events.Items.Cast<EventInfo>().Single(e=>e.Id==eventId);Pump();
+            var events=(TreeView)main.FindName("EventsList");
+            typeof(Tickets.App.MainWindow).GetField("events",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(main,store.Events());
+            typeof(Tickets.App.MainWindow).GetMethod("ApplyFilter",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
             var hall=(Tickets.App.HallView)main.FindName("Hall");main.Activate();hall.Focus();hall.Fit();Pump();
             Gesture(hall,new Point(8,8),new Point(8,8));
             Gesture(hall,new Point(38,38),new Point(38,38));
@@ -70,7 +74,7 @@ internal static class Program
             Gesture(hall,new Point(38,38),new Point(38,38));
             Check(hall.Selected.Count==3&&!hall.Selected.Contains(seatIds[3]),"repeat click deselects one place only");
             ((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");
-            ((TextBox)main.FindName("RecipientBox")).Text="UI recipient";
+            ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
             Exception? invoiceError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
@@ -87,9 +91,50 @@ internal static class Program
             issueButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(invoiceError is not null)throw invoiceError;
             var history=(DataGrid)main.FindName("HistoryGrid");Check(history.Items.Count==1,"one journal row for one issuance");
             Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
-            events.SelectedItem=events.Items.Cast<EventInfo>().First(e=>e.Id!=eventId);Pump();
+            main.SelectEvent(store.Events().First(e=>e.Id!=eventId).Id);Pump();
             Check(history.Items.Count==0,"journal hides issuances of other events");
-            main.Close();Console.WriteLine("PASS Windows editor flow, selection, issuance and invoice");return 0;
+            Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Прошедшие")==true),"past performances have a single expandable section");
+            var recipients=(ComboBox)main.FindName("RecipientBox");recipients.Text="СТС";Pump();
+            Check(recipients.Items.Cast<string>().Any(n=>n.Contains("СТС")),"recipient search includes imported organizations");recipients.IsDropDownOpen=false;
+            main.SeparateWindows=false;Exception? inlineError=null;var targetDate=DateTime.Today.AddDays(7);
+            ContentControl Inline(string name)=>Visual(main).OfType<ContentControl>().Single(c=>c.Tag?.GetType().Name==name);
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                Window? formWindow=null;
+                try
+                {
+                    var content=Inline("EventEditorWindow");formWindow=(Window)content.Tag;
+                    Check(app.Windows.Cast<Window>().Count(w=>w.IsVisible)==1,"event form is hosted inside main window");
+                    var boxes=Logical(content).OfType<ComboBox>().ToList();boxes[1].SelectedItem=boxes[1].Items.Cast<VenueInfo>().Single(v=>v.Id==venueId);
+                    Exception? priceError=null;
+                    app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                        Window? priceWindow=null;
+                        try{
+                            var pricing=Inline("PriceEditorWindow");priceWindow=(Window)pricing.Tag;
+                            Check(app.Windows.Cast<Window>().Count(w=>w.IsVisible)==1,"nested pricing form remains inside main window");
+                            Logical(pricing).OfType<TextBox>().First().Text="Embedded pricing";Click(pricing,"Назначить всему залу");Click(pricing,"Сохранить новую расценовку");
+                        }catch(Exception ex){priceError=ex;priceWindow?.Close();}
+                    }));
+                    Click(content,"Создать");if(priceError is not null)throw priceError;
+                    Check(boxes[2].SelectedItem is PlanInfo newPlan&&newPlan.Name=="Embedded pricing","nested pricing save returns to original form");
+                    Logical(content).OfType<DatePicker>().Single().SelectedDate=targetDate;boxes[3].Text="07";boxes[4].Text="08";boxes[5].Text="09";
+                    Click(content,"Создать показ");
+                }
+                catch(Exception ex){inlineError=ex;formWindow?.Close();}
+            }));
+            Click(main,"Новый показ");Pump();if(inlineError is not null)throw inlineError;
+            Check(store.Events().Any(e=>e.VenueId==venueId&&e.SortDate==targetDate.AddHours(7).AddMinutes(8).AddSeconds(9).ToString("yyyy-MM-ddTHH:mm:ss")),"typed hours minutes seconds create the correct show");
+            Check(((Grid)main.FindName("DialogLayer")).Visibility==Visibility.Collapsed&&((DockPanel)main.FindName("MainContent")).IsEnabled,"main window is restored after embedded save");
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                var settings=Inline("SettingsWindow");Logical(settings).OfType<CheckBox>().Single().IsChecked=true;Click(settings,"Сохранить");
+            }));Click(main,"Настройки");
+            Check(main.SeparateWindows&&File.ReadAllText(Path.Combine(work,"window-mode.txt"))=="separate","separate window preference is persisted");
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                var separate=app.Windows.Cast<Window>().Single(w=>w.Title=="Новый показ"&&w.IsVisible);
+                Check(app.Windows.Cast<Window>().Count(w=>w.IsVisible)==2,"separate window mode remains available");separate.Close();
+            }));Click(main,"Новый показ");
+            ((TextBox)main.FindName("SearchBox")).Text="no-such-performance-unique";Pump();
+            Check(((Grid)main.FindName("Workspace")).Visibility==Visibility.Collapsed&&!((Button)main.FindName("IssueButton")).IsEnabled,"empty search clears previous show and issuance context");
+            main.Close();Console.WriteLine("PASS complete catalog navigation, embedded forms, selection and invoices");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
         finally{foreach(var w in app.Windows.Cast<Window>().ToArray())w.Close();app.Shutdown();Directory.Delete(work,true);}

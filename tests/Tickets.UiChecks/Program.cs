@@ -100,8 +100,13 @@ internal static class Program
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
-        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));SetCursorPos((int)point.X,(int)point.Y);Pump();}
-        void SendMouse(string name,bool move=false){object args=move?new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount):new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left);typeof(Tickets.App.HallView).GetMethod(name,flags)!.Invoke(hall,new[]{args});}
+        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");Pump();}
+        void SendMouse(string name,bool move=false)
+        {
+            RoutedEventArgs args=move?new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount){RoutedEvent=Mouse.MouseMoveEvent,Source=hall}:
+                new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left){RoutedEvent=name=="OnMouseDown"?Mouse.MouseDownEvent:Mouse.MouseUpEvent,Source=hall};
+            typeof(Tickets.App.HallView).GetMethod(name,flags)!.Invoke(hall,new object[]{args});
+        }
         Position(from);SendMouse("OnMouseDown");Position(to);SendMouse("OnMouseMove",true);SendMouse("OnMouseUp");Pump();
     }
     private static void Pump()=>Application.Current.Dispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);

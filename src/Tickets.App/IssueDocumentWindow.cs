@@ -39,6 +39,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
             if(answer==MessageBoxResult.Yes)try{Save();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
     }
+    internal void SaveForNavigation(){if(template.Text!=original)Save();}
     private void Save()
     {
         var info=Store.SaveIssueDocument(eventId,issueId,kind,template.Text);original=info.Template;preview.Document=Document(info);

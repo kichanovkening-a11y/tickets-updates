@@ -4,6 +4,7 @@ public sealed partial class Store
 {
     public List<PlanInfo> AllPlans()
     {
+        foreach(var venue in Venues())EnsureEventPlans(venue.Id);
         using var c=Open();using var cmd=Command(c,"SELECT id,venue_id,name FROM pricing_plan WHERE NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE (h.kind='plan' AND h.entity_key=CAST(pricing_plan.id AS TEXT)) OR (h.kind='venue' AND h.entity_key=CAST(pricing_plan.venue_id AS TEXT))) ORDER BY name");using var read=cmd.ExecuteReader();var result=new List<PlanInfo>();
         while(read.Read())result.Add(new(read.GetInt64(0),read.GetInt64(1),read.GetString(2)));return result;
     }

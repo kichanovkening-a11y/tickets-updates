@@ -21,7 +21,7 @@ public sealed partial class Store
     {
         using var c=Open(); using var version=Command(c,"PRAGMA user_version");
         var v=Convert.ToInt32(version.ExecuteScalar());
-        if(v>7) throw new TicketException("База создана более новой программой. Обновите программу.");
+        if(v>8) throw new TicketException("База создана более новой программой. Обновите программу.");
         if(v>=2) return;
         var copy=Path+".before-v2.db";
         if(!System.IO.File.Exists(copy))
@@ -106,6 +106,7 @@ public sealed partial class Store
     }
     public List<PlanInfo> Plans(long venueId)
     {
+        EnsureEventPlans(venueId);
         using var c=Open(); using var cmd=Command(c,"SELECT id,venue_id,name FROM pricing_plan WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE (h.kind='plan' AND h.entity_key=CAST(pricing_plan.id AS TEXT)) OR (h.kind='venue' AND h.entity_key=CAST(pricing_plan.venue_id AS TEXT))) ORDER BY name","$v",venueId);
         using var r=cmd.ExecuteReader(); var list=new List<PlanInfo>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
     }

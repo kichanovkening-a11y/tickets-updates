@@ -134,6 +134,13 @@ internal static class Program
             typeof(Tickets.App.MainWindow).GetMethod("ApplyFilter",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
             var performanceGroup=events.Items.OfType<TreeViewItem>().First(i=>i.Header is TextBlock text&&text.Text=="UI event");performanceGroup.IsExpanded=false;performanceGroup.IsSelected=true;Pump();
             Check(performanceGroup.IsExpanded,"selecting a performance title opens its shows on one click");main.SelectEvent(eventId);Pump();
+            var six=new Tickets.App.HallView();var sixWindow=new Window{Content=six,Width=600,Height=400};sixWindow.Show();Pump();
+            var sixSeats=Enumerable.Range(0,6).Select(i=>new SeatInfo(i+1,"Партер",(i/3+1).ToString(),(i%3+1).ToString(),i%3*20,i/3*20,1000,"#00E676",null,"","",null)).ToArray();
+            six.Load(sixSeats,Array.Empty<SectorInfo>(),true);Pump();sixWindow.Activate();six.Focus();
+            Gesture(six,new Point(15,1),new Point(41,21));Check(six.Selected.Count==6,"partial rectangular overlap selects all six touched places");
+            Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");sixWindow.Close();
+            var currentShowRow=performanceGroup.Items.OfType<TreeViewItem>().Single(i=>i.Tag is EventInfo e&&e.Id==eventId);
+            Check(currentShowRow.Header is TextBlock selectedTitle&&Equals(selectedTitle.Foreground,Brushes.White)&&Equals(selectedTitle.Background,Brushes.DarkSlateBlue),"selected show text has contrast against its background");
             var hall=(Tickets.App.HallView)main.FindName("Hall");main.Activate();hall.Focus();hall.Fit();Pump();
             Gesture(hall,new Point(8,8),new Point(8,8));
             Gesture(hall,new Point(38,38),new Point(38,38));
@@ -148,10 +155,17 @@ internal static class Program
             ((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");
             Check(hall.Selected.Count==0,"applying price clears selection");
             Check(new Store(db).Seats(eventId).Where(s=>seatIds.Take(3).Contains(s.Id)).All(s=>s.Amount==123&&s.Color==store.PriceColors().Single(c=>c.Amount==123).Color),"price and category color persist and update scheme data");
-            Click(main,"Шаг назад");Check(store.Seats(eventId).All(s=>s.Amount==500),"price undo restores previous category");
+            Click(main,"Отменить изменение цены");Check(store.Seats(eventId).All(s=>s.Amount==500),"price undo restores previous category");
             hall.SetSelection(seatIds.Take(3));Click(main,"Изменить цену");((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");hall.SetSelection(seatIds.Take(3));
             Check(((ComboBox)main.FindName("RecipientBox")).Text=="","show opens without a previous recipient");
+            Exception? inlineRecipientError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? creation=null;try{
+                creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="RecipientEditorWindow"&&w.IsVisible);
+                Logical(creation).OfType<TextBox>().Single().Text="Новый получатель формы";Click(creation,"Создать");
+            }catch(Exception ex){inlineRecipientError=ex;creation?.Close();}}));Click(main,"Создать получателя");if(inlineRecipientError is not null)throw inlineRecipientError;
+            Check(((ComboBox)main.FindName("RecipientBox")).Text=="Новый получатель формы"&&store.Recipients().Contains("Новый получатель формы"),"recipient can be created and selected during issuance");
             ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
+            var summaryLabel=(TextBlock)main.FindName("SelectedSummary");Check(summaryLabel.FontSize>=24&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum are large bold red");
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
             Exception? invoiceError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
@@ -165,6 +179,7 @@ internal static class Program
                     var squareSave=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить"));var squarePrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Распечатать"));
                     Check(squareSave.Width==squareSave.Height&&squarePrint.Width==squarePrint.Height&&squareSave.Width==112,"save and print are prominent square buttons");
                     Check(Logical(window).OfType<FlowDocumentScrollViewer>().Single().ActualHeight>400,"invoice preview uses enlarged content area");
+                    var invoiceTab=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Накладная"));Check(Equals(invoiceTab.Background,Brushes.SteelBlue),"invoice tab is visibly active");
                     var senderField=Logical(window).OfType<ComboBox>().Single();Check(senderField.IsEditable&&senderField.Items.Contains(Store.DefaultSender),"invoice sender supports saved choice and manual entry");
                     senderField.Text="UI sender";Click(window,"Сохранить");
                     var issuedId=store.Issues(eventId).Single().Id;
@@ -175,6 +190,7 @@ internal static class Program
                     app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                         var form=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Договор · выдача №"));
                         try{
+                            Check(Equals(Logical(form).OfType<Button>().Single(b=>Equals(b.Content,"Договор")).Background,Brushes.SteelBlue)&&Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Накладная")),"contract toolbar marks active document and offers invoice");
                             var rendered=Logical(form).OfType<FlowDocumentScrollViewer>().Single().Document;Check(new TextRange(rendered.ContentStart,rendered.ContentEnd).Text.Contains("UI recipient"),"contract preview substitutes actual recipient");
                             Logical(form).OfType<TabControl>().Single().SelectedIndex=1;Logical(form).OfType<TextBox>().Single().Text="Договор для {recipient}. Отправитель: {sender}.";Click(form,"Сохранить шаблон");
                             Check(store.DocumentTemplate(IssueDocumentKinds.Contract).Contains("{recipient}"),"document template saves for later issuances");
@@ -193,6 +209,29 @@ internal static class Program
             Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
             hall.Selected.Add(seatIds[0]);typeof(Tickets.App.MainWindow).GetMethod("UpdateSelection",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);
             Check(((TextBlock)main.FindName("IssuedRecipients")).Text.Contains("UI recipient"),"issued selection explicitly identifies recipient");
+            var warning=((ListBox)main.FindName("SelectedList")).Items.Cast<object>().Single();
+            Check(Equals(warning.GetType().GetProperty("AlertBrush")!.GetValue(warning),Brushes.Red),"occupied selected place is red in the selected list");
+            var printButton=(Button)main.FindName("PrintTicketsButton");Check(printButton.IsEnabled&&Equals(printButton.Content,"Повторная печать"),"issued places expose reprint without changing ticket numbers");
+            hall.SetSelection(new[]{seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI print preview only";Pump();
+            Check(printButton.IsVisible&&printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"primary ticket printing action is visible and available");
+            var ticketPrintType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.TicketPrintWindow")!;Exception? ticketPreviewError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
+                previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
+                Check(Logical(previewWindow).OfType<DocumentPageView>().Any(),"ticket printing opens actual per-ticket page preview");
+                Check(store.History(eventId).Count==3,"opening print preview creates no issuance");
+            }catch(Exception ex){ticketPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(ticketPreviewError is not null)throw ticketPreviewError;
+            Check(store.History(eventId).Count==3&&!store.Recipients().Contains("UI print preview only"),"closing ticket print preview reserves neither seats nor recipient");
+            store.SetSeatsBlocked(eventId,new[]{seatIds[3]},true);
+            typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});hall.SetSelection(new[]{seatIds[3]});
+            Check(Equals(((Button)main.FindName("SaleStateButton")).Content,"Вернуть в продажу")&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot issue or print and expose restore action");
+            store.SetSeatsBlocked(eventId,new[]{seatIds[3]},false);typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});
+            var sample=store.TicketReprint(eventId,new[]{seatIds[0]});
+            var many=sample with{Tickets=Enumerable.Range(0,25).Select(i=>sample.Tickets[0] with{Number=i+1,Seat=(i+1).ToString()}).ToArray()};
+            var printedDocument=(FixedDocument)ticketPrintType.GetMethod("BuildDocument",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,new object[]{many,794d,1123d})!;
+            printedDocument.DocumentPaginator.ComputePageCount();
+            Check(printedDocument.Pages.Count==4&&printedDocument.DocumentPaginator.GetPage(0).Visual is not null,"ticket cards paginate without dropping tickets");
+            var cardCount=printedDocument.Pages.Sum(p=>p.Child.Children.OfType<Border>().Count());Check(cardCount==25,"each selected ticket has its own printable card");
+            var raster=new System.Windows.Media.Imaging.RenderTargetBitmap(794,1123,96,96,PixelFormats.Pbgra32);raster.Render(printedDocument.DocumentPaginator.GetPage(0).Visual);
             var archivedVenue=store.CreateHall("UI archived venue","",new[]{new DraftSeat{Number="1"},new DraftSeat{Number="2",X=26}});
             var archivedSeats=store.VenueSeats(archivedVenue).Select(s=>s.Id).ToArray();var archivePlan=store.SavePlan(archivedVenue,"Archive plan",archivedSeats.Select(id=>new PriceValue(id,1000,store.PriceColors().Single(p=>p.Amount==1000).Color)).ToArray());
             var archivedEvent=store.CreateEvent(store.SavePerformance("UI archived performance"),archivedVenue,archivePlan,DateTime.Today.AddDays(20));store.Issue(archivedEvent,new[]{archivedSeats[0]},"Архив UI организация","ARCHUI",1);
@@ -210,6 +249,13 @@ internal static class Program
             Logical(recipientsWindow).OfType<TextBox>().Single().Text="ui rec";Pump();
             Check(Logical(recipientsWindow).OfType<ListBox>().Single().Items.Count==1,"organization directory searches significant word prefixes");
             Check(Logical(recipientsWindow).OfType<TreeView>().Single().Items.Count>0,"organization directory opens all its issuance history");
+            Check(!Logical(recipientsWindow).OfType<Button>().Any(b=>Equals(b.Content,"Спецификация")),"recipient directory has no specification button");
+            Exception? newRecipientError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? creation=null;try{
+                creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="RecipientEditorWindow"&&w.IsVisible);
+                Logical(creation).OfType<TextBox>().Single().Text="UI stand-alone recipient";Click(creation,"Создать");
+            }catch(Exception ex){newRecipientError=ex;creation?.Close();}}));Click(recipientsWindow,"Создать получателя");if(newRecipientError is not null)throw newRecipientError;
+            Check(store.Recipients().Contains("UI stand-alone recipient"),"new recipient saves before any ticket issuance");
             var orgList=Logical(recipientsWindow).OfType<ListBox>().Single();
             Check(!Logical(recipientsWindow).OfType<Button>().Any(b=>Equals(b.Content,"Удалить получателя")),"recipient deletion has no extra action button");
             Check(orgList.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Удалить")),"recipient deletion is available through context menu");recipientsWindow.Close();
@@ -228,6 +274,15 @@ internal static class Program
                 Check(!Logical(selectedPricing).OfType<CheckBox>().Any(c=>Equals(c.Content,"Расценовки всех площадок")),"cross-venue pricing switch removed");
             }catch(Exception ex){directoryError=ex;}finally{selectedPricing?.Close();}}));
             pricingLeaf.IsSelected=true;if(directoryError is not null)throw directoryError;pricingDirectory.Close();
+            var priceEditorType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PriceEditorWindow")!;
+            var categoryEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId})!;categoryEditor.Show();Pump();
+            var categoryFields=Logical(categoryEditor).OfType<TextBox>().ToList();var categoryHall=Logical(categoryEditor).OfType<Tickets.App.HallView>().Single();
+            categoryHall.SetSelection(seatIds.Take(2));categoryFields[1].Text="1000";Click(categoryEditor,"Назначить выбранным местам");
+            Check(categoryHall.Selected.Count==0,"pricing editor clears selection after first price assignment");
+            categoryHall.SetSelection(seatIds.Skip(2));categoryFields[1].Text="2000";Click(categoryEditor,"Назначить выбранным местам");
+            var assigned=(System.Collections.IDictionary)priceEditorType.GetField("prices",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(categoryEditor)!;
+            Check(((PriceValue)assigned[seatIds[0]]!).Amount==1000&&((PriceValue)assigned[seatIds[1]]!).Amount==1000&&((PriceValue)assigned[seatIds[2]]!).Amount==2000,"next price assignment preserves earlier differently priced places");
+            Check(categoryHall.Selected.Count==0&&!Logical(categoryEditor).OfType<Button>().Any(b=>Equals(b.Content,"Снять выделение")),"pricing uses automatic clearing without extra clear button");categoryEditor.Close();
             var performanceDirectoryType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PerformanceWindow")!;
             var performanceDirectory=(Window)Activator.CreateInstance(performanceDirectoryType,store)!;performanceDirectory.Show();Pump();
             var performanceTree=Logical(performanceDirectory).OfType<TreeView>().Single();

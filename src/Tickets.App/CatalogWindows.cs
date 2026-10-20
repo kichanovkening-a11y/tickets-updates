@@ -140,7 +140,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         void Assign(bool all)=>Try(()=>{
             if(!long.TryParse(amount.Text,out var value)||value<0||!System.Text.RegularExpressions.Regex.IsMatch(color.Text,"^#[0-9a-fA-F]{6}$"))throw new TicketException("Введите неотрицательную цену и цвет вида #6EA8E0.");
             var ids=all?seats.Select(s=>s.Id).ToArray():preview.Selected.ToArray(); if(ids.Length==0)throw new TicketException("Выберите места на схеме.");
-            Remember();foreach(var id in prices.Where(p=>p.Value.Amount==value).Select(p=>p.Key).ToArray())prices[id]=new(id,value,color.Text);foreach(var id in ids)prices[id]=new(id,value,color.Text);Refresh();
+            Remember();foreach(var id in prices.Where(p=>p.Value.Amount==value).Select(p=>p.Key).ToArray())prices[id]=new(id,value,color.Text);foreach(var id in ids)prices[id]=new(id,value,color.Text);Refresh();if(!all)preview.Clear();
         });
         Button(form,"Назначить выбранным местам",()=>Assign(false)); Button(form,"Назначить всему залу",()=>Assign(true));
         Button(form,"Убрать цену у выбранных",()=>{if(preview.Selected.Any(prices.ContainsKey)){Remember();foreach(var id in preview.Selected)prices.Remove(id);Refresh();}});
@@ -152,7 +152,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         }));
         form.Children.Add(new TextBlock{Text="Цены сохраняются отдельным вариантом. Уже созданные показы и выданные билеты не изменяются.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);var toolbar=new StackPanel{Orientation=Orientation.Horizontal};DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
-        Button(toolbar,"Весь зал",()=>preview.Fit());Button(toolbar,"Снять выделение",()=>preview.Clear());area.Children.Add(preview);
+        Button(toolbar,"Весь зал",()=>preview.Fit());area.Children.Add(preview);
         void LoadPlans()
         {
             if(venue.SelectedItem is not VenueInfo v)return;

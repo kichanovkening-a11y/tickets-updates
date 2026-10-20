@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); }
 
     private SqliteConnection Open()
     {
@@ -46,18 +46,19 @@ public sealed partial class Store
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,coalesce(t.amount,p.amount),coalesce(pc.color,p.color,'#CBD5E1'),
-              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number
+              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number,b.seat_id IS NOT NULL
             FROM event e JOIN seat s ON s.venue_id=e.venue_id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
             LEFT JOIN event_price p ON p.event_id=e.id AND p.seat_id=s.id
             LEFT JOIN ticket t ON t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL
             LEFT JOIN price_color pc ON pc.amount=coalesce(t.amount,p.amount)
+            LEFT JOIN event_seat_block b ON b.event_id=e.id AND b.seat_id=s.id
             WHERE e.id=$e ORDER BY z.y,z.x,s.y,s.x,s.id
             ""","$e",eventId);
         using var r=cmd.ExecuteReader(); var result=new List<SeatInfo>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),
             r.GetDouble(4),r.GetDouble(5),r.IsDBNull(6)?null:r.GetInt64(6),r.GetString(7),
-            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11)));
+            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11),r.GetBoolean(12)));
         return result;
     }
 
@@ -126,10 +127,11 @@ public sealed partial class Store
                     JOIN seat s ON s.id=p.seat_id AND s.venue_id=e.venue_id
                     WHERE p.event_id=$e AND p.seat_id=$s
                     AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=$e AND t.seat_id=$s AND t.returned_at IS NULL)
+                    AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=$s)
                     ""","$e",eventId,"$s",sid);
                 check.Transaction=tx;
                 var amount=check.ExecuteScalar();
-                if(amount is null) throw new TicketException("Одно из мест уже выдано, не имеет цены или не относится к этому показу. Выдача отменена целиком.");
+                if(amount is null) throw new TicketException("Одно из мест уже выдано, снято с продажи, не имеет цены или не относится к этому показу. Выдача отменена целиком.");
                 var actualAmount=prices is not null && prices.TryGetValue(sid,out var custom)?custom:Convert.ToInt64(amount);
                 EnsurePriceColor(c,tx,actualAmount,null);
                 using var insert=Command(c,"""

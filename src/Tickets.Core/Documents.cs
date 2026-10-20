@@ -25,11 +25,12 @@ public sealed partial class Store
     }
     private string DocumentSetting(string name,string fallback)
     {using var c=Open();using var cmd=Command(c,"SELECT value FROM document_setting WHERE name=$n","$n",name);return cmd.ExecuteScalar() as string??fallback;}
-    public string Sender=>DocumentSetting("sender",DefaultSender);
+    public string Sender { get {var sender=DocumentSetting("sender",DefaultSender);return SenderChoiceAllowed(sender)?sender:DefaultSender;} }
     public string DocumentsDirectory=>DocumentSetting("directory",System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"Documents"));
     public void SaveDocumentSettings(string sender,string directory)
     {
-        sender=Required(sender,"От кого");directory=System.IO.Path.GetFullPath(directory.Trim());Directory.CreateDirectory(directory);
+        sender=Required(sender,"От кого");if(!SenderChoiceAllowed(sender))sender=DefaultSender;
+        directory=System.IO.Path.GetFullPath(directory.Trim());Directory.CreateDirectory(directory);
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         using(var prior=Command(c,"SELECT value FROM document_setting WHERE name='sender'"))
         {prior.Transaction=tx;if(prior.ExecuteScalar() is string previous)RememberSender(c,tx,previous);}

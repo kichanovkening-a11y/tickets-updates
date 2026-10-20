@@ -16,7 +16,9 @@ public sealed partial class Store
 {
     private void EnsurePackageDocuments()
     {
-        using var c=Open();using var version=Command(c,"PRAGMA user_version");if(Convert.ToInt32(version.ExecuteScalar())>=7)return;
+        using var c=Open();using var version=Command(c,"PRAGMA user_version");
+        if(Convert.ToInt32(version.ExecuteScalar())>=7)
+        {using var cleanup=c.BeginTransaction(deferred:false);RemoveRetiredSender(c,cleanup);cleanup.Commit();return;}
         var copy=Path+".before-v7.db";if(!File.Exists(copy))
         {using var dest=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=copy,Pooling=false}.ToString());dest.Open();c.BackupDatabase(dest);}
         using var tx=c.BeginTransaction(deferred:false);
@@ -32,16 +34,41 @@ public sealed partial class Store
         RememberSender(c,tx,DefaultSender);
         foreach(var kind in IssueDocumentKinds.All)
         {using var cmd=Command(c,"INSERT OR IGNORE INTO document_template(kind,template) VALUES($k,$t)","$k",kind,"$t",IssueDocumentKinds.DefaultTemplate(kind));cmd.Transaction=tx;cmd.ExecuteNonQuery();}
+        RemoveRetiredSender(c,tx);
         tx.Commit();
     }
+    private static string SenderChoiceKey(string sender)=>new(CatalogText.Key(sender).Where(char.IsLetterOrDigit).ToArray());
+    private static bool IsRetiredSender(string sender)=>SenderChoiceKey(sender)=="ИПБАРИНОВАС";
+    private static void RemoveRetiredSender(SqliteConnection c,SqliteTransaction tx)
+    {
+        var names=new List<string>();
+        using(var read=Command(c,"SELECT sender_name FROM sender_directory"))
+        {read.Transaction=tx;using var r=read.ExecuteReader();while(r.Read())if(IsRetiredSender(r.GetString(0)))names.Add(r.GetString(0));}
+        foreach(var name in names)
+        {using var cmd=Command(c,"DELETE FROM sender_directory WHERE sender_name=$s","$s",name);cmd.Transaction=tx;cmd.ExecuteNonQuery();}
+        using var setting=Command(c,"SELECT value FROM document_setting WHERE name='sender'");setting.Transaction=tx;
+        if(setting.ExecuteScalar() is string value&&IsRetiredSender(value))
+        {using var reset=Command(c,"UPDATE document_setting SET value=$s WHERE name='sender'","$s",DefaultSender);reset.Transaction=tx;reset.ExecuteNonQuery();}
+    }
     private static void RememberSender(SqliteConnection c,SqliteTransaction tx,string sender)
-    {using var cmd=Command(c,"INSERT OR IGNORE INTO sender_directory(sender_name) VALUES($s)","$s",sender);cmd.Transaction=tx;cmd.ExecuteNonQuery();}
+    {
+        if(IsRetiredSender(sender)||IsCatalogHidden(c,tx,"sender",SenderChoiceKey(sender)))return;
+        using var cmd=Command(c,"INSERT OR IGNORE INTO sender_directory(sender_name) VALUES($s)","$s",sender);cmd.Transaction=tx;cmd.ExecuteNonQuery();
+    }
+    public void RemoveSenderChoice(string sender)
+    {
+        var key=SenderChoiceKey(Required(sender,"От кого"));
+        using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        HideCatalogEntry(c,tx,"sender",key);tx.Commit();
+    }
+    private bool SenderChoiceAllowed(string sender)=>!IsRetiredSender(sender)&&!HiddenCatalogKeys("sender").Contains(SenderChoiceKey(sender));
     public List<string> Senders()
     {
-        using var c=Open();using var cmd=Command(c,"""
+        var hidden=HiddenCatalogKeys("sender");using var c=Open();using var cmd=Command(c,"""
             SELECT sender_name FROM sender_directory UNION SELECT sender FROM issue_batch UNION SELECT sender FROM specification
             UNION SELECT value FROM document_setting WHERE name='sender' ORDER BY 1 COLLATE NOCASE
-            """);using var read=cmd.ExecuteReader();var result=new List<string>();while(read.Read())if(!string.IsNullOrWhiteSpace(read.GetString(0)))result.Add(read.GetString(0));return result;
+            """);using var read=cmd.ExecuteReader();var result=new List<string>();while(read.Read())
+        {var sender=read.GetString(0);if(!string.IsNullOrWhiteSpace(sender)&&!IsRetiredSender(sender)&&!hidden.Contains(SenderChoiceKey(sender)))result.Add(sender);}return result;
     }
     private static string CheckedTemplate(string kind,string template)
     {IssueDocumentKinds.Name(kind);if(string.IsNullOrWhiteSpace(template)||template.Length>100000)throw new TicketException("Заполните текст шаблона (до 100 000 символов).");return template;}

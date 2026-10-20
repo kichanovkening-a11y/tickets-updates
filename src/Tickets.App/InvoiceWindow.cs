@@ -19,15 +19,11 @@ internal sealed class InvoiceWindow : EditorWindow
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(124)});
         var header=new StackPanel();Grid.SetColumnSpan(header,2);root.Children.Add(header);
-        var documents=new WrapPanel{Margin=new Thickness(0,0,0,4)};header.Children.Add(documents);
-        foreach(var kind in IssueDocumentKinds.All)
-        {
-            var name=kind;
-            var button=Button(documents,IssueDocumentKinds.Name(name),()=>Try(()=>{PersistSender();new IssueDocumentWindow(Store,eventId,issueId,name).ShowDialog();Refresh();}));
-            button.Width=145;button.Margin=new Thickness(0,0,5,4);
-        }
-        var specification=Button(documents,"Спецификация",()=>Try(()=>{PersistSender();new SpecificationWindow(Store,Store.Invoice(eventId,issueId).Recipient).ShowDialog();}));
-        specification.Width=145;specification.Margin=new Thickness(0,0,0,4);
+        header.Children.Add(IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
+            PersistSender();
+            IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
+            Refresh();
+        })));
         var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());header.Children.Add(senderRow);
         senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;header.Children.Add(savedStatus);

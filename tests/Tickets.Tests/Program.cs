@@ -32,6 +32,11 @@ void Reject(Action action)
     }
     throw new Exception("seed has no event with 3 priced seats");
 }
+SeatSelectionChecks.Register(Test);
+RecipientCreationChecks.Register(Test);
+ArchivePricingChecks.Register(Test);
+SaleStateChecks.Register(Test);
+TicketPrintingChecks.Register(Test);
 Test("multiple showing dates save atomically and reject conflicts", s => {
     var venue=s.CreateHall("Multi-date hall","",new[]{new DraftSeat{Row="1",Number="1",X=0,Y=0}});
     var plan=s.SavePlan(venue,"multi-date plan",s.VenueSeats(venue).Select(x=>new PriceValue(x.Id,500,"#FF0000")).ToArray());

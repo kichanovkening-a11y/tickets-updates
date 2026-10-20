@@ -16,7 +16,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
     private readonly TextBlock count=new(){Margin=new Thickness(0,5,0,10)};
     private List<RecipientDirectoryInfo> directory=[];
-    private readonly Button specification,open;
+    private readonly Button open;
     private readonly MenuItem delete;
 
     public RecipientsWindow(Store store):base(store,"Получатели / организации",1100,780)
@@ -30,6 +30,13 @@ internal sealed class RecipientsWindow:EditorWindow
         filter.Children.Add(new TextBlock{Text="Поиск организации",FontWeight=FontWeights.SemiBold});
         search.Margin=new Thickness(0,6,0,0);filter.Children.Add(search);
         filter.Children.Add(new TextBlock{Text="Начните вводить значимые слова названия",TextWrapping=TextWrapping.Wrap,FontSize=15.6,Margin=new Thickness(0,5,0,0)});
+        Button(filter,"Создать получателя",()=>Try(()=>{
+            var editor=new RecipientEditorWindow(Store,search.Text);
+            if(editor.ShowDialog()!=true)return;
+            search.Clear();directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
+            organizations.SelectedItem=directory.FirstOrDefault(x=>x.Name==editor.CreatedName);
+            organizations.ScrollIntoView(organizations.SelectedItem);
+        }));
         filter.Children.Add(showDeleted);showDeleted.Checked+=(_,_)=>{directory=Store.RecipientDirectory(true);Filter();};showDeleted.Unchecked+=(_,_)=>{directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();};
         filter.Children.Add(count);left.Children.Add(organizations);
         var splitter=new GridSplitter{Width=5,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Stretch};Grid.SetColumn(splitter,1);root.Children.Add(splitter);
@@ -37,9 +44,6 @@ internal sealed class RecipientsWindow:EditorWindow
         var details=new StackPanel();DockPanel.SetDock(details,Dock.Top);right.Children.Add(details);details.Children.Add(heading);details.Children.Add(summary);
         var actions=new WrapPanel{Margin=new Thickness(0,0,0,12)};details.Children.Add(actions);
         open=Button(actions,"Открыть выдачу",()=>Try(OpenSelected));open.Margin=new Thickness(0,0,10,0);
-        specification=Button(actions,"Спецификация",()=>Try(()=>{
-            if(organizations.SelectedItem is RecipientDirectoryInfo organization)new SpecificationWindow(Store,organization.Name).ShowDialog();
-        }));specification.Margin=new Thickness(0,0,10,0);
         delete=new MenuItem{Header="Удалить"};
         delete.Click+=(_,_)=>Try(()=>{
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
@@ -72,7 +76,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private void ShowHistory()
     {
         history.Items.Clear();open.IsEnabled=false;
-        var organization=organizations.SelectedItem as RecipientDirectoryInfo;specification.IsEnabled=organization is not null;delete.IsEnabled=organization is {IsDeleted:false};
+        var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
         var issues=Store.RecipientHistory(organization.Name);

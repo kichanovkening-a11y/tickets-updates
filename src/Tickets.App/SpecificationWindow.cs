@@ -16,15 +16,19 @@ internal sealed class SpecificationWindow : EditorWindow
     private List<SpecificationInfo> specifications=[];
     private SpecificationInfo? current;
     private bool loading,filtering;
+    private readonly bool fixedRecipient;
     private string originalRecipient="",originalSender="",originalTitle="",originalBody="";
     private bool dirty=>recipient.Text!=originalRecipient||sender.Text!=originalSender||title.Text!=originalTitle||body.Text!=originalBody;
 
-    public SpecificationWindow(Store store,string recipient=""):base(store,"Спецификации организаций",1120,820)
+    public SpecificationWindow(Store store,string recipient=""):this(store,recipient,false){}
+    internal SpecificationWindow(Store store,string recipient,bool fixedRecipient):base(store,"Спецификации организаций",1120,820)
     {
+        this.fixedRecipient=fixedRecipient;
         var root=new Grid{Margin=new Thickness(20)};
         root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(280)});
         root.ColumnDefinitions.Add(new ColumnDefinition());Content=root;
         var sidebar=new DockPanel{Margin=new Thickness(0,0,20,0)};root.Children.Add(sidebar);
+        if(fixedRecipient){sidebar.Visibility=Visibility.Collapsed;root.ColumnDefinitions[0].Width=new GridLength(0);}
         var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Top);sidebar.Children.Add(tools);
         tools.Children.Add(new TextBlock{Text="Сохранённые спецификации",FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap});
         Button(tools,"Новая организация",()=>Try(()=>{if(CanSwitch()){saved.SelectedItem=null;Load(null);}}));
@@ -73,13 +77,15 @@ internal sealed class SpecificationWindow : EditorWindow
         try
         {
             current=value;saved.SelectedItem=value;recipient.ItemsSource=Store.Recipients();
-            recipient.Text=value?.Recipient??initialRecipient;recipient.IsEnabled=value is null;
+            recipient.Text=value?.Recipient??initialRecipient;recipient.IsEnabled=value is null&&!fixedRecipient;
             sender.Text=value?.Sender??Store.Sender;title.Text=value?.Title??"Спецификация";body.Text=value?.Body??"";
-            status.Text=value is null?"Новая спецификация. Заполните текст и сохраните.":"Сохранённая спецификация. Для другой организации нажмите «Новая организация».";
+            status.Text=value is null?"Новая спецификация. Заполните текст и сохраните.":fixedRecipient?"Сохранённая спецификация получателя текущей выдачи.":"Сохранённая спецификация. Для другой организации нажмите «Новая организация».";
             originalRecipient=recipient.Text;originalSender=sender.Text;originalTitle=title.Text;originalBody=body.Text;
         }
         finally{loading=false;}
     }
+
+    internal bool SaveForNavigation()=>!dirty||Save() is not null;
 
     private SpecificationInfo? Save()
     {

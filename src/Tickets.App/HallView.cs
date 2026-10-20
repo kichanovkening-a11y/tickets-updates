@@ -15,7 +15,7 @@ public sealed class HallView : FrameworkElement
     private double zoom=1;
     private Vector offset;
     private Point start, last;
-    private bool dragging, panning, marquee;
+    private bool dragging, panning, marquee, removing;
     private HashSet<long> gestureSelection=[];
     private long? hoverId;
     public HashSet<long> Selected { get; }=[];
@@ -46,7 +46,7 @@ public sealed class HallView : FrameworkElement
             foreach(var s in seats)
             {
                 var rect=new Rect(s.X,s.Y,16,16);
-                var brush=s.TicketId.HasValue?Brushes.SlateGray:s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
+                var brush=s.TicketId.HasValue?Brushes.SlateGray:s.IsBlocked?Brushes.DarkOrange:s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,null,rect,2,2);
                 var textColor=Brushes.Black;
                 if(brush is SolidColorBrush solid && (solid.Color.R*.299+solid.Color.G*.587+solid.Color.B*.114)<145) textColor=Brushes.White;
@@ -95,7 +95,7 @@ public sealed class HallView : FrameworkElement
     private SeatInfo? Hit(Point p)
     {
         var w=World(p);
-        return seats.LastOrDefault(s=>w.X>=s.X && w.X<=s.X+16 && w.Y>=s.Y && w.Y<=s.Y+16);
+        return SeatSelection.Hit(seats,w.X,w.Y);
     }
     protected override void OnRender(DrawingContext dc)
     {
@@ -104,8 +104,11 @@ public sealed class HallView : FrameworkElement
         dc.PushTransform(new MatrixTransform(zoom,0,0,zoom,offset.X,offset.Y));
         dc.DrawDrawing(drawing);
         var pen=new Pen(Brushes.DodgerBlue,2/zoom);
+        var occupiedPen=new Pen(Brushes.Red,3/zoom);
+        var occupiedFill=new SolidColorBrush(Color.FromArgb(150,240,30,30));
         foreach(var s in seats.Where(s=>Selected.Contains(s.Id)))
-            dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(70,35,125,255)),pen,new Rect(s.X-1,s.Y-1,18,18),2,2);
+            dc.DrawRoundedRectangle(s.TicketId.HasValue || s.IsBlocked?occupiedFill:new SolidColorBrush(Color.FromArgb(70,35,125,255)),
+                s.TicketId.HasValue || s.IsBlocked?occupiedPen:pen,new Rect(s.X-1,s.Y-1,18,18),2,2);
         dc.Pop();
         if(marquee && dragging) dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(30,30,110,220)),
             new Pen(Brushes.DodgerBlue,1),new Rect(start,last));
@@ -118,6 +121,8 @@ public sealed class HallView : FrameworkElement
         Focus(); start=last=e.GetPosition(this); dragging=true;
         panning=e.ChangedButton is MouseButton.Right or MouseButton.Middle || Keyboard.IsKeyDown(Key.Space);
         marquee=false;gestureSelection=Selected.ToHashSet();
+        var worldStart=World(start);
+        removing=SeatSelection.RemoveOnDrag(seats,gestureSelection,worldStart.X,worldStart.Y);
         CaptureMouse(); if(panning) Cursor=Cursors.Hand; e.Handled=true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
@@ -126,7 +131,7 @@ public sealed class HallView : FrameworkElement
         if(dragging)
         {
             if(panning) { offset+=p-last; }
-            else if((p-start).Length>=6){marquee=true;SelectRange(p);}
+            else if(marquee || (p-start).Length>=6){marquee=true;SelectRange(p);}
             last=p; InvalidateVisual(); return;
         }
         var s=Hit(p);
@@ -142,14 +147,14 @@ public sealed class HallView : FrameworkElement
         var p=e.GetPosition(this);
         if(!panning)
         {
-            if(marquee)
+            if(marquee || (p-start).Length>=6)
             {
                 SelectRange(p);
             }
             else if((p-start).Length<6)
             {
                 var s=Hit(p);
-                if(s is not null && !Selected.Remove(s.Id)) Selected.Add(s.Id);
+                if(s is not null) SeatSelection.Toggle(Selected,s.Id);
             }
             SelectionChanged?.Invoke();
         }
@@ -157,8 +162,8 @@ public sealed class HallView : FrameworkElement
     }
     private void SelectRange(Point end)
     {
-        var rectangle=new Rect(World(start),World(end));
-        var next=gestureSelection.Concat(seats.Where(s=>rectangle.Contains(new Point(s.X+8,s.Y+8))).Select(s=>s.Id)).ToHashSet();
+        var from=World(start);var to=World(end);
+        var next=SeatSelection.ApplyRectangle(seats,gestureSelection,from.X,from.Y,to.X,to.Y,removing);
         if(Selected.SetEquals(next))return;
         Selected.Clear();Selected.UnionWith(next);SelectionChanged?.Invoke();
     }

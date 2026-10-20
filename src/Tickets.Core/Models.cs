@@ -6,11 +6,11 @@ public sealed record EventInfo(long Id, long VenueId, string Title, string Venue
     public string Caption => $"{Title} · {Date}";
 }
 public sealed record SeatInfo(long Id, string Sector, string Row, string Number, double X, double Y,
-    long? Amount, string Color, long? TicketId, string Recipient, string Series, long? TicketNumber)
+    long? Amount, string Color, long? TicketId, string Recipient, string Series, long? TicketNumber, bool IsBlocked=false)
 {
-    public bool Available => Amount.HasValue && !TicketId.HasValue;
+    public bool Available => Amount.HasValue && !TicketId.HasValue && !IsBlocked;
     public string Label => $"{Sector} · ряд {Row}, место {Number}";
-    public string Status => TicketId.HasValue ? $"Выдан: {Recipient}" : Amount.HasValue ? "Свободно" : "Нет цены";
+    public string Status => TicketId.HasValue ? $"Выдан: {Recipient}" : IsBlocked ? "Снят с продажи" : Amount.HasValue ? "Свободно" : "Нет цены";
 }
 public sealed record SectorInfo(string Name, double X, double Y);
 public sealed record TicketInfo(long Id, long SeatId, string Sector, string Row, string Seat,

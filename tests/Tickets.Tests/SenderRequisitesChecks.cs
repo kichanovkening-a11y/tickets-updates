@@ -7,6 +7,8 @@ internal static class SenderRequisitesChecks
         test("restored sender remains selectable and user deletions survive reopening",s=>{
             const string restored="ИП Баринов А.С.";
             Require(s.Senders().Contains(restored),"exact restored sender seed missing");
+            s.RemoveSenderChoice("ИП Баринов А С");
+            Require(s.Senders().Contains(restored),"deleting unpunctuated sender hid distinct requested sender");
             s.SaveDocumentSettings(restored,s.DocumentsDirectory);
             Require(new Store(s.Path).Sender==restored,"restored sender suppressed as document default");
             s.RemoveSenderChoice(restored);

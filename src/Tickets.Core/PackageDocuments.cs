@@ -37,7 +37,7 @@ public sealed partial class Store
         tx.Commit();
         EnsureOrganizationDirectory();
     }
-    private static string SenderChoiceKey(string sender)=>new(CatalogText.Key(sender).Where(char.IsLetterOrDigit).ToArray());
+    private static string SenderChoiceKey(string sender)=>CatalogText.Key(sender);
     private static void RememberSender(SqliteConnection c,SqliteTransaction tx,string sender)
     {
         if(IsCatalogHidden(c,tx,"sender",SenderChoiceKey(sender)))return;

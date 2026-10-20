@@ -22,7 +22,8 @@ public sealed partial class Store
         using var marker=Command(c,"SELECT value FROM document_setting WHERE name='organization-directory-seed-v1'");marker.Transaction=tx;
         if(marker.ExecuteScalar() is not null){tx.Commit();return;}
         const string restored="ИП Баринов А.С.";
-        using(var unhide=Command(c,"DELETE FROM catalog_hidden WHERE kind='sender' AND entity_key=$k","$k",SenderChoiceKey(restored))){unhide.Transaction=tx;unhide.ExecuteNonQuery();}
+        using(var unhide=Command(c,"DELETE FROM catalog_hidden WHERE kind='sender' AND (entity_key=$k OR entity_key='ИПБАРИНОВАС')","$k",SenderChoiceKey(restored))){unhide.Transaction=tx;unhide.ExecuteNonQuery();}
+        HideCatalogEntry(c,tx,"sender",SenderChoiceKey("ИП Баринов А С"));
         RememberSender(c,tx,restored);
         var alliance=new OrganizationDetails(DefaultSender,"7729768795","772301001","1147746365062","109548, г. Москва, Вн. Тер. Г. Муниципальный округ Печатники, ул. Шоссейная, д. 20, кв. 75","ПАО «ПРОМСВЯЗЬБАНК» г. Москва","40702810500000272771","30101810400000000555","044525555","Заборский Л.Н.","Генеральный директор");
         using(var seed=Command(c,"INSERT OR IGNORE INTO organization_details(role,name_key,details) VALUES('sender',$k,$d)","$k",CatalogText.Key(DefaultSender),"$d",JsonSerializer.Serialize(alliance))){seed.Transaction=tx;seed.ExecuteNonQuery();}

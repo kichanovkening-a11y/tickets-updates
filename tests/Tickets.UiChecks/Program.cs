@@ -169,6 +169,15 @@ internal static class Program
             Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
             hall.Selected.Add(seatIds[0]);typeof(Tickets.App.MainWindow).GetMethod("UpdateSelection",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);
             Check(((TextBlock)main.FindName("IssuedRecipients")).Text.Contains("UI recipient"),"issued selection explicitly identifies recipient");
+            var archivedVenue=store.CreateHall("UI archived venue","",new[]{new DraftSeat{Number="1"},new DraftSeat{Number="2",X=26}});
+            var archivedSeats=store.VenueSeats(archivedVenue).Select(s=>s.Id).ToArray();var archivePlan=store.SavePlan(archivedVenue,"Archive plan",archivedSeats.Select(id=>new PriceValue(id,1000,store.PriceColors().Single(p=>p.Amount==1000).Color)).ToArray());
+            var archivedEvent=store.CreateEvent(store.SavePerformance("UI archived performance"),archivedVenue,archivePlan,DateTime.Today.AddDays(20));store.Issue(archivedEvent,new[]{archivedSeats[0]},"Архив UI организация","ARCHUI",1);
+            var reload=typeof(Tickets.App.MainWindow).GetMethod("RefreshCatalogNavigation",BindingFlags.Instance|BindingFlags.NonPublic)!;reload.Invoke(main,null);main.SelectEvent(archivedEvent);Pump();
+            store.DeleteVenue(archivedVenue);store.DeleteRecipient("Архив UI организация");reload.Invoke(main,null);Pump();
+            Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Удалённые из справочников")==true)&&((Grid)main.FindName("Workspace")).IsVisible,"deleted shows remain accessible in archive without losing selected context");
+            hall.SetSelection(new[]{archivedSeats[0]});Check(((Button)main.FindName("ReturnButton")).IsEnabled,"archived show still permits returning issued seats on scheme");
+            hall.SetSelection(new[]{archivedSeats[1]});((ComboBox)main.FindName("RecipientBox")).Text="Blocked archived issuance";
+            Check(!((Button)main.FindName("IssueButton")).IsEnabled&&!((Button)main.FindName("ApplyPriceButton")).IsEnabled,"archived show disables new issuance and price edits");
             main.SelectEvent(store.Events().First(e=>e.Id!=eventId).Id);Pump();
             Check(history.Items.Count==0,"journal hides issuances of other events");
             Check(((ComboBox)main.FindName("RecipientBox")).Text=="","switching shows clears recipient");

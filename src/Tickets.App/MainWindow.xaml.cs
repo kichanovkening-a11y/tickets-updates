@@ -207,7 +207,7 @@ public partial class MainWindow : Window
     private void RefreshCatalogNavigation()
     {
         ReadEventCatalog();ApplyFilter();
-        if(current is not null&&!events.Any(e=>e.Id==current.Id)){current=null;Hall.Load([],[],true);HistoryGrid.ItemsSource=null;ShowHome();}
+        if(current is not null&&!events.Concat(archivedEvents).Any(e=>e.Id==current.Id)){current=null;Hall.Load([],[],true);HistoryGrid.ItemsSource=null;ShowHome();}
     }
     private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
     private void IssueSelected(bool print)

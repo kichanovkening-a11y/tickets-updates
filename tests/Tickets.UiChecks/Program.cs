@@ -59,7 +59,7 @@ internal static class Program
             var planId=store.SavePlan(venueId,"UI plan",seatIds.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
             var eventId=store.CreateEvent(store.SavePerformance("UI event"),venueId,planId,DateTime.Today.AddHours(19));
             var events=(ListBox)main.FindName("EventsList");events.ItemsSource=store.Events();events.SelectedItem=events.Items.Cast<EventInfo>().Single(e=>e.Id==eventId);Pump();
-            var hall=(Tickets.App.HallView)main.FindName("Hall");hall.Fit();Pump();
+            var hall=(Tickets.App.HallView)main.FindName("Hall");main.Activate();hall.Focus();hall.Fit();Pump();
             Gesture(hall,new Point(8,8),new Point(8,8));
             Gesture(hall,new Point(38,38),new Point(38,38));
             Check(hall.Selected.SetEquals(new[]{seatIds[0],seatIds[3]}),"separate single clicks accumulate places");
@@ -101,10 +101,15 @@ internal static class Program
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
-        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");Pump();}
-        Position(from);mouse_event(2,0,0,0,UIntPtr.Zero);Pump();
-        Position(to);mouse_event(4,0,0,0,UIntPtr.Zero);Pump();
+        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");WaitForInput();}
+        Position(from);mouse_event(2,0,0,0,UIntPtr.Zero);WaitForInput();
+        Position(to);mouse_event(4,0,0,0,UIntPtr.Zero);WaitForInput();
         Console.WriteLine($"Mouse gesture {from} -> {to}; selected: {string.Join(',',hall.Selected)}");
+    }
+    private static void WaitForInput()
+    {
+        var frame=new DispatcherFrame();var timer=new DispatcherTimer(DispatcherPriority.Background){Interval=TimeSpan.FromMilliseconds(80)};
+        timer.Tick+=(_,_)=>{timer.Stop();frame.Continue=false;};timer.Start();Dispatcher.PushFrame(frame);
     }
     private static void Pump()=>Application.Current.Dispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool condition,string label){if(!condition)throw new Exception(label);Console.WriteLine("PASS "+label);}

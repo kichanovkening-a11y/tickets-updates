@@ -61,6 +61,7 @@ internal static class Program
             var hallFields=Logical(hallEditor).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
             hallFields[0].Text="UI row hall";hallFields[3].Text="20";hallFields[5].Text="А";
             var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
+            Check(!rowGrid.IsReadOnly,"per-row seats and aisles are editable");
             Check(rowGrid.Items.Count==20,"row count produces a configuration row for every hall row");
             var configurations=rowGrid.Items.Cast<HallRowLayout>().ToArray();
             foreach(var row in configurations){row.SeatCount=1;row.AisleAfter=0;}configurations[0].SeatCount=23;configurations[0].AisleAfter=10;

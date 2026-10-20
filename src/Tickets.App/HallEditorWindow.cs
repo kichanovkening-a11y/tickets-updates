@@ -14,7 +14,7 @@ internal sealed class HallEditorWindow : EditorWindow
     private readonly HallView preview=new();
     private readonly DataGrid table=new(){IsReadOnly=false,AutoGenerateColumns=false,SelectionMode=DataGridSelectionMode.Extended,CanUserAddRows=false,CanUserDeleteRows=false};
     private readonly ObservableCollection<HallRowLayout> rowLayouts=[];
-    private readonly DataGrid rowTable=new(){AutoGenerateColumns=false,CanUserAddRows=false,CanUserDeleteRows=false,Height=210,Margin=new Thickness(0,10,0,0)};
+    private readonly DataGrid rowTable=new(){IsReadOnly=false,AutoGenerateColumns=false,CanUserAddRows=false,CanUserDeleteRows=false,Height=210,Margin=new Thickness(0,10,0,0)};
     private readonly TabControl tabs=new();
     private readonly TextBlock summary=new(){Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap};
     public HallEditorWindow(Store store,VenueInfo? copy=null):base(store,"Создание зала")

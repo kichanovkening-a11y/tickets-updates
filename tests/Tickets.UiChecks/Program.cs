@@ -12,15 +12,12 @@ using Tickets.Core;
 
 internal static class Program
 {
-    private sealed class TestApp : Tickets.App.App
-    {
-        protected override void OnStartup(StartupEventArgs e) { }
-    }
     [STAThread]
     private static int Main(string[] args)
     {
         var work=Path.Combine(Path.GetTempPath(),"Tickets-ui-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(work);
-        var app=new TestApp();app.InitializeComponent();app.ShutdownMode=ShutdownMode.OnExplicitShutdown;
+        var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/Tickets;component/UiResources.xaml",UriKind.Relative)});
         try
         {
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);

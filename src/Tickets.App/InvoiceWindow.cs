@@ -40,10 +40,10 @@ internal sealed class InvoiceWindow : EditorWindow
             PersistSender();var seats=Store.Invoice(eventId,issueId).Tickets.Where(t=>t.ReturnedAt is null).Select(t=>t.SeatId).ToArray();
             if(seats.Length==0)throw new TicketException("В накладной нет выданных билетов для печати.");
             new TicketPrintWindow(Store,eventId,seats).ShowDialog();Refresh();
-        }));printTickets.Width=112;printTickets.Height=112;printTickets.Content=new TextBlock{Text="Печать билетов",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center};
+        }));printTickets.Width=112;printTickets.Height=112;
         extendInvoice=Button(actions,"Дополнить накладную",()=>Try(()=>{
             PersistSender();new InvoiceExtensionWindow(Store,eventId,issueId).ShowDialog();Refresh();
-        }));extendInvoice.Width=112;extendInvoice.Height=112;extendInvoice.Content=new TextBlock{Text="Дополнить накладную",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center};
+        }));extendInvoice.Width=112;extendInvoice.Height=112;
         Grid.SetRow(reader,1);root.Children.Add(reader);Refresh();
         Closing+=(_,e)=>{
             try{PersistSender();Refresh();}

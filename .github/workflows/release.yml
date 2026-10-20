@@ -1,0 +1,71 @@
+name: Build and publish Tickets
+on:
+  push:
+    branches: [main]
+    paths: ['src/**', 'tests/**', 'scripts/**', 'data/**', 'version.json', '.github/workflows/release.yml']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: tickets-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.408
+      - name: Restore test data
+        run: python scripts/restore_seed.py
+      - name: Test accounting and updater
+        run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db
+      - name: Publish portable Windows app
+        shell: pwsh
+        run: |
+          $v = (Get-Content version.json | ConvertFrom-Json).version
+          dotnet publish src/Tickets.App/Tickets.App.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 "-p:Version=$v" -o release/Tickets
+          if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
+      - name: Start application on Windows
+        shell: pwsh
+        run: |
+          $v = (Get-Content version.json | ConvertFrom-Json).version
+          $exe = (Resolve-Path release/Tickets/Tickets.exe).Path
+          $p = Start-Process $exe -PassThru
+          try {
+            $ready = $false
+            for ($i=0; $i -lt 20; $i++) {
+              Start-Sleep -Seconds 1
+              $p.Refresh()
+              if ($p.HasExited) { throw "Application exited: $($p.ExitCode)" }
+              if ($p.MainWindowHandle -ne 0 -and $p.MainWindowTitle -eq "Билеты · $v") { $ready=$true; break }
+            }
+            if (-not $ready) { throw 'Main window did not open' }
+            Write-Host "Windows main window opened: $($p.MainWindowTitle)"
+            $null=$p.CloseMainWindow()
+            if (-not $p.WaitForExit(10000)) { throw 'Application did not close normally' }
+          } finally { if (-not $p.HasExited) { $p.Kill(); $p.WaitForExit() } }
+      - name: Create release packages
+        shell: pwsh
+        run: |
+          $v = (Get-Content version.json | ConvertFrom-Json).version
+          python scripts/package_release.py release/Tickets release-assets $env:GITHUB_REPOSITORY $v
+          if ($LASTEXITCODE -ne 0) { throw 'Update packaging failed' }
+          python scripts/package_portable.py release/Tickets release-assets/Tickets-Windows-x64.zip
+          if ($LASTEXITCODE -ne 0) { throw 'Portable packaging failed' }
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $v = (Get-Content version.json | ConvertFrom-Json).version
+          $tag = "v$v"
+          gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -eq 0) { throw 'Version already published: increment version.json' }
+          $assets = @(Get-ChildItem release-assets -File | ForEach-Object FullName)
+          gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Билеты $v" --notes-file RELEASE-NOTES.md --draft
+          if ($LASTEXITCODE -ne 0) { throw 'Release upload failed' }
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

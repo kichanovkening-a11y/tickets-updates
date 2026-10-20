@@ -1,0 +1,152 @@
+using Microsoft.Data.Sqlite;
+using System.Globalization;
+using System.Text.RegularExpressions;
+namespace Tickets.Core;
+
+public sealed record VenueInfo(long Id,string Name,string Address);
+public sealed record PerformanceInfo(long Id,string Title);
+public sealed record PlanInfo(long Id,long VenueId,string Name);
+public sealed record PriceValue(long SeatId,long Amount,string Color);
+public sealed class DraftSeat
+{
+    public string Sector {get;set;}="Партер";
+    public string Row {get;set;}="1";
+    public string Number {get;set;}="1";
+    public double X {get;set;}
+    public double Y {get;set;}
+}
+public sealed partial class Store
+{
+    private void EnsureCatalog()
+    {
+        using var c=Open(); using var version=Command(c,"PRAGMA user_version");
+        var v=Convert.ToInt32(version.ExecuteScalar());
+        if(v>2) throw new TicketException("База создана более новой программой. Обновите программу.");
+        if(v==2) return;
+        var copy=Path+".before-v2.db";
+        if(!System.IO.File.Exists(copy))
+        {
+            using var dest=new SqliteConnection(new SqliteConnectionStringBuilder {DataSource=copy,Pooling=false}.ToString());
+            dest.Open(); c.BackupDatabase(dest);
+        }
+        using var tx=c.BeginTransaction(deferred:false);
+        using var cmd=Command(c,"""
+            CREATE TABLE IF NOT EXISTS performance(id INTEGER PRIMARY KEY, title TEXT NOT NULL, name_key TEXT NOT NULL UNIQUE);
+            CREATE TABLE IF NOT EXISTS pricing_plan(id INTEGER PRIMARY KEY, venue_id INTEGER NOT NULL REFERENCES venue(id),
+              name TEXT NOT NULL, name_key TEXT NOT NULL, UNIQUE(venue_id,name_key));
+            CREATE TABLE IF NOT EXISTS plan_price(plan_id INTEGER NOT NULL REFERENCES pricing_plan(id),
+              seat_id INTEGER NOT NULL REFERENCES seat(id), amount INTEGER NOT NULL CHECK(amount>=0),color TEXT NOT NULL,
+              PRIMARY KEY(plan_id,seat_id));
+            PRAGMA user_version=2;
+            """); cmd.Transaction=tx; cmd.ExecuteNonQuery();
+        using var titles=Command(c,"SELECT DISTINCT title FROM event"); titles.Transaction=tx;
+        var names=new List<string>(); using(var r=titles.ExecuteReader()) while(r.Read()) names.Add(r.GetString(0));
+        foreach(var name in names)
+        {
+            using var add=Command(c,"INSERT OR IGNORE INTO performance(title,name_key) VALUES($n,$k)","$n",name,"$k",name.Trim().Normalize().ToUpperInvariant());
+            add.Transaction=tx; add.ExecuteNonQuery();
+        }
+        tx.Commit();
+    }
+    private static string Required(string value,string field,int max=200)
+    {
+        value=value.Trim();
+        if(value.Length==0 || value.Length>max || value.Any(char.IsControl)) throw new TicketException($"Укажите поле «{field}» (до {max} символов).");
+        return value;
+    }
+    public List<VenueInfo> Venues()
+    {
+        using var c=Open(); using var cmd=Command(c,"SELECT id,name,address FROM venue ORDER BY name");
+        using var r=cmd.ExecuteReader(); var list=new List<VenueInfo>();
+        while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2))); return list;
+    }
+    public List<PerformanceInfo> Performances()
+    {
+        using var c=Open(); using var cmd=Command(c,"SELECT id,title FROM performance ORDER BY title");
+        using var r=cmd.ExecuteReader(); var list=new List<PerformanceInfo>();
+        while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1))); return list;
+    }
+    public long SavePerformance(string title)
+    {
+        title=Required(title,"Спектакль"); var key=title.Normalize().ToUpperInvariant(); using var c=Open();
+        using var cmd=Command(c,"INSERT OR IGNORE INTO performance(title,name_key) VALUES($n,$k)","$n",title,"$k",key); cmd.ExecuteNonQuery();
+        using var find=Command(c,"SELECT id FROM performance WHERE name_key=$k","$k",key); return Convert.ToInt64(find.ExecuteScalar());
+    }
+    public List<DraftSeat> HallDraft(long venueId)=>VenueSeats(venueId).Select(s=>new DraftSeat{
+        Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y}).ToList();
+    public long CreateHall(string name,string address,IReadOnlyCollection<DraftSeat> seats)
+    {
+        name=Required(name,"Название зала");
+        if(seats.Count is 0 or >50000) throw new TicketException("В зале должно быть от 1 до 50 000 мест.");
+        var keys=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach(var s in seats)
+        {
+            s.Sector=Required(s.Sector,"Сектор"); s.Row=Required(s.Row,"Ряд",32); s.Number=Required(s.Number,"Место",32);
+            if(!double.IsFinite(s.X)||!double.IsFinite(s.Y)||Math.Abs(s.X)>1000000||Math.Abs(s.Y)>1000000)
+                throw new TicketException("Недопустимые координаты места.");
+            if(!keys.Add(s.Sector+"\u001f"+s.Row+"\u001f"+s.Number)) throw new TicketException($"Повторяется место: {s.Sector}, ряд {s.Row}, место {s.Number}.");
+        }
+        using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+        using var add=Command(c,"INSERT INTO venue(name,address) VALUES($n,$a) RETURNING id","$n",name,"$a",address.Trim()); add.Transaction=tx;
+        var id=Convert.ToInt64(add.ExecuteScalar()); long zid=0;
+        foreach(var sector in seats.GroupBy(s=>s.Sector,StringComparer.OrdinalIgnoreCase))
+        {
+            zid++; using var zone=Command(c,"INSERT INTO sector VALUES($v,$z,$n,$x,$y)","$v",id,"$z",zid,"$n",sector.Key,"$x",sector.Min(s=>s.X),"$y",sector.Min(s=>s.Y)-26);
+            zone.Transaction=tx; zone.ExecuteNonQuery();
+            foreach(var s in sector)
+            {
+                using var seat=Command(c,"INSERT INTO seat(venue_id,sector_id,row_label,number,x,y) VALUES($v,$z,$r,$n,$x,$y)",
+                    "$v",id,"$z",zid,"$r",s.Row,"$n",s.Number,"$x",s.X,"$y",s.Y); seat.Transaction=tx; seat.ExecuteNonQuery();
+            }
+        }
+        tx.Commit(); return id;
+    }
+    public List<PlanInfo> Plans(long venueId)
+    {
+        using var c=Open(); using var cmd=Command(c,"SELECT id,venue_id,name FROM pricing_plan WHERE venue_id=$v ORDER BY name","$v",venueId);
+        using var r=cmd.ExecuteReader(); var list=new List<PlanInfo>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
+    }
+    public List<PriceValue> PlanPrices(long planId)
+    {
+        using var c=Open(); using var cmd=Command(c,"SELECT seat_id,amount,color FROM plan_price WHERE plan_id=$p","$p",planId);
+        using var r=cmd.ExecuteReader(); var list=new List<PriceValue>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
+    }
+    public List<SeatInfo> VenueSeats(long venueId)
+    {
+        using var c=Open(); using var cmd=Command(c,"SELECT s.id,z.name,s.row_label,s.number,s.x,s.y FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE s.venue_id=$v ORDER BY z.y,z.x,s.y,s.x","$v",venueId);
+        using var r=cmd.ExecuteReader(); var list=new List<SeatInfo>();
+        while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetDouble(4),r.GetDouble(5),null,"#CBD5E1",null,"","",null)); return list;
+    }
+    public long SavePlan(long venueId,string name,IReadOnlyCollection<PriceValue> prices)
+    {
+        name=Required(name,"Название расценовки");
+        var ids=VenueSeats(venueId).Select(s=>s.Id).ToHashSet();
+        if(prices.Count==0 || prices.Select(x=>x.SeatId).Distinct().Count()!=prices.Count || prices.Any(p=>!ids.Contains(p.SeatId)||p.Amount<0||!Regex.IsMatch(p.Color,"^#[0-9a-fA-F]{6}$")))
+            throw new TicketException("Назначьте корректные цены местам выбранного зала. Цена не может быть отрицательной.");
+        using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+        try
+        {
+            using var add=Command(c,"INSERT INTO pricing_plan(venue_id,name,name_key) VALUES($v,$n,$k) RETURNING id","$v",venueId,"$n",name,"$k",name.Normalize().ToUpperInvariant()); add.Transaction=tx;
+            var id=Convert.ToInt64(add.ExecuteScalar());
+            foreach(var p in prices)
+            {
+                using var cmd=Command(c,"INSERT INTO plan_price VALUES($p,$s,$a,$c)","$p",id,"$s",p.SeatId,"$a",p.Amount,"$c",p.Color); cmd.Transaction=tx; cmd.ExecuteNonQuery();
+            }
+            tx.Commit(); return id;
+        }
+        catch(SqliteException ex) when(ex.SqliteErrorCode==19) { throw new TicketException("Расценовка с таким названием уже есть. Сохраните под новым названием."); }
+    }
+    public long CreateEvent(long performanceId,long venueId,long planId,DateTime date)
+    {
+        using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+        using var title=Command(c,"SELECT title FROM performance WHERE id=$p","$p",performanceId); title.Transaction=tx;
+        var name=title.ExecuteScalar() as string ?? throw new TicketException("Выберите спектакль.");
+        using var check=Command(c,"SELECT count(*) FROM pricing_plan WHERE id=$p AND venue_id=$v","$p",planId,"$v",venueId); check.Transaction=tx;
+        if(Convert.ToInt32(check.ExecuteScalar())!=1) throw new TicketException("Выберите расценовку этого зала.");
+        using var add=Command(c,"INSERT INTO event(venue_id,title,starts_at,legacy_date) VALUES($v,$n,$d,$l) RETURNING id",
+            "$v",venueId,"$n",name,"$d",date.ToString("yyyy-MM-ddTHH:mm:ss",CultureInfo.InvariantCulture),"$l",date.ToString("dd.MM.yyyy HH:mm:ss",CultureInfo.InvariantCulture));
+        add.Transaction=tx; var id=Convert.ToInt64(add.ExecuteScalar());
+        using var prices=Command(c,"INSERT INTO event_price SELECT $e,seat_id,amount,color FROM plan_price WHERE plan_id=$p","$e",id,"$p",planId);
+        prices.Transaction=tx; prices.ExecuteNonQuery(); tx.Commit(); return id;
+    }
+}

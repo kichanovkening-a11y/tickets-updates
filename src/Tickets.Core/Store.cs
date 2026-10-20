@@ -1,0 +1,159 @@
+using Microsoft.Data.Sqlite;
+
+namespace Tickets.Core;
+
+public sealed partial class Store
+{
+    public string Path { get; }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); }
+
+    private SqliteConnection Open()
+    {
+        var c = new SqliteConnection(new SqliteConnectionStringBuilder {
+            DataSource=Path, Mode=SqliteOpenMode.ReadWrite, ForeignKeys=true,
+            DefaultTimeout=5, Pooling=false }.ToString());
+        c.Open();
+        return c;
+    }
+
+    private static SqliteCommand Command(SqliteConnection c, string sql, params object[] pairs)
+    {
+        var cmd=c.CreateCommand(); cmd.CommandText=sql;
+        for (var i=0;i<pairs.Length;i+=2) cmd.Parameters.AddWithValue((string)pairs[i],pairs[i+1]);
+        return cmd;
+    }
+
+    public List<EventInfo> Events()
+    {
+        using var c=Open();
+        using var cmd=Command(c,"""
+            SELECT e.id,e.venue_id,e.title,v.name,e.legacy_date,e.starts_at,
+              (SELECT count(*) FROM seat s WHERE s.venue_id=e.venue_id),
+              (SELECT count(*) FROM ticket t WHERE t.event_id=e.id AND t.returned_at IS NULL)
+            FROM event e JOIN venue v ON v.id=e.venue_id ORDER BY e.starts_at DESC,e.id DESC
+            """);
+        using var r=cmd.ExecuteReader(); var result=new List<EventInfo>();
+        while(r.Read()) result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),
+            r.GetString(4),r.GetString(5),r.GetInt32(6),r.GetInt32(7)));
+        return result;
+    }
+
+    public List<SeatInfo> Seats(long eventId)
+    {
+        using var c=Open();
+        using var cmd=Command(c,"""
+            SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,p.amount,coalesce(p.color,'#CBD5E1'),
+              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number
+            FROM event e JOIN seat s ON s.venue_id=e.venue_id
+            JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
+            LEFT JOIN event_price p ON p.event_id=e.id AND p.seat_id=s.id
+            LEFT JOIN ticket t ON t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL
+            WHERE e.id=$e ORDER BY z.y,z.x,s.y,s.x,s.id
+            ""","$e",eventId);
+        using var r=cmd.ExecuteReader(); var result=new List<SeatInfo>();
+        while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),
+            r.GetDouble(4),r.GetDouble(5),r.IsDBNull(6)?null:r.GetInt64(6),r.GetString(7),
+            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11)));
+        return result;
+    }
+
+    public List<SectorInfo> Sectors(long venueId)
+    {
+        using var c=Open();
+        using var cmd=Command(c,"SELECT name,x,y FROM sector WHERE venue_id=$v ORDER BY y,x","$v",venueId);
+        using var r=cmd.ExecuteReader(); var result=new List<SectorInfo>();
+        while(r.Read()) result.Add(new(r.GetString(0),r.GetDouble(1),r.GetDouble(2)));
+        return result;
+    }
+
+    public List<TicketInfo> History(long eventId)
+    {
+        using var c=Open();
+        using var cmd=Command(c,"""
+            SELECT t.id,s.id,z.name,s.row_label,s.number,t.recipient,t.series,t.number,t.amount,
+              t.issued_at,t.returned_at FROM ticket t JOIN seat s ON s.id=t.seat_id
+            JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
+            WHERE t.event_id=$e ORDER BY t.id DESC
+            ""","$e",eventId);
+        using var r=cmd.ExecuteReader(); var result=new List<TicketInfo>();
+        while(r.Read()) result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),
+            r.GetString(4),r.GetString(5),r.GetString(6),r.GetInt64(7),r.GetInt64(8),r.GetString(9),
+            r.IsDBNull(10)?null:r.GetString(10)));
+        return result;
+    }
+
+    private static string Series(string series) => series.Trim().Normalize().ToUpperInvariant();
+
+    public long NextNumber(string series)
+    {
+        using var c=Open();
+        using var cmd=Command(c,"SELECT coalesce(max(number),0) FROM ticket WHERE series=$s","$s",Series(series));
+        var last=Convert.ToInt64(cmd.ExecuteScalar());
+        if(last==long.MaxValue) throw new TicketException("Номера этой серии закончились. Используйте другую серию.");
+        return last+1;
+    }
+
+    public void Issue(long eventId, IReadOnlyCollection<long> seats, string recipient, string series, long firstNumber)
+    {
+        recipient=recipient.Trim(); series=Series(series);
+        if(recipient.Length is 0 or >200) throw new TicketException("Укажите получателя (до 200 символов).");
+        if(series.Length is 0 or >32) throw new TicketException("Укажите серию (до 32 символов).");
+        if(seats.Count==0) throw new TicketException("Выберите места.");
+        if(seats.Distinct().Count()!=seats.Count) throw new TicketException("В списке повторяются места.");
+        if(firstNumber<1 || firstNumber>long.MaxValue-seats.Count+1)
+            throw new TicketException("Недопустимый диапазон номеров билетов.");
+        try
+        {
+            using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+            var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
+            foreach(var sid in seats)
+            {
+                using var check=Command(c,"""
+                    SELECT p.amount FROM event_price p JOIN event e ON e.id=p.event_id
+                    JOIN seat s ON s.id=p.seat_id AND s.venue_id=e.venue_id
+                    WHERE p.event_id=$e AND p.seat_id=$s
+                    AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=$e AND t.seat_id=$s AND t.returned_at IS NULL)
+                    ""","$e",eventId,"$s",sid);
+                check.Transaction=tx;
+                var amount=check.ExecuteScalar();
+                if(amount is null) throw new TicketException("Одно из мест уже выдано, не имеет цены или не относится к этому показу. Выдача отменена целиком.");
+                using var insert=Command(c,"""
+                    INSERT INTO ticket(event_id,seat_id,recipient,series,number,amount,issued_at)
+                    VALUES($e,$s,$r,$series,$n,$a,$time)
+                    ""","$e",eventId,"$s",sid,"$r",recipient,"$series",series,"$n",n,
+                    "$a",Convert.ToInt64(amount),"$time",timestamp);
+                insert.Transaction=tx; insert.ExecuteNonQuery();
+                if(n<long.MaxValue) n++;
+            }
+            tx.Commit();
+        }
+        catch(SqliteException ex) when(ex.SqliteErrorCode==19)
+        { throw new TicketException("Серия и номер уже использованы. Выдача отменена целиком; выберите следующий номер или другую серию."); }
+        catch(SqliteException ex) when(ex.SqliteErrorCode is 5 or 6)
+        { throw new TicketException("База занята другим окном программы. Повторите действие."); }
+    }
+
+    public void Return(IReadOnlyCollection<long> tickets)
+    {
+        if(tickets.Count==0 || tickets.Distinct().Count()!=tickets.Count)
+            throw new TicketException("Выберите выданные билеты без повторов.");
+        using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+        var time=DateTimeOffset.Now.ToString("O");
+        foreach(var id in tickets)
+        {
+            using var cmd=Command(c,"UPDATE ticket SET returned_at=$time WHERE id=$id AND returned_at IS NULL",
+                "$time",time,"$id",id);
+            cmd.Transaction=tx;
+            if(cmd.ExecuteNonQuery()!=1) throw new TicketException("Билет уже возвращён или не найден. Возврат отменён целиком.");
+        }
+        tx.Commit();
+    }
+
+    public void Backup(string destination)
+    {
+        if(System.IO.Path.GetFullPath(destination)==Path) throw new TicketException("Копия должна сохраняться в другой файл.");
+        using var source=Open();
+        using var target=new SqliteConnection(new SqliteConnectionStringBuilder {DataSource=destination,Pooling=false}.ToString());
+        target.Open(); source.BackupDatabase(target);
+    }
+}

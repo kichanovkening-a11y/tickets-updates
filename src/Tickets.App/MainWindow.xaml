@@ -1,0 +1,114 @@
+<Window x:Class="Tickets.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:Tickets.App"
+        Title="Билеты · 0.2.0" Width="1420" Height="880" MinWidth="800" MinHeight="500" WindowStartupLocation="CenterScreen" WindowState="Maximized" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True">
+  <DockPanel>
+    <Border DockPanel.Dock="Top" Background="#152C46" Padding="20,14">
+      <DockPanel>
+        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+          <Button Content="Свернуть" Click="MinimizeClick"/>
+          <Button x:Name="MaximizeButton" Content="В окно" Click="MaximizeClick"/>
+          <Button Content="Закрыть" Click="CloseClick" Margin="0"/>
+        </StackPanel>
+        <Button DockPanel.Dock="Right" Content="Обновление" Click="UpdateClick" Margin="0,0,12,0"/>
+        <Button DockPanel.Dock="Right" Content="Главная" Click="HomeClick" Margin="0,0,16,0"/>
+        <TextBlock x:Name="AppBrand" Text="БИЛЕТЫ" Foreground="White" FontSize="22" FontWeight="SemiBold"/>
+      </DockPanel>
+    </Border>
+    <Border DockPanel.Dock="Bottom" Background="White" Padding="15,9" BorderBrush="#CBD5E1" BorderThickness="0,1,0,0">
+      <TextBlock x:Name="StatusText" Text="Загрузка…" TextWrapping="Wrap"/>
+    </Border>
+    <Grid Margin="12"><Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
+        <DockPanel>
+          <StackPanel DockPanel.Dock="Top"><TextBlock Text="Мероприятия" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+            <WrapPanel Margin="0,0,0,8">
+              <Button Content="Залы" Click="HallsClick" Padding="8,6"/><Button Content="Спектакли" Click="PerformancesClick" Padding="8,6"/>
+              <Button Content="Расценовки" Click="PricesClick" Padding="8,6" Margin="0,5,0,0"/><Button Content="Новый показ" Click="NewEventClick" Padding="8,6" Margin="5,5,0,0"/>
+            </WrapPanel>
+            <TextBox x:Name="SearchBox" TextChanged="SearchChanged" ToolTip="Поиск по названию, площадке или дате"/>
+            <TextBlock Text="Название, площадка или дата" Foreground="#64748B" FontSize="11" Margin="0,4,0,9"/>
+          </StackPanel>
+          <Button DockPanel.Dock="Bottom" Content="Резервная копия…" Click="BackupClick" Margin="0,10,0,0"/>
+          <ListBox x:Name="EventsList" SelectionChanged="EventChanged" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling">
+            <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Padding" Value="6,9"/></Style></ListBox.ItemContainerStyle>
+            <ListBox.ItemTemplate><DataTemplate><StackPanel>
+              <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+              <TextBlock Text="{Binding Date}" Foreground="#2563A6" Margin="0,4,0,3"/>
+              <TextBlock Text="{Binding Venue}" Foreground="#64748B" FontSize="11" TextWrapping="Wrap"/>
+            </StackPanel></DataTemplate></ListBox.ItemTemplate>
+          </ListBox>
+        </DockPanel>
+      </Border>
+      <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+        <StackPanel Margin="8,0,0,10"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+          <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel>
+        <TabControl Grid.Row="1" BorderBrush="#CBD5E1" Background="White">
+          <TabItem Header="  Схема зала  ">
+            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="310"/></Grid.ColumnDefinitions>
+              <DockPanel>
+                <WrapPanel DockPanel.Dock="Top" Margin="10">
+                  <Button Content="Весь зал" Click="FitClick"/><Button Content="−" Click="ZoomOutClick"/><Button Content="+" Click="ZoomInClick"/>
+                  <Button Content="Снять выделение" Click="ClearClick"/>
+                </WrapPanel>
+                <TextBlock DockPanel.Dock="Bottom" Text="Колесо — масштаб · Правая кнопка — сдвиг · Shift + протянуть — выделение" Foreground="#64748B" FontSize="11" Margin="10,7" TextWrapping="Wrap"/>
+                <WrapPanel x:Name="LegendPanel" DockPanel.Dock="Bottom" Margin="10,4"/>
+                <local:HallView x:Name="Hall" Margin="5"/>
+              </DockPanel>
+              <Border Grid.Column="1" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1,0,0,0" Padding="14">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <DockPanel>
+                  <StackPanel DockPanel.Dock="Top">
+                    <TextBlock Text="Выбранные места" FontSize="17" FontWeight="SemiBold"/>
+                    <TextBlock x:Name="SelectedSummary" Text="Ничего не выбрано" Margin="0,7,0,10" TextWrapping="Wrap"/>
+                    <ListBox x:Name="SelectedList" Height="160" BorderBrush="#E2E8F0">
+                      <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="3,4"><TextBlock Text="{Binding Label}" FontSize="12"/><TextBlock Text="{Binding Status}" FontSize="11" Foreground="#64748B"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+                    </ListBox>
+                    <TextBlock Text="Получатель / организация" Margin="0,14,0,5"/>
+                    <TextBox x:Name="RecipientBox" MaxLength="200" TextChanged="InputChanged"/>
+                    <Grid Margin="0,10,0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="10"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                      <StackPanel><TextBlock Text="Серия" Margin="0,0,0,5"/><TextBox x:Name="SeriesBox" Text="ТЕСТ" MaxLength="32" TextChanged="SeriesChanged"/></StackPanel>
+                      <StackPanel Grid.Column="2"><TextBlock Text="Первый номер" Margin="0,0,0,5"/><TextBox x:Name="NumberBox" Text="1" TextChanged="InputChanged"/></StackPanel>
+                    </Grid>
+                    <Button x:Name="IssueButton" Content="Выдать выбранные" Click="IssueClick" Background="#2466A8" Foreground="White" Margin="0,10,0,7" IsEnabled="False"/>
+                    <Button x:Name="ReturnButton" Content="Вернуть выбранные" Click="ReturnClick" Margin="0,0,0,8" IsEnabled="False"/>
+                    <TextBlock x:Name="SelectionHint" Foreground="#64748B" FontSize="11" TextWrapping="Wrap"/>
+                  </StackPanel>
+                </DockPanel>
+                </ScrollViewer>
+              </Border>
+            </Grid>
+          </TabItem>
+          <TabItem Header="  Журнал выдачи и возвратов  ">
+            <DockPanel Margin="10">
+              <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10"><Button Content="Вернуть билеты из журнала" Click="ReturnHistoryClick" HorizontalAlignment="Left"/>
+                <TextBlock Text="Возвращённые билеты остаются в истории" Foreground="#64748B" VerticalAlignment="Center" Margin="10,0,0,0"/></DockPanel>
+              <DataGrid x:Name="HistoryGrid" SelectionMode="Extended" SelectionUnit="FullRow">
+                <DataGrid.Columns>
+                  <DataGridTextColumn Header="Билет" Binding="{Binding Code}" Width="110"/>
+                  <DataGridTextColumn Header="Статус" Binding="{Binding Status}" Width="100"/>
+                  <DataGridTextColumn Header="Получатель" Binding="{Binding Recipient}" Width="*"/>
+                  <DataGridTextColumn Header="Сектор" Binding="{Binding Sector}" Width="120"/>
+                  <DataGridTextColumn Header="Ряд" Binding="{Binding Row}" Width="55"/>
+                  <DataGridTextColumn Header="Место" Binding="{Binding Seat}" Width="60"/>
+                  <DataGridTextColumn Header="Цена, ₽" Binding="{Binding Amount}" Width="80"/>
+                </DataGrid.Columns>
+              </DataGrid>
+            </DockPanel>
+          </TabItem>
+        </TabControl>
+      </Grid>
+      <Border x:Name="HomePanel" Grid.Column="2" Background="White" Padding="35">
+        <StackPanel VerticalAlignment="Center" MaxWidth="600" HorizontalAlignment="Center">
+          <TextBlock Text="Билеты" FontSize="34" FontWeight="SemiBold" Foreground="#152C46"/>
+          <WrapPanel Margin="0,18,0,10">
+            <Button Content="Создать зал" Click="NewHallClick"/><Button Content="Создать спектакль" Click="PerformancesClick"/>
+            <Button Content="Создать расценовку" Click="PricesClick" Margin="0,8,6,0"/><Button Content="Создать показ" Click="NewEventClick" Margin="0,8,0,0"/>
+          </WrapPanel>
+          <TextBlock Text="Выберите мероприятие" FontSize="24" Margin="0,20,0,12"/>
+          <TextBlock Text="Список мероприятий находится слева. Найдите спектакль по названию, площадке или дате и нажмите на него, чтобы открыть зал." TextWrapping="Wrap" FontSize="16" Foreground="#475569"/>
+          <Button Content="Найти мероприятие" Click="FindEventClick" HorizontalAlignment="Left" Margin="0,25,0,12"/>
+          <TextBlock x:Name="HomeSummary" Foreground="#64748B" TextWrapping="Wrap"/>
+        </StackPanel>
+      </Border>
+    </Grid>
+  </DockPanel>
+</Window>

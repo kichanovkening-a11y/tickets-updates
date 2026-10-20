@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+**/*_wpftmp.csproj
+release/
+*.user
+Data/tickets.db
+Backups/
+github-release/

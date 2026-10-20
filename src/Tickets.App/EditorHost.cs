@@ -53,11 +53,15 @@ public partial class MainWindow
 }
 internal sealed class SettingsWindow:EditorWindow
 {
-    internal SettingsWindow(Store store,MainWindow main):base(store,"Настройки",650,450)
+    internal SettingsWindow(Store store,MainWindow main):base(store,"Настройки",750,650)
     {
         var form=new StackPanel{Margin=new Thickness(25)};Content=form;
         var separate=new CheckBox{Content="Открывать формы в отдельных окнах",IsChecked=main.SeparateWindows,Margin=new Thickness(0,15,0,20),FontSize=17};form.Children.Add(separate);
         form.Children.Add(new TextBlock{Text="По умолчанию формы открываются внутри главного окна. Настройка применяется к следующим открываемым формам.",TextWrapping=TextWrapping.Wrap});
-        Button(form,"Сохранить",()=>Try(()=>{main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));
+        var sender=Field(form,"От кого по умолчанию",store.Sender);
+        var directory=Field(form,"Папка накладных и спецификаций",store.DocumentsDirectory);
+        Button(form,"Выбрать папку…",()=>{var dialog=new Microsoft.Win32.OpenFolderDialog{Title="Папка документов"};if(System.IO.Directory.Exists(directory.Text))dialog.InitialDirectory=directory.Text;if(dialog.ShowDialog(DialogOwner)==true)directory.Text=dialog.FolderName;});
+        Button(form,"Спецификации",()=>new SpecificationWindow(store).ShowDialog());
+        Button(form,"Сохранить",()=>Try(()=>{store.SaveDocumentSettings(sender.Text,directory.Text);main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));
     }
 }

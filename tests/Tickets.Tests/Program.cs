@@ -219,9 +219,9 @@ Test("Word invoice contains exact issuance tickets totals and escaped text",s=>{
     using var archive=ZipFile.OpenRead(file);Check(archive.GetEntry("[Content_Types].xml")!=null&&archive.GetEntry("_rels/.rels")!=null);
     using var stream=archive.GetEntry("word/document.xml")!.Open();var xml=System.Xml.Linq.XDocument.Load(stream);var text=string.Join(" ",xml.Descendants().Where(e=>e.Name.LocalName=="t").Select(e=>e.Value));
     Check(text.Contains(invoice.Recipient)&&text.Contains(invoice.Title)&&text.Contains(invoice.Total.ToString("N0",System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))));
-    Check(invoice.Tickets.All(t=>text.Contains(t.Code)&&text.Contains(t.Sector)&&text.Contains(t.Row)&&text.Contains(t.Seat)));
+    Check(invoice.Tickets.All(t=>!text.Contains(t.Code)&&text.Contains(t.Sector)&&text.Contains(t.Row)&&text.Contains(t.Seat)));
     File.Copy(file,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-sample.docx"),true);
-    var many=invoice with{Tickets=Enumerable.Range(1,85).Select(n=>invoice.Tickets[0] with{Number=n,Seat=n.ToString()}).ToList()};
+    var many=invoice with{Tickets=Enumerable.Range(1,85).Select(n=>invoice.Tickets[0] with{Number=n,Row=n.ToString(),Seat="1"}).ToList()};
     InvoiceDocuments.SaveWord(many,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-many.docx"));
 });
 Test("same venue and instant cannot be booked twice",s=>{
@@ -248,6 +248,30 @@ Test("schedule groups by performance with chronological upcoming and accessible 
 Test("editable clock accepts seconds and rejects invalid times",s=>{
     Check(CatalogText.Time("7","08","09")==new TimeSpan(7,8,9));Reject(()=>CatalogText.Time("24","0","0"));Reject(()=>CatalogText.Time("1","60","0"));Reject(()=>CatalogText.Time("1","0","60"));Reject(()=>CatalogText.Time("","0","0"));
     Check(s.Recipients().Count>=90&&s.Recipients("СТС").Count>0,"legacy organizations absent");
+});
+Test("hall labels per-row aisles and stable survivors",s=>HallLayoutChecks.Run());
+Test("document sender snapshot and auto save survives reload",s=>{
+    var c=Choice(s);var folder=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(s.Path)!,"Документы");
+    s.SaveDocumentSettings("Новый отправитель",folder);var id=s.Issue(c.Event,c.Seats,"Организация","DOC",1);
+    Check(s.Invoice(c.Event,id).Sender=="Новый отправитель");
+    s.SaveDocumentSettings("Другой отправитель",folder);Check(new Store(s.Path).Invoice(c.Event,id).Sender=="Новый отправитель");
+    s.UpdateInvoiceSender(c.Event,id,"Изменённый отправитель");Check(s.Invoice(c.Event,id).Sender=="Изменённый отправитель");
+    Reject(()=>s.UpdateInvoiceSender(-1,id,"Чужой"));Check(File.Exists(s.SaveInvoiceDocument(c.Event,id)));
+    Check(File.Exists(s.Path+".before-v5.db"));
+});
+Test("one persistent specification per normalized organization",s=>{
+    var first=s.SaveSpecification("Организация Ёлка",s.Sender,"Спецификация","Партер — билеты по согласованию.\nУсловия: __________");
+    var second=s.SaveSpecification(" организация елка ","Отправитель","Обновление","Новый текст");
+    Check(first.Id==second.Id&&s.Specifications().Count==1);var loaded=new Store(s.Path).Specifications().Single();Check(loaded.Body=="Новый текст");
+    Check(File.Exists(s.SaveSpecificationDocument(loaded)));Check(s.Recipients("елка").Count>0);
+});
+Test("group invoice places by row price and return state without serial",s=>{
+    var tickets=Enumerable.Range(1,5).Select(n=>new TicketInfo(n,n,"Партер","9",n.ToString(),"Получатель","SECRET",n,n==5?200:100,"2030-01-01T12:00:00Z",n==4?"2030-01-02T12:00:00Z":null)).ToList();
+    var invoice=new InvoiceInfo(1,1,"Спектакль","Зал","01.01.2030","Получатель","2030-01-01T12:00:00Z",tickets);
+    var lines=InvoiceDocuments.Lines(invoice);Check(lines.Count==3);Check(lines.Any(l=>l.Seats=="1, 2, 3"&&l.Count==3&&l.Total==300));
+    Check(invoice.Total==600);Check(RussianWords.Quantity(21)=="двадцать один билет");Check(RussianWords.Quantity(11)=="одиннадцать билетов");
+    Check(RussianWords.Money(2001)=="две тысячи один рубль ноль копеек");Check(RussianWords.Number(0)=="ноль");
+    Check(RussianWords.Money((decimal)long.MaxValue*50000).Length>10);
 });
 SqliteConnection.ClearAllPools();
 Directory.Delete(root,true);

@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); EnsureScheduling(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); }
 
     private SqliteConnection Open()
     {
@@ -109,9 +109,9 @@ public sealed partial class Store
             using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
             var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
             using var batch=Command(c,"""
-                INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date)
-                SELECT e.id,$r,$time,$series,e.title,v.name,e.legacy_date FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
-                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series);batch.Transaction=tx;
+                INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date,sender)
+                SELECT e.id,$r,$time,$series,e.title,v.name,e.legacy_date,coalesce((SELECT value FROM document_setting WHERE name='sender'),$sender) FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
+                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series,"$sender",DefaultSender);batch.Transaction=tx;
             var result=batch.ExecuteScalar();if(result is null)throw new TicketException("Показ не найден.");
             var issueId=Convert.ToInt64(result);
             foreach(var sid in seats)

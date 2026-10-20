@@ -138,6 +138,7 @@ public partial class MainWindow : Window
         var selected=Hall.SelectedSeats;
         foreach(var id in issuePrices.Keys.Where(id=>!Hall.Selected.Contains(id)).ToArray())issuePrices.Remove(id);
         SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(issuePrices.TryGetValue(s.Id,out var price)?price:s.Amount??0)}).ToList();
+        IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Выдано: {g.Key} — мест: {g.Count()}"));
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
         SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(issuePrices.TryGetValue(s.Id,out var price)?price:s.Amount??0)):N0} ₽";
         IssueButton.IsEnabled=current is not null && selected.Count>0 && free==selected.Count &&
@@ -157,6 +158,8 @@ public partial class MainWindow : Window
         if(!ready) return;
         NumberBox.Text=store.NextNumber(SeriesBox.Text).ToString(CultureInfo.InvariantCulture); UpdateSelection();
     }
+    private void SpecificationsClick(object sender,RoutedEventArgs e)=>Run(()=>new SpecificationWindow(store,RecipientBox.Text).ShowDialog());
+    private void TogglePriceClick(object sender,RoutedEventArgs e){PriceEditorPanel.Visibility=PriceEditorPanel.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;if(PriceEditorPanel.Visibility==Visibility.Visible)PriceBox.Focus();}
     private void ApplyPriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(!long.TryParse(PriceBox.Text,out var price)||price<0)throw new TicketException("Введите целую неотрицательную цену.");
         var selected=Hall.SelectedSeats;if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите свободные места с ценой.");
@@ -194,7 +197,9 @@ public partial class MainWindow : Window
     {
         if(ids.Length==0) throw new TicketException("Выберите билеты для возврата.");
         if(MessageBox.Show(this,$"Вернуть билеты: {ids.Length}? Места снова станут свободными.","Возврат",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes) return;
+        var eventId=current!.Id;var issueIds=store.History(eventId).Where(t=>ids.Contains(t.Id)).Select(t=>t.IssueId).Distinct().ToArray();
         store.Return(ids); LoadEvent(false); StatusText.Text=$"Возвращено билетов: {ids.Length}. Записи сохранены в журнале.";
+        foreach(var issue in issueIds)try{store.SaveInvoiceDocument(eventId,issue);}catch(Exception ex){StatusText.Text+=" Не удалось обновить Word: "+ex.Message;}
     }
     private void BackupClick(object sender,RoutedEventArgs e)=>Run(()=> {
         var dialog=new SaveFileDialog {Filter="База билетов (*.db)|*.db",FileName=$"tickets-{DateTime.Now:yyyy-MM-dd-HHmm}.db"};

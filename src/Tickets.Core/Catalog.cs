@@ -21,7 +21,7 @@ public sealed partial class Store
     {
         using var c=Open(); using var version=Command(c,"PRAGMA user_version");
         var v=Convert.ToInt32(version.ExecuteScalar());
-        if(v>4) throw new TicketException("База создана более новой программой. Обновите программу.");
+        if(v>5) throw new TicketException("База создана более новой программой. Обновите программу.");
         if(v>=2) return;
         var copy=Path+".before-v2.db";
         if(!System.IO.File.Exists(copy))

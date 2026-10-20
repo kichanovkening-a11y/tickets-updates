@@ -50,8 +50,10 @@ public sealed class HallView : FrameworkElement
                 dc.DrawRoundedRectangle(brush,null,rect,2,2);
                 var textColor=Brushes.Black;
                 if(brush is SolidColorBrush solid && (solid.Color.R*.299+solid.Color.G*.587+solid.Color.B*.114)<145) textColor=Brushes.White;
-                var text=Text(s.Number.Length>3?s.Number[..3]:s.Number,8,textColor);
-                dc.DrawText(text,new Point(s.X+(16-text.Width)/2,s.Y+1.5));
+                var text=Text(s.Number,8,textColor);
+                // Keep the complete label visible even when it contains several letters or digits.
+                if(text.Width>14)text.SetFontSize(8*14/text.Width);
+                dc.DrawText(text,new Point(s.X+(16-text.Width)/2,s.Y+(16-text.Height)/2));
                 if(s.TicketId.HasValue)
                 {
                     var pen=new Pen(Brushes.White,.8);

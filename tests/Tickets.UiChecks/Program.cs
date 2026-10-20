@@ -54,6 +54,27 @@ internal static class Program
             Click(editor,"Создать");Pump();if(nestedError is not null)throw nestedError;
             Check(combos[2].SelectedItem is PlanInfo plan&&plan.Name=="UI test pricing","new pricing selected after nested editor saves");
             editor.Close();
+            var hallType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.HallEditorWindow")!;
+            var hallEditor=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;hallEditor.Show();Pump();
+            var hallFields=Logical(hallEditor).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
+            hallFields[0].Text="UI row hall";hallFields[3].Text="20";hallFields[5].Text="А";
+            var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
+            Check(rowGrid.Items.Count==20,"row count produces a configuration row for every hall row");
+            var configurations=rowGrid.Items.Cast<HallRowLayout>().ToArray();
+            foreach(var row in configurations){row.SeatCount=1;row.AisleAfter=0;}configurations[0].SeatCount=23;configurations[0].AisleAfter=10;
+            Click(hallEditor,"Добавить сектор");Pump();
+            var draftPreview=Logical(hallEditor).OfType<Tickets.App.HallView>().Single();draftPreview.Selected.UnionWith(new long[]{1,2,3});
+            Click(hallEditor,"Удалить выбранные (Del)");Click(hallEditor,"Сохранить как новый зал");
+            var editedHall=store.Venues().Single(v=>v.Name=="UI row hall");var remaining=store.HallDraft(editedHall.Id);
+            Check(remaining.Count==39&&remaining.Where(x=>x.Row=="А").Select(x=>x.Number).Contains("4")&&!remaining.Where(x=>x.Row=="А").Any(x=>x.Number=="1"),"drawing deletion preserves surviving seat labels");
+            Check(remaining.Single(x=>x.Row=="А"&&x.Number=="4").X==60,"drawing deletion preserves original seat coordinates");
+            var specType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.SpecificationWindow")!;
+            var specWindow=(Window)Activator.CreateInstance(specType,store,"UI organization")!;specWindow.Show();Pump();
+            var specFields=Logical(specWindow).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToArray();specFields[^1].Text="Билеты: Партер, ряд А. Условия согласованы.";
+            Click(specWindow,"Сохранить");Check(store.Specifications().Single().Recipient=="UI organization","organization specification persists from form");
+            Check(File.Exists(Path.Combine(store.DocumentsDirectory,"Спецификации","Спецификация-1.docx")),"specification automatically saves Word");specWindow.Close();
+            var reopened=(Window)Activator.CreateInstance(specType,store,"UI organization")!;reopened.Show();Pump();
+            Check(Logical(reopened).OfType<TextBox>().Any(t=>t.Text.Contains("Условия согласованы")),"saved organization specification reopens");reopened.Close();
             var venueId=store.CreateHall("UI selection hall","",new[]{
                 new DraftSeat{Row="1",Number="1",X=0,Y=0},new DraftSeat{Row="1",Number="2",X=30,Y=0},
                 new DraftSeat{Row="2",Number="1",X=0,Y=30},new DraftSeat{Row="2",Number="2",X=30,Y=30}});
@@ -75,6 +96,7 @@ internal static class Program
             Check(hall.Selected.Count==4,"another left drag accumulates another group");
             Gesture(hall,new Point(38,38),new Point(38,38));
             Check(hall.Selected.Count==3&&!hall.Selected.Contains(seatIds[3]),"repeat click deselects one place only");
+            Click(main,"Изменить цену");Check(((StackPanel)main.FindName("PriceEditorPanel")).IsVisible,"price editor opens above selection summary");
             ((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");
             ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
@@ -87,12 +109,16 @@ internal static class Program
                     Check(text.Contains("UI recipient")&&text.Contains("369"),"invoice opens immediately with actual prices and correct total");
                     var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
                     Check(paginator.PageCount>=1&&paginator.GetPage(0).Visual is not null,"invoice paginates for printing");
+                    Check(text.Contains(Store.DefaultSender)&&text.Contains("триста шестьдесят девять рублей")&&!text.Contains("ТЕСТ 000001"),"invoice has sender and words without ticket serials");
+                    Check(Directory.GetFiles(Path.Combine(store.DocumentsDirectory,"Накладные"),"*.docx").Length==1,"invoice automatically saves Word inside program data");
                     Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить в Word")),"Word save action available");
                 }catch(Exception ex){invoiceError=ex;}finally{window.Close();}
             }));
             issueButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(invoiceError is not null)throw invoiceError;
             var history=(DataGrid)main.FindName("HistoryGrid");Check(history.Items.Count==1,"one journal row for one issuance");
             Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
+            hall.Selected.Add(seatIds[0]);typeof(Tickets.App.MainWindow).GetMethod("UpdateSelection",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);
+            Check(((TextBlock)main.FindName("IssuedRecipients")).Text.Contains("UI recipient"),"issued selection explicitly identifies recipient");
             main.SelectEvent(store.Events().First(e=>e.Id!=eventId).Id);Pump();
             Check(history.Items.Count==0,"journal hides issuances of other events");
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Прошедшие")==true),"past performances have a single expandable section");

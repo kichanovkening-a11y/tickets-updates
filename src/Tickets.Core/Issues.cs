@@ -36,8 +36,8 @@ public sealed partial class Store
 
     public InvoiceInfo Invoice(long eventId,long issueId)
     {
-        using var c=Open();using var cmd=Command(c,"SELECT title,venue,event_date,recipient,issued_at FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId);
+        using var c=Open();using var cmd=Command(c,"SELECT title,venue,event_date,recipient,issued_at,sender FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId);
         using var r=cmd.ExecuteReader();if(!r.Read())throw new TicketException("Выдача не найдена в этом мероприятии.");
-        return new(issueId,eventId,r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),History(eventId).Where(t=>t.IssueId==issueId).OrderBy(t=>t.Number).ToList());
+        return new(issueId,eventId,r.GetString(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetString(4),History(eventId).Where(t=>t.IssueId==issueId).OrderBy(t=>t.Number).ToList(),r.GetString(5));
     }
 }

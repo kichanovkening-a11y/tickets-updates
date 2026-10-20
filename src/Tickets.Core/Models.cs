@@ -26,7 +26,7 @@ public sealed record IssueInfo(long Id,long EventId,string Recipient,string Issu
     public string Status=>ReturnedCount==0?"Выдано":ReturnedCount==Count?"Возвращено":"Частичный возврат";
     public string Date=>DateTimeOffset.Parse(IssuedAt).ToString("dd.MM.yyyy HH:mm");
 }
-public sealed record InvoiceInfo(long Id,long EventId,string Title,string Venue,string EventDate,string Recipient,string IssuedAt,IReadOnlyList<TicketInfo> Tickets)
+public sealed record InvoiceInfo(long Id,long EventId,string Title,string Venue,string EventDate,string Recipient,string IssuedAt,IReadOnlyList<TicketInfo> Tickets,string Sender="ООО \"Альянс ТА\"")
 {
     public decimal Total=>Tickets.Sum(t=>(decimal)t.Amount);
     public int ActiveCount=>Tickets.Count(t=>t.ReturnedAt is null);

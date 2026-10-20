@@ -172,7 +172,7 @@ Test("updater restores previous files if replacement fails mid-operation",s=>{
     File.WriteAllText(System.IO.Path.Combine(app,"Tickets.dll"),"old");Directory.CreateDirectory(System.IO.Path.Combine(app,"Tickets.Core.dll"));
     File.WriteAllText(System.IO.Path.Combine(stage,"Tickets.dll"),"new");File.WriteAllText(System.IO.Path.Combine(stage,"Tickets.Core.dll"),"core");
     var files=new List<UpdateFile>{new("Tickets.dll",UpdateFiles.Hash(System.IO.Path.Combine(stage,"Tickets.dll"))),new("Tickets.Core.dll",UpdateFiles.Hash(System.IO.Path.Combine(stage,"Tickets.Core.dll")))};
-    try{UpdateFiles.Apply(new(app,stage,files));throw new Exception("failure expected");}catch(IOException){}
+    try{UpdateFiles.Apply(new(app,stage,files));throw new Exception("failure expected");}catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){}
     Check(File.ReadAllText(System.IO.Path.Combine(app,"Tickets.dll"))=="old");
 });
 SqliteConnection.ClearAllPools();

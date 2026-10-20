@@ -1,16 +1,16 @@
 <Window x:Class="Tickets.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:Tickets.App"
-        Title="Билеты · 0.2.0" Width="1420" Height="880" MinWidth="800" MinHeight="500" WindowStartupLocation="CenterScreen" WindowState="Maximized" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True">
+        Title="Билеты · 0.2.2" Width="1420" Height="880" MinWidth="800" MinHeight="500" WindowStartupLocation="CenterScreen" WindowState="Maximized" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True">
   <DockPanel>
     <Border DockPanel.Dock="Top" Background="#152C46" Padding="20,14">
-      <DockPanel>
-        <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-          <Button Content="Свернуть" Click="MinimizeClick"/>
-          <Button x:Name="MaximizeButton" Content="В окно" Click="MaximizeClick"/>
-          <Button Content="Закрыть" Click="CloseClick" Margin="0"/>
-        </StackPanel>
-        <Button DockPanel.Dock="Right" Content="Обновление" Click="UpdateClick" Margin="0,0,12,0"/>
-        <Button DockPanel.Dock="Right" Content="Главная" Click="HomeClick" Margin="0,0,16,0"/>
-        <TextBlock x:Name="AppBrand" Text="БИЛЕТЫ" Foreground="White" FontSize="22" FontWeight="SemiBold"/>
+      <DockPanel LastChildFill="True">
+        <TextBlock x:Name="AppBrand" DockPanel.Dock="Left" Text="БИЛЕТЫ" Foreground="White" FontSize="22" FontWeight="SemiBold" Margin="0,0,20,0" VerticalAlignment="Center"/>
+        <WrapPanel HorizontalAlignment="Right">
+          <Button Content="Главная" Click="HomeClick" Margin="0,3,6,3"/>
+          <Button Content="Обновление" Click="UpdateClick" Margin="0,3,6,3"/>
+          <Button Content="Свернуть" Click="MinimizeClick" Margin="0,3,6,3"/>
+          <Button x:Name="MaximizeButton" Content="В окно" Click="MaximizeClick" Margin="0,3,6,3"/>
+          <Button Content="Закрыть" Click="CloseClick" Margin="0,3,0,3"/>
+        </WrapPanel>
       </DockPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Background="White" Padding="15,9" BorderBrush="#CBD5E1" BorderThickness="0,1,0,0">
@@ -21,8 +21,8 @@
         <DockPanel>
           <StackPanel DockPanel.Dock="Top"><TextBlock Text="Мероприятия" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
             <WrapPanel Margin="0,0,0,8">
-              <Button Content="Залы" Click="HallsClick" Padding="8,6"/><Button Content="Спектакли" Click="PerformancesClick" Padding="8,6"/>
-              <Button Content="Расценовки" Click="PricesClick" Padding="8,6" Margin="0,5,0,0"/><Button Content="Новый показ" Click="NewEventClick" Padding="8,6" Margin="5,5,0,0"/>
+              <Button Content="Залы" Click="HallsClick"/><Button Content="Спектакли" Click="PerformancesClick"/>
+              <Button Content="Расценовки" Click="PricesClick" Margin="0,5,0,0"/><Button Content="Новый показ" Click="NewEventClick" Margin="0,5,0,0"/>
             </WrapPanel>
             <TextBox x:Name="SearchBox" TextChanged="SearchChanged" ToolTip="Поиск по названию, площадке или дате"/>
             <TextBlock Text="Название, площадка или дата" Foreground="#64748B" FontSize="11" Margin="0,4,0,9"/>

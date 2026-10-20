@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
@@ -132,11 +131,13 @@ internal sealed class PriceEditorWindow : EditorWindow
     private readonly HallView preview=new();
     private List<SeatInfo> seats=[];
     private readonly Dictionary<long,PriceValue> prices=[];
-    public PriceEditorWindow(Store store):base(store,"Расценовки")
+    public long CreatedId{get;private set;}
+    public PriceEditorWindow(Store store,long? venueId=null):base(store,"Расценовки")
     {
         var grid=new Grid{Margin=new Thickness(16)}; grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});grid.ColumnDefinitions.Add(new ColumnDefinition());Content=grid;
         var form=new StackPanel{Margin=new Thickness(0,0,15,0)}; grid.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         var venue=Combo(form,"Зал",store.Venues(),"Name");
+        if(venueId.HasValue) venue.SelectedItem=venue.Items.Cast<VenueInfo>().FirstOrDefault(v=>v.Id==venueId.Value);
         var plans=Combo(form,"Существующая расценовка",Array.Empty<PlanInfo>(),"Name");
         var oldEvent=Combo(form,"Или цены существующего показа",Array.Empty<EventInfo>(),"Caption");
         var name=Field(form,"Название новой расценовки");
@@ -164,7 +165,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         Button(form,"Убрать цену у выбранных",()=>{foreach(var id in preview.Selected)prices.Remove(id);Refresh();});
         Button(form,"Сохранить новую расценовку",()=>Try(()=>{
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
-            store.SavePlan(v.Id,name.Text,prices.Values.ToArray());DialogResult=true;
+            CreatedId=store.SavePlan(v.Id,name.Text,prices.Values.ToArray());DialogResult=true;
         }));
         form.Children.Add(new TextBlock{Text="Цены сохраняются отдельным вариантом. Уже созданные показы и выданные билеты не изменяются.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);var toolbar=new StackPanel{Orientation=Orientation.Horizontal};DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
@@ -195,14 +196,27 @@ internal sealed class EventEditorWindow : EditorWindow
         var performance=Combo(form,"Спектакль",store.Performances(),"Title");
         var venue=Combo(form,"Площадка / зал",store.Venues(),"Name");
         var plan=Combo(form,"Расценовка",Array.Empty<PlanInfo>(),"Name");
+        form.Children.Remove(plan);
+        var planRow=new Grid();planRow.ColumnDefinitions.Add(new ColumnDefinition());planRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
+        plan.Margin=new Thickness(0,0,10,0);plan.VerticalAlignment=VerticalAlignment.Center;planRow.Children.Add(plan);
+        var createPlan=new Button{Content="Создать",Margin=new Thickness(0)};Grid.SetColumn(createPlan,1);planRow.Children.Add(createPlan);form.Children.Add(planRow);
         void LoadPlans(){if(venue.SelectedItem is VenueInfo v){plan.ItemsSource=store.Plans(v.Id);if(plan.Items.Count>0)plan.SelectedIndex=0;}}
+        createPlan.Click+=(_,_)=>Try(()=>{
+            if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
+            var editor=new PriceEditorWindow(store,v.Id){Owner=this};
+            if(editor.ShowDialog()==true){LoadPlans();plan.SelectedItem=plan.Items.Cast<PlanInfo>().FirstOrDefault(p=>p.Id==editor.CreatedId);}
+        });
         venue.SelectionChanged+=(_,_)=>Try(LoadPlans);LoadPlans();
-        form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});var date=new DatePicker{SelectedDate=DateTime.Today};form.Children.Add(date);
-        var time=Field(form,"Время (чч:мм)","19:00");
+        form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});var date=new DatePicker{SelectedDate=DateTime.Today,CalendarStyle=(Style)Application.Current.FindResource(typeof(Calendar))};form.Children.Add(date);
+        form.Children.Add(new TextBlock{Text="Время",Margin=new Thickness(0,12,0,5)});
+        var timeRow=new StackPanel{Orientation=Orientation.Horizontal};form.Children.Add(timeRow);
+        var hours=Combo(timeRow,"Часы",Enumerable.Range(0,24).Select(n=>n.ToString("00")),"");
+        var minutes=Combo(timeRow,"Минуты",Enumerable.Range(0,60).Select(n=>n.ToString("00")),"");
+        hours.Width=85;minutes.Width=85;minutes.Margin=new Thickness(12,0,0,0);hours.SelectedIndex=19;minutes.SelectedIndex=0;
         Button(form,"Создать показ",()=>Try(()=>{
             if(performance.SelectedItem is not PerformanceInfo p||venue.SelectedItem is not VenueInfo v||plan.SelectedItem is not PlanInfo r||date.SelectedDate is null)
                 throw new TicketException("Выберите спектакль, зал, расценовку и дату. Если расценовок нет, сначала создайте её.");
-            if(!TimeSpan.TryParseExact(time.Text.Trim(),new[]{"h\\:mm","hh\\:mm"},CultureInfo.InvariantCulture,out var t)||t.TotalHours>=24)throw new TicketException("Введите время, например 19:00.");
+            var t=new TimeSpan(hours.SelectedIndex,minutes.SelectedIndex,0);
             CreatedId=store.CreateEvent(p.Id,v.Id,r.Id,date.SelectedDate.Value.Date+t);DialogResult=true;
         }));
     }

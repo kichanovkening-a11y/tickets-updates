@@ -22,6 +22,8 @@ jobs:
         run: python scripts/restore_seed.py
       - name: Test accounting and updater
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db
+      - name: Verify Windows editor controls
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db
       - name: Publish portable Windows app
         shell: pwsh
         run: |

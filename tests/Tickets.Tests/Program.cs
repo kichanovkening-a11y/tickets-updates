@@ -273,6 +273,24 @@ Test("group invoice places by row price and return state without serial",s=>{
     Check(RussianWords.Money(2001)=="две тысячи один рубль ноль копеек");Check(RussianWords.Number(0)=="ноль");
     Check(RussianWords.Money((decimal)long.MaxValue*50000).Length>10);
 });
+Test("recipient search matches word prefixes and ignores organization prefixes",s=>{
+    s.SaveSpecification("ООО Билетмаркет",s.Sender,"Спецификация","Текст");
+    s.SaveSpecification("ТЕАТР Левашова Иван",s.Sender,"Спецификация","Текст");
+    Check(s.Recipients("ле").All(n=>!n.Contains("Билетмаркет")),"substring search incorrectly matches middle of word");
+    Check(s.Recipients("ле ив").Contains("ТЕАТР Левашова Иван"),"name word prefixes not matched");
+    Check(s.Recipients("ООО бил").Contains("ООО Билетмаркет"));
+});
+Test("plan copying matches labeled places across halls without changing source",s=>{
+    var first=s.CreateHall("Первый шаблон", "",new[]{new DraftSeat{Row="А",Number="1"},new DraftSeat{Row="Ё",Number="2",X=20}});
+    var second=s.CreateHall("Вторая схема", "",new[]{new DraftSeat{Row="А",Number="1"},new DraftSeat{Row="Е",Number="2",X=20},new DraftSeat{Row="Ё",Number="2",X=40}});
+    var seats=s.VenueSeats(first);var color=s.PriceColors().First(c=>c.Amount==1000).Color;
+    var plan=s.SavePlan(first,"Шаблон",seats.Select(x=>new PriceValue(x.Id,1000,color)).ToArray());
+    var copied=s.CopyPlanPrices(plan,second);Check(copied.Count==2&&copied.All(p=>s.VenueSeats(second).Any(x=>x.Id==p.SeatId)));
+    Check(!copied.Any(p=>s.VenueSeats(second).Single(x=>x.Id==p.SeatId).Row=="Е"),"letter Ё must remain a distinct seat row");
+    Check(s.PlanPrices(plan).Select(p=>p.SeatId).SequenceEqual(seats.Select(x=>x.Id)));Check(s.AllPlans().Any(p=>p.Id==plan));
+});
+PricingChecks.Register(Test);
+RecipientHistoryChecks.Register(Test);
 SqliteConnection.ClearAllPools();
 Directory.Delete(root,true);
 Console.WriteLine($"{total-failed}/{total} passed");

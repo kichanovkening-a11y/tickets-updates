@@ -14,12 +14,13 @@ public partial class MainWindow : Window
     private List<EventInfo> events=[];
     private EventInfo? current;
     private bool ready;
-    private readonly Dictionary<long,long> issuePrices=[];
+    private readonly Stack<PriceChange> priceUndo=[];
 
     public MainWindow(Store store)
     {
         this.store=store;
         InitializeComponent();ReadWindowSettings();
+        PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
         var appVersion=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
         Title="Билеты · "+appVersion;AppBrand.Text="БИЛЕТЫ · "+appVersion;
@@ -48,11 +49,11 @@ public partial class MainWindow : Window
     private void ApplyFilter()
     {
         var id=current?.Id; var q=Normalize(SearchBox.Text.Trim());
-        var filtered=events.Where(x=>Normalize(x.Title+" "+x.Venue+" "+x.Date).Contains(q)).ToList();
+        var filtered=events.Where(x=>SearchText.Matches(x.Title+" "+x.Venue+" "+x.Date,q)).ToList();
         EventsList.Items.Clear();var now=DateTime.Now;
         TreeViewItem Group(PerformanceShows group,bool past)
         {
-            var title=new TextBlock{Text=group.Title,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,MaxWidth=205};
+            var title=new TextBlock{Text=group.Title,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,FontSize=13,MaxWidth=205};
             var root=new TreeViewItem{Header=title,Foreground=past?Brushes.Gray:Brushes.Black,Margin=new Thickness(0,5,0,5)};
             foreach(var show in group.Shows)
             {
@@ -64,7 +65,7 @@ public partial class MainWindow : Window
         foreach(var group in EventSchedule.Groups(filtered,false,now))EventsList.Items.Add(Group(group,false));
         var past=EventSchedule.Groups(filtered,true,now);if(past.Count>0)
         {
-            var old=new TreeViewItem{Header=$"Прошедшие ({past.Sum(g=>g.Shows.Count)})",Foreground=Brushes.Gray,FontWeight=FontWeights.SemiBold};
+            var old=new TreeViewItem{Header=$"Прошедшие ({past.Sum(g=>g.Shows.Count)})",Foreground=Brushes.Gray,FontWeight=FontWeights.Bold};
             foreach(var group in past)old.Items.Add(Group(group,true));EventsList.Items.Add(old);
         }
         if(id.HasValue)SelectEvent(id.Value);
@@ -116,7 +117,8 @@ public partial class MainWindow : Window
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;
         EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Выдано: {seats.Count(s=>s.TicketId.HasValue)}";
-        issuePrices.Clear();PriceBox.Clear();
+        PriceBox.Clear();
+        if(fit){recipientUpdating=true;try{RecipientBox.SelectedItem=null;RecipientBox.Text="";}finally{recipientUpdating=false;}}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
         HistoryGrid.ItemsSource=store.Issues(current.Id);RefreshRecipients();
         LegendPanel.Children.Clear();
@@ -129,22 +131,22 @@ public partial class MainWindow : Window
     {
         var panel=new StackPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,12,4)};
         panel.Children.Add(new Border {Background=brush,Width=12,Height=12,CornerRadius=new CornerRadius(2),Margin=new Thickness(0,0,5,0)});
-        panel.Children.Add(new TextBlock {Text=text,FontSize=11,VerticalAlignment=VerticalAlignment.Center});
+        panel.Children.Add(new TextBlock {Text=text,FontSize=14.3,VerticalAlignment=VerticalAlignment.Center});
         LegendPanel.Children.Add(panel);
     }
     private void UpdateSelection()
     {
         if(!ready) return;
         var selected=Hall.SelectedSeats;
-        foreach(var id in issuePrices.Keys.Where(id=>!Hall.Selected.Contains(id)).ToArray())issuePrices.Remove(id);
-        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(issuePrices.TryGetValue(s.Id,out var price)?price:s.Amount??0)}).ToList();
+        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0)}).ToList();
         IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Выдано: {g.Key} — мест: {g.Count()}"));
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
-        SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(issuePrices.TryGetValue(s.Id,out var price)?price:s.Amount??0)):N0} ₽";
+        SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
         IssueButton.IsEnabled=current is not null && selected.Count>0 && free==selected.Count &&
             !string.IsNullOrWhiteSpace(RecipientBox.Text) && !string.IsNullOrWhiteSpace(SeriesBox.Text) &&
             long.TryParse(NumberBox.Text,out var n) && n>0;
-        IssuePrintButton.IsEnabled=IssueButton.IsEnabled;ApplyPriceButton.IsEnabled=selected.Count>0&&free==selected.Count;
+        ApplyPriceButton.IsEnabled=selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
+        UndoPriceButton.IsEnabled=priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
         ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
         SelectionHint.Text=selected.Count==0?"Клик добавляет место, повторный клик снимает его. Протяните левой кнопкой, чтобы добавить несколько мест.":
             free==selected.Count?"Все выбранные места доступны для выдачи.":
@@ -160,20 +162,37 @@ public partial class MainWindow : Window
     }
     private void SpecificationsClick(object sender,RoutedEventArgs e)=>Run(()=>new SpecificationWindow(store,RecipientBox.Text).ShowDialog());
     private void TogglePriceClick(object sender,RoutedEventArgs e){PriceEditorPanel.Visibility=PriceEditorPanel.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;if(PriceEditorPanel.Visibility==Visibility.Visible)PriceBox.Focus();}
+    private void PriceAmountChanged(object sender,TextChangedEventArgs e)
+    {
+        if(!ready)return;
+        if(!long.TryParse(PriceBox.Text,out var amount)||amount<0){PriceColorBox.ItemsSource=null;return;}
+        var colors=store.PriceColors();var mapped=colors.FirstOrDefault(p=>p.Amount==amount)?.Color;
+        var used=colors.Where(p=>p.Amount!=amount).Select(p=>p.Color).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var choices=PricePalette.Colors.Where(c=>!used.Contains(c)).ToList();if(mapped is not null&&!choices.Contains(mapped))choices.Insert(0,mapped);
+        var excluded=used.Concat(choices).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        while(choices.Count<8){var next=PricePalette.NextAvailable(excluded);choices.Add(next);excluded.Add(next);}
+        PriceColorBox.ItemsSource=choices;PriceColorBox.SelectedItem=mapped??choices[0];PriceColorBox.IsEnabled=mapped is null;
+    }
     private void ApplyPriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
+        if(current is null)return;
         if(!long.TryParse(PriceBox.Text,out var price)||price<0)throw new TicketException("Введите целую неотрицательную цену.");
-        var selected=Hall.SelectedSeats;if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите свободные места с ценой.");
-        foreach(var seat in selected)issuePrices[seat.Id]=price;UpdateSelection();
+        var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();
+        var change=store.SetEventPrices(current.Id,ids,price,PriceColorBox.SelectedItem as string);priceUndo.Push(change);
+        LoadEvent(false);Hall.Clear();PriceEditorPanel.Visibility=Visibility.Collapsed;
+        StatusText.Text=$"Цена {InvoiceDocuments.Money(price)} сохранена для {ids.Length} мест. Выделение снято.";
     });
-    private void ResetPriceClick(object sender,RoutedEventArgs e){foreach(var id in Hall.Selected)issuePrices.Remove(id);UpdateSelection();}
+    private void UndoPriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
+        if(!priceUndo.TryPeek(out var change)||current?.Id!=change.EventId)throw new TicketException("В этом показе нет изменений цены для отмены.");
+        store.UndoPriceChange(change);priceUndo.Pop();LoadEvent(false);StatusText.Text="Последнее изменение цены отменено.";
+    });
+    private void RecipientsClick(object sender,RoutedEventArgs e)=>Run(()=>new RecipientsWindow(store).ShowDialog());
     private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
-    private void IssuePrintClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(true));
     private void IssueSelected(bool print)
     {
         if(current is null)return;
         var eventId=current.Id;var selected=Hall.SelectedSeats;
         if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
-        var issueId=store.Issue(eventId,selected.Select(s=>s.Id).ToArray(),RecipientBox.Text,SeriesBox.Text,first,issuePrices);
+        var issueId=store.Issue(eventId,selected.Select(s=>s.Id).ToArray(),RecipientBox.Text,SeriesBox.Text,first);
         LoadEvent(false);StatusText.Text=$"Выдано билетов: {selected.Count}. Накладная № {issueId}.";
         OpenInvoice(issueId,print);
     }

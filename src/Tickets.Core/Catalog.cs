@@ -21,7 +21,7 @@ public sealed partial class Store
     {
         using var c=Open(); using var version=Command(c,"PRAGMA user_version");
         var v=Convert.ToInt32(version.ExecuteScalar());
-        if(v>5) throw new TicketException("База создана более новой программой. Обновите программу.");
+        if(v>6) throw new TicketException("База создана более новой программой. Обновите программу.");
         if(v>=2) return;
         var copy=Path+".before-v2.db";
         if(!System.IO.File.Exists(copy))
@@ -108,7 +108,7 @@ public sealed partial class Store
     }
     public List<PriceValue> PlanPrices(long planId)
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT seat_id,amount,color FROM plan_price WHERE plan_id=$p","$p",planId);
+        using var c=Open(); using var cmd=Command(c,"SELECT p.seat_id,p.amount,coalesce(pc.color,p.color) FROM plan_price p LEFT JOIN price_color pc ON pc.amount=p.amount WHERE p.plan_id=$p","$p",planId);
         using var r=cmd.ExecuteReader(); var list=new List<PriceValue>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
     }
     public List<SeatInfo> VenueSeats(long venueId)
@@ -123,14 +123,23 @@ public sealed partial class Store
         var ids=VenueSeats(venueId).Select(s=>s.Id).ToHashSet();
         if(prices.Count==0 || prices.Select(x=>x.SeatId).Distinct().Count()!=prices.Count || prices.Any(p=>!ids.Contains(p.SeatId)||p.Amount<0||!Regex.IsMatch(p.Color,"^#[0-9a-fA-F]{6}$")))
             throw new TicketException("Назначьте корректные цены местам выбранного зала. Цена не может быть отрицательной.");
+        if(prices.GroupBy(p=>p.Amount).Any(g=>g.Select(p=>NormalizePriceColor(p.Color)).Distinct().Count()!=1))
+            throw new TicketException("Для одной цены выберите один общий цвет.");
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
         try
         {
-            using var add=Command(c,"INSERT INTO pricing_plan(venue_id,name,name_key) VALUES($v,$n,$k) RETURNING id","$v",venueId,"$n",name,"$k",name.Normalize().ToUpperInvariant()); add.Transaction=tx;
+            using(var existing=Command(c,"SELECT name FROM pricing_plan WHERE venue_id=$v","$v",venueId))
+            {
+                existing.Transaction=tx;using var read=existing.ExecuteReader();
+                while(read.Read())if(CatalogText.Key(read.GetString(0))==CatalogText.Key(name))
+                    throw new TicketException("Расценовка с таким названием уже есть. Сохраните под новым названием.");
+            }
+            using var add=Command(c,"INSERT INTO pricing_plan(venue_id,name,name_key) VALUES($v,$n,$k) RETURNING id","$v",venueId,"$n",name,"$k",CatalogText.Key(name)); add.Transaction=tx;
             var id=Convert.ToInt64(add.ExecuteScalar());
             foreach(var p in prices)
             {
-                using var cmd=Command(c,"INSERT INTO plan_price VALUES($p,$s,$a,$c)","$p",id,"$s",p.SeatId,"$a",p.Amount,"$c",p.Color); cmd.Transaction=tx; cmd.ExecuteNonQuery();
+                var color=EnsurePriceColor(c,tx,p.Amount,p.Color);
+                using var cmd=Command(c,"INSERT INTO plan_price VALUES($p,$s,$a,$c)","$p",id,"$s",p.SeatId,"$a",p.Amount,"$c",color); cmd.Transaction=tx; cmd.ExecuteNonQuery();
             }
             tx.Commit(); return id;
         }

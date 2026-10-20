@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); }
 
     private SqliteConnection Open()
     {
@@ -42,12 +42,13 @@ public sealed partial class Store
     {
         using var c=Open();
         using var cmd=Command(c,"""
-            SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,coalesce(t.amount,p.amount),coalesce(p.color,'#CBD5E1'),
+            SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,coalesce(t.amount,p.amount),coalesce(pc.color,p.color,'#CBD5E1'),
               t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number
             FROM event e JOIN seat s ON s.venue_id=e.venue_id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
             LEFT JOIN event_price p ON p.event_id=e.id AND p.seat_id=s.id
             LEFT JOIN ticket t ON t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL
+            LEFT JOIN price_color pc ON pc.amount=coalesce(t.amount,p.amount)
             WHERE e.id=$e ORDER BY z.y,z.x,s.y,s.x,s.id
             ""","$e",eventId);
         using var r=cmd.ExecuteReader(); var result=new List<SeatInfo>();
@@ -125,11 +126,13 @@ public sealed partial class Store
                 check.Transaction=tx;
                 var amount=check.ExecuteScalar();
                 if(amount is null) throw new TicketException("Одно из мест уже выдано, не имеет цены или не относится к этому показу. Выдача отменена целиком.");
+                var actualAmount=prices is not null && prices.TryGetValue(sid,out var custom)?custom:Convert.ToInt64(amount);
+                EnsurePriceColor(c,tx,actualAmount,null);
                 using var insert=Command(c,"""
                     INSERT INTO ticket(event_id,seat_id,recipient,series,number,amount,issued_at,issue_id)
                     VALUES($e,$s,$r,$series,$n,$a,$time,$issue)
                     ""","$e",eventId,"$s",sid,"$r",recipient,"$series",series,"$n",n,
-                    "$a",prices is not null && prices.TryGetValue(sid,out var custom)?custom:Convert.ToInt64(amount),"$time",timestamp,"$issue",issueId);
+                    "$a",actualAmount,"$time",timestamp,"$issue",issueId);
                 insert.Transaction=tx; insert.ExecuteNonQuery();
                 if(n<long.MaxValue) n++;
             }

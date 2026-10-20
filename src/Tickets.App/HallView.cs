@@ -34,7 +34,7 @@ public sealed class HallView : FrameworkElement
         catch { return Brushes.SteelBlue; }
     }
     private static FormattedText Text(string text,double size,Brush color)
-        => new(text,CultureInfo.GetCultureInfo("ru-RU"),FlowDirection.LeftToRight,new Typeface("Segoe UI"),size,color,1);
+        => new(text,CultureInfo.GetCultureInfo("ru-RU"),FlowDirection.LeftToRight,new Typeface(new FontFamily("Segoe UI"),FontStyles.Normal,FontWeights.Bold,FontStretches.Normal),size,color,1);
 
     public void Load(IReadOnlyList<SeatInfo> source,IReadOnlyList<SectorInfo> sectors,bool fit)
     {
@@ -42,7 +42,7 @@ public sealed class HallView : FrameworkElement
         var group=new DrawingGroup();
         using(var dc=group.Open())
         {
-            foreach(var sector in sectors) dc.DrawText(Text(sector.Name,12,Brushes.SlateGray),new Point(sector.X,sector.Y));
+            foreach(var sector in sectors) dc.DrawText(Text(sector.Name,15.6,Brushes.SlateGray),new Point(sector.X,sector.Y));
             foreach(var s in seats)
             {
                 var rect=new Rect(s.X,s.Y,16,16);
@@ -50,9 +50,9 @@ public sealed class HallView : FrameworkElement
                 dc.DrawRoundedRectangle(brush,null,rect,2,2);
                 var textColor=Brushes.Black;
                 if(brush is SolidColorBrush solid && (solid.Color.R*.299+solid.Color.G*.587+solid.Color.B*.114)<145) textColor=Brushes.White;
-                var text=Text(s.Number,8,textColor);
+                var text=Text(s.Number,10.4,textColor);
                 // Keep the complete label visible even when it contains several letters or digits.
-                if(text.Width>14)text.SetFontSize(8*14/text.Width);
+                if(text.Width>14)text.SetFontSize(10.4*14/text.Width);
                 dc.DrawText(text,new Point(s.X+(16-text.Width)/2,s.Y+(16-text.Height)/2));
                 if(s.TicketId.HasValue)
                 {
@@ -63,7 +63,7 @@ public sealed class HallView : FrameworkElement
             foreach(var row in seats.GroupBy(s=>(s.Sector,s.Y,s.Row)))
             {
                 var first=row.MinBy(s=>s.X)!;
-                var label=Text(first.Row,9,Brushes.SlateGray);
+                var label=Text(first.Row,11.7,Brushes.SlateGray);
                 dc.DrawText(label,new Point(first.X-label.Width-6,first.Y+1));
             }
         }

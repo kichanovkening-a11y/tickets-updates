@@ -21,7 +21,7 @@ public static class EventSchedule
     public static List<PerformanceShows> Groups(IEnumerable<EventInfo> events,bool past,DateTime now,string search="")
     {
         var query=CatalogText.Key(search);
-        return events.Where(e=>(Start(e)<now)==past&&CatalogText.Key(e.Title+" "+e.Venue+" "+e.Date).Contains(query))
+        return events.Where(e=>(Start(e)<now)==past&&SearchText.Matches(e.Title+" "+e.Venue+" "+e.Date,query))
             .GroupBy(e=>CatalogText.Key(e.Title)).Select(g=>new PerformanceShows(g.First().Title,
                 (past?g.OrderByDescending(Start):g.OrderBy(Start)).ToList()))
             .OrderBy(g=>past?DateTime.MaxValue-Start(g.Shows[0]):Start(g.Shows[0])-DateTime.MinValue).ToList();
@@ -57,6 +57,6 @@ public sealed partial class Store
     public List<string> Recipients(string search="")
     {
         using var c=Open();using var cmd=Command(c,"SELECT name FROM recipient ORDER BY name COLLATE NOCASE");using var read=cmd.ExecuteReader();var names=new List<string>();
-        var query=CatalogText.Key(search);while(read.Read()){var name=read.GetString(0);if(CatalogText.Key(name).Contains(query))names.Add(name);}return names;
+        var query=CatalogText.Key(search);while(read.Read()){var name=read.GetString(0);if(SearchText.Matches(name,query))names.Add(name);}return names;
     }
 }

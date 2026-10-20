@@ -95,19 +95,16 @@ internal static class Program
         finally{foreach(var w in app.Windows.Cast<Window>().ToArray())w.Close();app.Shutdown();Directory.Delete(work,true);}
     }
     [DllImport("user32.dll")] private static extern bool SetCursorPos(int x,int y);
+    [DllImport("user32.dll")] private static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
     private static void Gesture(Tickets.App.HallView hall,Point from,Point to)
     {
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
         void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");Pump();}
-        void SendMouse(string name,bool move=false)
-        {
-            RoutedEventArgs args=move?new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount){RoutedEvent=Mouse.MouseMoveEvent,Source=hall}:
-                new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left){RoutedEvent=name=="OnMouseDown"?Mouse.MouseDownEvent:Mouse.MouseUpEvent,Source=hall};
-            typeof(Tickets.App.HallView).GetMethod(name,flags)!.Invoke(hall,new object[]{args});
-        }
-        Position(from);SendMouse("OnMouseDown");Position(to);SendMouse("OnMouseMove",true);SendMouse("OnMouseUp");Pump();
+        Position(from);mouse_event(2,0,0,0,UIntPtr.Zero);Pump();
+        Position(to);mouse_event(4,0,0,0,UIntPtr.Zero);Pump();
+        Console.WriteLine($"Mouse gesture {from} -> {to}; selected: {string.Join(',',hall.Selected)}");
     }
     private static void Pump()=>Application.Current.Dispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool condition,string label){if(!condition)throw new Exception(label);Console.WriteLine("PASS "+label);}

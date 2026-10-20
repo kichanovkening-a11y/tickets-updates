@@ -9,6 +9,7 @@ using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Windows.Documents;
 using Tickets.Core;
+using EventInfo=Tickets.Core.EventInfo;
 
 internal static class Program
 {
@@ -100,8 +101,8 @@ internal static class Program
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
         void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));SetCursorPos((int)point.X,(int)point.Y);Pump();}
-        void Mouse(string name,bool move=false){object args=move?new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount):new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left);typeof(Tickets.App.HallView).GetMethod(name,flags)!.Invoke(hall,new[]{args});}
-        Position(from);Mouse("OnMouseDown");Position(to);Mouse("OnMouseMove",true);Mouse("OnMouseUp");Pump();
+        void SendMouse(string name,bool move=false){object args=move?new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount):new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left);typeof(Tickets.App.HallView).GetMethod(name,flags)!.Invoke(hall,new[]{args});}
+        Position(from);SendMouse("OnMouseDown");Position(to);SendMouse("OnMouseMove",true);SendMouse("OnMouseUp");Pump();
     }
     private static void Pump()=>Application.Current.Dispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool condition,string label){if(!condition)throw new Exception(label);Console.WriteLine("PASS "+label);}

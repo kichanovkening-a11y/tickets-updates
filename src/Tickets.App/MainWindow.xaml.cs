@@ -73,7 +73,7 @@ public partial class MainWindow : Window
     private void EventChanged(object sender,RoutedPropertyChangedEventArgs<object> e)
     {
         if(!ready) return;
-        if(EventsList.SelectedItem is TreeViewItem group&&group.Tag is not EventInfo)return;
+        if(EventsList.SelectedItem is TreeViewItem group&&group.Tag is not EventInfo){group.IsExpanded=true;return;}
         current=(EventsList.SelectedItem as TreeViewItem)?.Tag as EventInfo;
         if(current is null)
         {

@@ -111,6 +111,10 @@ internal static class Program
                     var document=Logical(window).OfType<FlowDocumentReader>().Single().Document;
                     var text=new TextRange(document.ContentStart,document.ContentEnd).Text;
                     Check(text.Contains("UI recipient")&&text.Contains("369"),"invoice opens immediately with actual prices and correct total");
+                    var returnList=Logical(window).OfType<ListBox>().Single();returnList.SelectedIndex=0;
+                    var senderField=Logical(window).OfType<TextBox>().Single();senderField.Text="UI sender";Click(window,"Сохранить в Word");
+                    Check(returnList.SelectedItems.Count==1,"saving sender preserves tickets selected for return");
+                    Check(store.Invoice(eventId,store.Issues(eventId).Single().Id).Sender=="UI sender","edited invoice sender persists");
                     var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
                     Check(paginator.PageCount>=1&&paginator.GetPage(0).Visual is not null,"invoice paginates for printing");
                     Check(text.Contains(Store.DefaultSender)&&text.Contains("триста шестьдесят девять рублей")&&!text.Contains("ТЕСТ 000001"),"invoice has sender and words without ticket serials");

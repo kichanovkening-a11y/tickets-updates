@@ -8,7 +8,7 @@ permissions:
   contents: write
 concurrency:
   group: tickets-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: windows-2022

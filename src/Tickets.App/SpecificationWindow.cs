@@ -15,7 +15,9 @@ internal sealed class SpecificationWindow : EditorWindow
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,0)};
     private List<SpecificationInfo> specifications=[];
     private SpecificationInfo? current;
-    private bool loading,dirty,filtering;
+    private bool loading,filtering;
+    private string originalRecipient="",originalSender="",originalTitle="",originalBody="";
+    private bool dirty=>recipient.Text!=originalRecipient||sender.Text!=originalSender||title.Text!=originalTitle||body.Text!=originalBody;
 
     public SpecificationWindow(Store store,string recipient=""):base(store,"Спецификации организаций",1120,820)
     {
@@ -40,9 +42,8 @@ internal sealed class SpecificationWindow : EditorWindow
         Button(actions,"Сохранить в Word…",()=>Try(Export));
         Button(actions,"Распечатать",()=>Try(Print));
         form.Children.Add(status);
-        foreach(var box in new[]{sender,title,body})box.TextChanged+=(_,_)=>{if(!loading)dirty=true;};
         this.recipient.AddHandler(TextBox.TextChangedEvent,new TextChangedEventHandler((_,_)=>{
-            if(loading||filtering)return;dirty=true;
+            if(loading||filtering)return;
             if(!this.recipient.IsEnabled)return;
             filtering=true;
             try{var text=this.recipient.Text;this.recipient.ItemsSource=Store.Recipients(text);this.recipient.Text=text;}
@@ -74,7 +75,8 @@ internal sealed class SpecificationWindow : EditorWindow
             current=value;saved.SelectedItem=value;recipient.ItemsSource=Store.Recipients();
             recipient.Text=value?.Recipient??initialRecipient;recipient.IsEnabled=value is null;
             sender.Text=value?.Sender??Store.Sender;title.Text=value?.Title??"Спецификация";body.Text=value?.Body??"";
-            status.Text=value is null?"Новая спецификация. Заполните текст и сохраните.":"Сохранённая спецификация. Для другой организации нажмите «Новая организация».";dirty=false;
+            status.Text=value is null?"Новая спецификация. Заполните текст и сохраните.":"Сохранённая спецификация. Для другой организации нажмите «Новая организация».";
+            originalRecipient=recipient.Text;originalSender=sender.Text;originalTitle=title.Text;originalBody=body.Text;
         }
         finally{loading=false;}
     }

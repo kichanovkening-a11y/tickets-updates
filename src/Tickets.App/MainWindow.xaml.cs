@@ -14,6 +14,7 @@ public partial class MainWindow : Window
     private List<EventInfo> events=[];
     private EventInfo? current;
     private bool ready;
+    private readonly Dictionary<long,long> issuePrices=[];
 
     public MainWindow(Store store)
     {
@@ -96,8 +97,9 @@ public partial class MainWindow : Window
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;
         EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Выдано: {seats.Count(s=>s.TicketId.HasValue)}";
+        issuePrices.Clear();PriceBox.Clear();
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
-        HistoryGrid.ItemsSource=store.History(current.Id);
+        HistoryGrid.ItemsSource=store.Issues(current.Id);
         LegendPanel.Children.Clear();
         foreach(var price in seats.Where(s=>s.Amount.HasValue).GroupBy(s=>s.Amount).OrderBy(s=>s.Key))
             AddLegend(price.Key+" ₽",HallView.SeatBrush(price.First().Color));
@@ -114,14 +116,17 @@ public partial class MainWindow : Window
     private void UpdateSelection()
     {
         if(!ready) return;
-        var selected=Hall.SelectedSeats; SelectedList.ItemsSource=selected;
+        var selected=Hall.SelectedSeats;
+        foreach(var id in issuePrices.Keys.Where(id=>!Hall.Selected.Contains(id)).ToArray())issuePrices.Remove(id);
+        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(issuePrices.TryGetValue(s.Id,out var price)?price:s.Amount??0)}).ToList();
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
-        SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>s.Amount??0):N0} ₽";
+        SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(issuePrices.TryGetValue(s.Id,out var price)?price:s.Amount??0)):N0} ₽";
         IssueButton.IsEnabled=current is not null && selected.Count>0 && free==selected.Count &&
             !string.IsNullOrWhiteSpace(RecipientBox.Text) && !string.IsNullOrWhiteSpace(SeriesBox.Text) &&
             long.TryParse(NumberBox.Text,out var n) && n>0;
+        IssuePrintButton.IsEnabled=IssueButton.IsEnabled;ApplyPriceButton.IsEnabled=selected.Count>0&&free==selected.Count;
         ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
-        SelectionHint.Text=selected.Count==0?"Нажимайте на места на схеме. Повторное нажатие снимает выделение.":
+        SelectionHint.Text=selected.Count==0?"Клик добавляет место, повторный клик снимает его. Протяните левой кнопкой, чтобы добавить несколько мест.":
             free==selected.Count?"Все выбранные места доступны для выдачи.":
             issued==selected.Count?"Выбраны выданные билеты. Их можно вернуть.":
             "Для выдачи выберите только свободные места с ценой. Для возврата — только выданные.";
@@ -133,20 +138,39 @@ public partial class MainWindow : Window
         if(!ready) return;
         NumberBox.Text=store.NextNumber(SeriesBox.Text).ToString(CultureInfo.InvariantCulture); UpdateSelection();
     }
-    private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=> {
-        if(current is null) return;
-        var selected=Hall.SelectedSeats;
-        if(!long.TryParse(NumberBox.Text,out var first)) throw new TicketException("Введите целый положительный номер.");
-        store.Issue(current.Id,selected.Select(s=>s.Id).ToArray(),RecipientBox.Text,SeriesBox.Text,first);
-        LoadEvent(false); StatusText.Text=$"Выдано билетов: {selected.Count}. Изменения сохранены.";
+    private void ApplyPriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
+        if(!long.TryParse(PriceBox.Text,out var price)||price<0)throw new TicketException("Введите целую неотрицательную цену.");
+        var selected=Hall.SelectedSeats;if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите свободные места с ценой.");
+        foreach(var seat in selected)issuePrices[seat.Id]=price;UpdateSelection();
     });
+    private void ResetPriceClick(object sender,RoutedEventArgs e){foreach(var id in Hall.Selected)issuePrices.Remove(id);UpdateSelection();}
+    private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
+    private void IssuePrintClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(true));
+    private void IssueSelected(bool print)
+    {
+        if(current is null)return;
+        var eventId=current.Id;var selected=Hall.SelectedSeats;
+        if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
+        var issueId=store.Issue(eventId,selected.Select(s=>s.Id).ToArray(),RecipientBox.Text,SeriesBox.Text,first,issuePrices);
+        LoadEvent(false);StatusText.Text=$"Выдано билетов: {selected.Count}. Накладная № {issueId}.";
+        OpenInvoice(issueId,print);
+    }
     private void ReturnClick(object sender,RoutedEventArgs e)=>Run(()=>ReturnTickets(
         Hall.SelectedSeats.Where(s=>s.TicketId.HasValue).Select(s=>s.TicketId!.Value).ToArray()));
-    private void ReturnHistoryClick(object sender,RoutedEventArgs e)=>Run(()=> {
-        var selected=HistoryGrid.SelectedItems.Cast<TicketInfo>().ToList();
-        if(selected.Any(x=>x.ReturnedAt is not null)) throw new TicketException("Выберите только билеты со статусом «Выдан».");
-        ReturnTickets(selected.Select(x=>x.Id).ToArray());
+    private void OpenInvoiceClick(object sender,RoutedEventArgs e)=>Run(()=>{
+        if(HistoryGrid.SelectedItem is not IssueInfo issue)throw new TicketException("Выберите выдачу.");OpenInvoice(issue.Id);
     });
+    private void HistoryRowClick(object sender,System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var source=e.OriginalSource as DependencyObject;
+        var row=source is null?null:ItemsControl.ContainerFromElement(HistoryGrid,source) as DataGridRow;
+        if(row?.Item is IssueInfo issue){e.Handled=true;Run(()=>OpenInvoice(issue.Id));}
+    }
+    private void OpenInvoice(long issueId,bool print=false)
+    {
+        if(current is null)return;
+        new InvoiceWindow(store,current.Id,issueId,print){Owner=this}.ShowDialog();LoadEvent(false);
+    }
     private void ReturnTickets(long[] ids)
     {
         if(ids.Length==0) throw new TicketException("Выберите билеты для возврата.");

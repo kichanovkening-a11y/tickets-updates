@@ -175,6 +175,55 @@ Test("updater restores previous files if replacement fails mid-operation",s=>{
     try{UpdateFiles.Apply(new(app,stage,files));throw new Exception("failure expected");}catch(Exception ex) when(ex is IOException or UnauthorizedAccessException){}
     Check(File.ReadAllText(System.IO.Path.Combine(app,"Tickets.dll"))=="old");
 });
+Test("issuance price override persists without changing event pricing",s=>{
+    var method=typeof(Store).GetMethods().SingleOrDefault(m=>m.Name=="Issue"&&m.GetParameters().Length==6);
+    Check(method is not null,"price override API is missing");
+    var c=Choice(s);var original=s.Seats(c.Event).First(x=>x.Id==c.Seats[0]).Amount;
+    method!.Invoke(s,new object?[]{c.Event,c.Seats,"Получатель","ЦЕНА",1L,new Dictionary<long,long>{{c.Seats[0],17}}});
+    Check(new Store(s.Path).History(c.Event).Single(x=>x.SeatId==c.Seats[0]).Amount==17);
+    Check(s.Seats(c.Event).Single(x=>x.Id==c.Seats[0]).Amount==17,"issued seat must show actual price");
+    s.Return(s.History(c.Event).Select(x=>x.Id).ToArray());
+    Check(s.Seats(c.Event).First(x=>x.Id==c.Seats[0]).Amount==original,"base pricing changed");
+});
+Test("separate issuances and event filtering survive reopen and partial return",s=>{
+    var c=Choice(s);var a=s.Issue(c.Event,c.Seats.Take(2).ToArray(),"A","A",1);
+    var b=s.Issue(c.Event,new[]{c.Seats[2]},"A","A",3);
+    Check(a!=b);Check(s.Issues(c.Event).Count==2);
+    var other=s.Events().First(e=>e.Id!=c.Event);Check(s.Issues(other.Id).Count==0);
+    Reject(()=>s.Invoice(other.Id,a));
+    var invoice=s.Invoice(c.Event,a);Check(invoice.Tickets.Count==2&&invoice.Recipient=="A");
+    s.Return(new[]{invoice.Tickets[0].Id});var reopened=new Store(s.Path);
+    Check(reopened.Issues(c.Event).Single(i=>i.Id==a).ReturnedCount==1);
+    Check(reopened.Invoice(c.Event,a).Tickets.Count==2&&reopened.Invoice(c.Event,a).ActiveCount==1);
+    var count=s.Issues(c.Event).Count;Reject(()=>s.Issue(c.Event,new[]{c.Seats[1]},"B","B",1));Check(s.Issues(c.Event).Count==count);
+});
+Test("invalid override prices cannot create tickets or orphan issuances",s=>{
+    var c=Choice(s);
+    Reject(()=>s.Issue(c.Event,c.Seats,"A","A",1,new Dictionary<long,long>{{c.Seats[0],-1}}));
+    Reject(()=>s.Issue(c.Event,c.Seats,"A","A",1,new Dictionary<long,long>{{-1,10}}));
+    Check(s.Issues(c.Event).Count==0&&s.History(c.Event).Count==0);
+});
+Test("v2 migration preserves issued prices and returns and is repeatable",s=>{
+    var c=Choice(s);s.Issue(c.Event,c.Seats,"A","A",1);s.Return(new[]{s.History(c.Event)[0].Id});
+    using(var cn=new SqliteConnection("Data Source="+s.Path)){
+        cn.Open();using var cmd=cn.CreateCommand();cmd.CommandText="DROP INDEX ticket_issue; ALTER TABLE ticket DROP COLUMN issue_id; DROP TABLE issue_batch; PRAGMA user_version=2;";cmd.ExecuteNonQuery();
+    }
+    var reopened=new Store(s.Path);Check(reopened.Issues(c.Event).Count==1);var i=reopened.Issues(c.Event)[0];
+    Check(i.Count==3&&i.ReturnedCount==1);Check(File.Exists(s.Path+".before-v3.db"));Check(new Store(s.Path).Issues(c.Event).Count==1);
+});
+Test("Word invoice contains exact issuance tickets totals and escaped text",s=>{
+    var writer=typeof(Store).Assembly.GetType("Tickets.Core.InvoiceDocuments");Check(writer is not null,"Word invoice exporter is missing");
+    var c=Choice(s);var issue=s.Issue(c.Event,c.Seats,"ООО «Тест & партнёры»","СЕРИЯ",1,new Dictionary<long,long>{{c.Seats[0],123}});
+    var invoice=s.Invoice(c.Event,issue);var file=System.IO.Path.Combine(root,"invoice.docx");
+    writer!.GetMethod("SaveWord")!.Invoke(null,new object[]{invoice,file});
+    using var archive=ZipFile.OpenRead(file);Check(archive.GetEntry("[Content_Types].xml")!=null&&archive.GetEntry("_rels/.rels")!=null);
+    using var stream=archive.GetEntry("word/document.xml")!.Open();var xml=System.Xml.Linq.XDocument.Load(stream);var text=string.Join(" ",xml.Descendants().Where(e=>e.Name.LocalName=="t").Select(e=>e.Value));
+    Check(text.Contains(invoice.Recipient)&&text.Contains(invoice.Title)&&text.Contains(invoice.Total.ToString("N0",System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))));
+    Check(invoice.Tickets.All(t=>text.Contains(t.Code)&&text.Contains(t.Sector)&&text.Contains(t.Row)&&text.Contains(t.Seat)));
+    File.Copy(file,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-sample.docx"),true);
+    var many=invoice with{Tickets=Enumerable.Range(1,85).Select(n=>invoice.Tickets[0] with{Number=n,Seat=n.ToString()}).ToList()};
+    InvoiceDocuments.SaveWord(many,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-many.docx"));
+});
 SqliteConnection.ClearAllPools();
 Directory.Delete(root,true);
 Console.WriteLine($"{total-failed}/{total} passed");

@@ -16,6 +16,7 @@ public sealed class HallView : FrameworkElement
     private Vector offset;
     private Point start, last;
     private bool dragging, panning, marquee;
+    private HashSet<long> gestureSelection=[];
     private long? hoverId;
     public HashSet<long> Selected { get; }=[];
     public event Action? SelectionChanged;
@@ -114,7 +115,7 @@ public sealed class HallView : FrameworkElement
     {
         Focus(); start=last=e.GetPosition(this); dragging=true;
         panning=e.ChangedButton is MouseButton.Right or MouseButton.Middle || Keyboard.IsKeyDown(Key.Space);
-        marquee=!panning && (Keyboard.Modifiers&ModifierKeys.Shift)!=0;
+        marquee=false;gestureSelection=Selected.ToHashSet();
         CaptureMouse(); if(panning) Cursor=Cursors.Hand; e.Handled=true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
@@ -123,6 +124,7 @@ public sealed class HallView : FrameworkElement
         if(dragging)
         {
             if(panning) { offset+=p-last; }
+            else if((p-start).Length>=6){marquee=true;SelectRange(p);}
             last=p; InvalidateVisual(); return;
         }
         var s=Hit(p);
@@ -140,8 +142,7 @@ public sealed class HallView : FrameworkElement
         {
             if(marquee)
             {
-                var rectangle=new Rect(World(start),World(p));
-                foreach(var s in seats.Where(s=>rectangle.Contains(new Point(s.X+8,s.Y+8)))) Selected.Add(s.Id);
+                SelectRange(p);
             }
             else if((p-start).Length<6)
             {
@@ -151,6 +152,13 @@ public sealed class HallView : FrameworkElement
             SelectionChanged?.Invoke();
         }
         dragging=panning=marquee=false; Cursor=Cursors.Arrow; ReleaseMouseCapture(); InvalidateVisual(); e.Handled=true;
+    }
+    private void SelectRange(Point end)
+    {
+        var rectangle=new Rect(World(start),World(end));
+        var next=gestureSelection.Concat(seats.Where(s=>rectangle.Contains(new Point(s.X+8,s.Y+8))).Select(s=>s.Id)).ToHashSet();
+        if(Selected.SetEquals(next))return;
+        Selected.Clear();Selected.UnionWith(next);SelectionChanged?.Invoke();
     }
     protected override void OnLostMouseCapture(MouseEventArgs e)
     { dragging=panning=marquee=false; Cursor=Cursors.Arrow; InvalidateVisual(); }

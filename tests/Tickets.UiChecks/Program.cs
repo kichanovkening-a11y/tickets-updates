@@ -4,6 +4,10 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using System.Windows.Threading;
+using System.Windows.Input;
+using System.Reflection;
+using System.Runtime.InteropServices;
+using System.Windows.Documents;
 using Tickets.Core;
 
 internal static class Program
@@ -49,10 +53,58 @@ internal static class Program
             }));
             Click(editor,"Создать");Pump();if(nestedError is not null)throw nestedError;
             Check(combos[2].SelectedItem is PlanInfo plan&&plan.Name=="UI test pricing","new pricing selected after nested editor saves");
-            editor.Close();main.Close();Console.WriteLine("PASS Windows editor flow and rendered controls");return 0;
+            editor.Close();
+            var venueId=store.CreateHall("UI selection hall","",new[]{
+                new DraftSeat{Row="1",Number="1",X=0,Y=0},new DraftSeat{Row="1",Number="2",X=30,Y=0},
+                new DraftSeat{Row="2",Number="1",X=0,Y=30},new DraftSeat{Row="2",Number="2",X=30,Y=30}});
+            var seatIds=store.VenueSeats(venueId).Select(s=>s.Id).ToArray();
+            var planId=store.SavePlan(venueId,"UI plan",seatIds.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
+            var eventId=store.CreateEvent(store.SavePerformance("UI event"),venueId,planId,DateTime.Today.AddHours(19));
+            var events=(ListBox)main.FindName("EventsList");events.ItemsSource=store.Events();events.SelectedItem=events.Items.Cast<EventInfo>().Single(e=>e.Id==eventId);Pump();
+            var hall=(Tickets.App.HallView)main.FindName("Hall");hall.Fit();Pump();
+            Gesture(hall,new Point(8,8),new Point(8,8));
+            Gesture(hall,new Point(38,38),new Point(38,38));
+            Check(hall.Selected.SetEquals(new[]{seatIds[0],seatIds[3]}),"separate single clicks accumulate places");
+            Gesture(hall,new Point(23,-4),new Point(51,21));
+            Check(hall.Selected.SetEquals(new[]{seatIds[0],seatIds[1],seatIds[3]}),"left drag adds seats without Shift and preserves previous choices");
+            Gesture(hall,new Point(-4,23),new Point(21,51));
+            Check(hall.Selected.Count==4,"another left drag accumulates another group");
+            Gesture(hall,new Point(38,38),new Point(38,38));
+            Check(hall.Selected.Count==3&&!hall.Selected.Contains(seatIds[3]),"repeat click deselects one place only");
+            ((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");
+            ((TextBox)main.FindName("RecipientBox")).Text="UI recipient";
+            var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
+            Exception? invoiceError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                var window=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Накладная №"));
+                try{
+                    var document=Logical(window).OfType<FlowDocumentReader>().Single().Document;
+                    var text=new TextRange(document.ContentStart,document.ContentEnd).Text;
+                    Check(text.Contains("UI recipient")&&text.Contains("369"),"invoice opens immediately with actual prices and correct total");
+                    var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
+                    Check(paginator.PageCount>=1&&paginator.GetPage(0).Visual is not null,"invoice paginates for printing");
+                    Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить в Word")),"Word save action available");
+                }catch(Exception ex){invoiceError=ex;}finally{window.Close();}
+            }));
+            issueButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(invoiceError is not null)throw invoiceError;
+            var history=(DataGrid)main.FindName("HistoryGrid");Check(history.Items.Count==1,"one journal row for one issuance");
+            Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
+            events.SelectedItem=events.Items.Cast<EventInfo>().First(e=>e.Id!=eventId);Pump();
+            Check(history.Items.Count==0,"journal hides issuances of other events");
+            main.Close();Console.WriteLine("PASS Windows editor flow, selection, issuance and invoice");return 0;
         }
         catch(Exception ex){Console.Error.WriteLine(ex);return 1;}
         finally{foreach(var w in app.Windows.Cast<Window>().ToArray())w.Close();app.Shutdown();Directory.Delete(work,true);}
+    }
+    [DllImport("user32.dll")] private static extern bool SetCursorPos(int x,int y);
+    private static void Gesture(Tickets.App.HallView hall,Point from,Point to)
+    {
+        var flags=BindingFlags.Instance|BindingFlags.NonPublic;
+        var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
+        var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
+        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));SetCursorPos((int)point.X,(int)point.Y);Pump();}
+        void Mouse(string name,bool move=false){object args=move?new MouseEventArgs(Mouse.PrimaryDevice,Environment.TickCount):new MouseButtonEventArgs(Mouse.PrimaryDevice,Environment.TickCount,MouseButton.Left);typeof(Tickets.App.HallView).GetMethod(name,flags)!.Invoke(hall,new[]{args});}
+        Position(from);Mouse("OnMouseDown");Position(to);Mouse("OnMouseMove",true);Mouse("OnMouseUp");Pump();
     }
     private static void Pump()=>Application.Current.Dispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool condition,string label){if(!condition)throw new Exception(label);Console.WriteLine("PASS "+label);}

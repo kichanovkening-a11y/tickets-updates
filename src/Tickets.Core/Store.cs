@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureIssues(); }
 
     private SqliteConnection Open()
     {
@@ -42,7 +42,7 @@ public sealed partial class Store
     {
         using var c=Open();
         using var cmd=Command(c,"""
-            SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,p.amount,coalesce(p.color,'#CBD5E1'),
+            SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,coalesce(t.amount,p.amount),coalesce(p.color,'#CBD5E1'),
               t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number
             FROM event e JOIN seat s ON s.venue_id=e.venue_id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
@@ -71,14 +71,14 @@ public sealed partial class Store
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT t.id,s.id,z.name,s.row_label,s.number,t.recipient,t.series,t.number,t.amount,
-              t.issued_at,t.returned_at FROM ticket t JOIN seat s ON s.id=t.seat_id
+              t.issued_at,t.returned_at,t.issue_id FROM ticket t JOIN seat s ON s.id=t.seat_id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
             WHERE t.event_id=$e ORDER BY t.id DESC
             ""","$e",eventId);
         using var r=cmd.ExecuteReader(); var result=new List<TicketInfo>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),
             r.GetString(4),r.GetString(5),r.GetString(6),r.GetInt64(7),r.GetInt64(8),r.GetString(9),
-            r.IsDBNull(10)?null:r.GetString(10)));
+            r.IsDBNull(10)?null:r.GetString(10),r.GetInt64(11)));
         return result;
     }
 
@@ -93,19 +93,27 @@ public sealed partial class Store
         return last+1;
     }
 
-    public void Issue(long eventId, IReadOnlyCollection<long> seats, string recipient, string series, long firstNumber)
+    public long Issue(long eventId, IReadOnlyCollection<long> seats, string recipient, string series, long firstNumber, IReadOnlyDictionary<long,long>? prices=null)
     {
-        recipient=recipient.Trim(); series=Series(series);
+        recipient=Required(recipient,"Получатель"); series=Series(series);
         if(recipient.Length is 0 or >200) throw new TicketException("Укажите получателя (до 200 символов).");
-        if(series.Length is 0 or >32) throw new TicketException("Укажите серию (до 32 символов).");
+        if(series.Length is 0 or >32 || series.Any(char.IsControl)) throw new TicketException("Укажите серию (до 32 символов).");
         if(seats.Count==0) throw new TicketException("Выберите места.");
         if(seats.Distinct().Count()!=seats.Count) throw new TicketException("В списке повторяются места.");
+        if(prices is not null && prices.Any(p=>p.Value<0||!seats.Contains(p.Key)))
+            throw new TicketException("Изменённые цены должны относиться к выбранным местам и быть неотрицательными.");
         if(firstNumber<1 || firstNumber>long.MaxValue-seats.Count+1)
             throw new TicketException("Недопустимый диапазон номеров билетов.");
         try
         {
             using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
             var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
+            using var batch=Command(c,"""
+                INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date)
+                SELECT e.id,$r,$time,$series,e.title,v.name,e.legacy_date FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
+                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series);batch.Transaction=tx;
+            var result=batch.ExecuteScalar();if(result is null)throw new TicketException("Показ не найден.");
+            var issueId=Convert.ToInt64(result);
             foreach(var sid in seats)
             {
                 using var check=Command(c,"""
@@ -118,14 +126,14 @@ public sealed partial class Store
                 var amount=check.ExecuteScalar();
                 if(amount is null) throw new TicketException("Одно из мест уже выдано, не имеет цены или не относится к этому показу. Выдача отменена целиком.");
                 using var insert=Command(c,"""
-                    INSERT INTO ticket(event_id,seat_id,recipient,series,number,amount,issued_at)
-                    VALUES($e,$s,$r,$series,$n,$a,$time)
+                    INSERT INTO ticket(event_id,seat_id,recipient,series,number,amount,issued_at,issue_id)
+                    VALUES($e,$s,$r,$series,$n,$a,$time,$issue)
                     ""","$e",eventId,"$s",sid,"$r",recipient,"$series",series,"$n",n,
-                    "$a",Convert.ToInt64(amount),"$time",timestamp);
+                    "$a",prices is not null && prices.TryGetValue(sid,out var custom)?custom:Convert.ToInt64(amount),"$time",timestamp,"$issue",issueId);
                 insert.Transaction=tx; insert.ExecuteNonQuery();
                 if(n<long.MaxValue) n++;
             }
-            tx.Commit();
+            tx.Commit();return issueId;
         }
         catch(SqliteException ex) when(ex.SqliteErrorCode==19)
         { throw new TicketException("Серия и номер уже использованы. Выдача отменена целиком; выберите следующий номер или другую серию."); }

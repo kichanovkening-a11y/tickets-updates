@@ -23,6 +23,7 @@ jobs:
       - name: Test accounting and updater
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db
       - name: Verify Windows editor controls
+        timeout-minutes: 3
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db
       - name: Publish portable Windows app
         shell: pwsh

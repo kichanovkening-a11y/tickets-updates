@@ -35,7 +35,7 @@ public static class InvoiceDocuments
             new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),
             new XElement(W+"tblBorders",new[]{"top","left","bottom","right","insideH","insideV"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"val","single"),new XAttribute(W+"sz",4),new XAttribute(W+"color","B8C1CC"))))),
             new XElement(W+"tblGrid",widths.Select(width=>new XElement(W+"gridCol",new XAttribute(W+"w",width)))));
-        XElement TableRow(string[] values,bool header)=>new(W+"tr",new XElement(W+"trPr",header?new XElement(W+"tblHeader"):null),
+        XElement TableRow(string[] values,bool header)=>new(W+"tr",new XElement(W+"trPr",header?new XElement(W+"tblHeader"):null,values.All(v=>v.Length<100)?new XElement(W+"cantSplit"):null),
             values.Select((text,i)=>new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",widths[i]),new XAttribute(W+"type","dxa")),
                 new XElement(W+"vAlign",new XAttribute(W+"val","top")),header?new XElement(W+"shd",new XAttribute(W+"fill","E8EDF3")):null),Paragraph(text,header,20))));
         table.Add(TableRow(Headers,true));foreach(var row in Rows(invoice))table.Add(TableRow(row,false));body.Add(table);

@@ -32,11 +32,25 @@ function Read-Scalars($value) {
     }
     return $result
 }
-function Property-Scalars($value, [string]$name) {
+# Runtime releases expose different optional metadata collections. Geometry is
+# mandatory above; unavailable auxiliary metadata must not discard that layout.
+function Get-OptionalValue($value, [string]$name) {
     if ($null -eq $value) { return $null }
     $property = $value.GetType().GetProperty($name)
-    if ($null -eq $property) { return $null }
-    return Read-Scalars ($property.GetValue($value, $null))
+    if ($null -eq $property) {
+        $script:metadataWarnings += "Unavailable: $($value.GetType().FullName).$name"
+        return $null
+    }
+    try { return $property.GetValue($value, $null) }
+    catch {
+        $script:metadataWarnings += "Getter failed: $($value.GetType().FullName).$name - $($_.Exception.Message)"
+        return $null
+    }
+}
+function Property-Scalars($value, [string]$name) {
+    $nested = Get-OptionalValue $value $name
+    if ($null -eq $nested) { return $null }
+    return Read-Scalars $nested
 }
 $files = @(Get-ChildItem -LiteralPath $source -Filter '*.rpt' -File | Sort-Object Name)
 if ($files.Count -ne 11) { throw "Expected 11 original RPTs, found $($files.Count)." }
@@ -54,6 +68,7 @@ foreach ($file in $files) {
         $openType = $shared.GetType('CrystalDecisions.Shared.OpenReportMethod', $true)
         $mode = [Enum]::Parse($openType, 'OpenReportByTempCopy')
         $report.Load($file.FullName, $mode)
+        $script:metadataWarnings = @()
         $sections = @()
         foreach ($section in $report.ReportDefinition.Sections) {
             $objects = @()
@@ -71,11 +86,16 @@ foreach ($file in $files) {
             $sections += [ordered]@{ properties = Read-Scalars $section; format = Property-Scalars $section 'SectionFormat'; objects = $objects }
         }
         $formulas = @()
-        foreach ($formula in $report.DataDefinition.FormulaFields) { $formulas += Read-Scalars $formula }
+        foreach ($formula in (Get-OptionalValue $report.DataDefinition 'FormulaFields')) { $formulas += Read-Scalars $formula }
         $databaseFields = @()
-        foreach ($field in $report.DataDefinition.DatabaseFields) { $databaseFields += Read-Scalars $field }
+        $database = Get-OptionalValue $report 'Database'
+        foreach ($table in (Get-OptionalValue $database 'Tables')) {
+            foreach ($field in (Get-OptionalValue $table 'Fields')) {
+                $databaseFields += [ordered]@{ table = Read-Scalars $table; field = Read-Scalars $field }
+            }
+        }
         $parameters = @()
-        foreach ($parameter in $report.DataDefinition.ParameterFields) { $parameters += Read-Scalars $parameter }
+        foreach ($parameter in (Get-OptionalValue $report.DataDefinition 'ParameterFields')) { $parameters += Read-Scalars $parameter }
         $record = [ordered]@{
             schemaVersion = 1; sourceFile = $file.Name; sourceSha256 = $hash
             engine = $engine.FullName; engineFileVersion = [Diagnostics.FileVersionInfo]::GetVersionInfo($enginePath).FileVersion
@@ -83,6 +103,7 @@ foreach ($file in $files) {
             printOptions = Read-Scalars $report.PrintOptions
             pageMargins = Property-Scalars $report.PrintOptions 'PageMargins'
             sections = $sections; formulas = $formulas; parameters = $parameters; databaseFields = $databaseFields
+            metadataWarnings = $script:metadataWarnings
         }
         $output = Join-Path $destination ($file.BaseName + '.layout.json')
         $record | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $output -Encoding UTF8

@@ -52,6 +52,22 @@ jobs:
           & ./scripts/extract_legacy_ticket_layouts.ps1 -EngineAssembly $engines[0].FullName -OutputDirectory $output
           $layouts = @(Get-ChildItem -LiteralPath $output -Filter '*.layout.json' -File)
           if ($layouts.Count -ne 11) { throw "Expected 11 extracted layouts, found $($layouts.Count)." }
+      - name: Emit compressed layouts for recovery through job logs
+        if: always()
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = Join-Path $env:RUNNER_TEMP 'legacy-ticket-layouts'
+          foreach ($layout in @(Get-ChildItem -LiteralPath $output -Filter '*.layout.json' -File -ErrorAction SilentlyContinue | Sort-Object Name)) {
+            $payload = [IO.File]::ReadAllBytes($layout.FullName)
+            $compressed = [IO.MemoryStream]::new()
+            try {
+              $gzip = [IO.Compression.GZipStream]::new($compressed, [IO.Compression.CompressionMode]::Compress, $true)
+              try { $gzip.Write($payload, 0, $payload.Length) } finally { $gzip.Dispose() }
+              Write-Output ("LEGACY_LAYOUT_GZIP_BASE64 " + [Convert]::ToBase64String($compressed.ToArray()))
+              Write-Output ("Layout: " + $layout.Name + "; JSON bytes: " + $payload.Length + "; SHA256: " + (Get-FileHash -LiteralPath $layout.FullName -Algorithm SHA256).Hash)
+            } finally { $compressed.Dispose() }
+          }
       - name: Retain extracted source geometry and diagnostic logs
         if: always()
         uses: actions/upload-artifact@v4

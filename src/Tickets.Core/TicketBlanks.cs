@@ -13,9 +13,12 @@ public sealed record TicketBlankField
     public double Width { get; set; } = 80;
     public double Height { get; set; } = 8;
     public double FontSize { get; set; } = 12;
+    public string FontFamily { get; set; } = "Arial";
+    public int Rotation { get; set; }
 }
 public sealed record TicketBlankPosition
 {
+    public List<TicketBlankField>? Fields { get; set; }
     public double X { get; set; } = 10;
     public double Y { get; set; } = 10;
     public double Width { get; set; } = 190;
@@ -30,6 +33,7 @@ public sealed record TicketBlank
     public string ScanPath { get; set; } = "";
     public LegacyTicketLayout? Legacy { get; set; }
     public bool PrintBackground { get; set; }
+    public bool IsEditableCopy { get; set; }
     public List<TicketBlankPosition> Positions { get; set; } = [new()];
     public List<TicketBlankField> Fields { get; set; } = new[]{"event","venue","date","sector","row","seat","price","number"}
         .Select((key,index)=>new TicketBlankField{Key=key,X=5,Y=3+index*9}).ToList();
@@ -42,6 +46,7 @@ public sealed record TicketBlank
         static bool Range(double value,double min,double max)=>double.IsFinite(value)&&value>=min&&value<=max;
         var maximum=Legacy is null?1200:2000;
         if(!Range(PageWidth,20,maximum)||!Range(PageHeight,20,maximum))throw new TicketException($"Размер листа должен быть от 20 до {maximum} мм.");
+        if(PrintBackground&&string.IsNullOrEmpty(ScanPath))throw new TicketException("Для печати фона сначала загрузите скан.");
         if(Legacy is not null){Legacy.Validate();return;}
         if(Positions is null||Positions.Count is <1 or >100)throw new TicketException("Добавьте от 1 до 100 позиций билетов на листе.");
         foreach(var p in Positions)
@@ -53,12 +58,14 @@ public sealed record TicketBlank
             if(a.X<b.X+b.Width-0.001&&b.X<a.X+a.Width-0.001&&a.Y<b.Y+b.Height-0.001&&b.Y<a.Y+a.Height-0.001)
                 throw new TicketException("Позиции билетов на листе не должны перекрываться.");
         }
-        if(Fields is null||Fields.Count!=FieldKeys.Length||FieldKeys.Any(k=>Fields.Count(f=>f.Key==k)!=1))throw new TicketException("Бланк должен содержать все восемь полей билета без повторений.");
-        if(!Fields.Any(f=>f.Enabled))throw new TicketException("Включите печать хотя бы одного поля билета.");
-        foreach(var f in Fields)
-            if(!Range(f.X,0,1200)||!Range(f.Y,0,1200)||!Range(f.Width,1,1200)||!Range(f.Height,1,1200)||!Range(f.FontSize,4,100)||(f.Enabled&&Positions.Any(p=>f.X+f.Width>p.Width+0.001||f.Y+f.Height>p.Height+0.001)))
+        foreach(var activeFields in Positions.Select(p=>p.Fields??Fields))
+        {
+        if(activeFields is null||activeFields.Count!=FieldKeys.Length||FieldKeys.Any(k=>activeFields.Count(f=>f.Key==k)!=1))throw new TicketException("Бланк должен содержать все восемь полей билета без повторений.");
+        if(!activeFields.Any(f=>f.Enabled))throw new TicketException("Включите печать хотя бы одного поля билета.");
+        foreach(var f in activeFields)
+            if(!Range(f.X,0,1200)||!Range(f.Y,0,1200)||!Range(f.Width,1,1200)||!Range(f.Height,1,1200)||!Range(f.FontSize,4,100)||string.IsNullOrWhiteSpace(f.FontFamily)||f.Rotation is not (0 or 90 or 180 or 270)||(f.Enabled&&Positions.Where(p=>ReferenceEquals(p.Fields??Fields,activeFields)).Any(p=>f.X+f.Width>p.Width+0.001||f.Y+f.Height>p.Height+0.001)))
                 throw new TicketException("Поля должны помещаться в каждой позиции билета; шрифт — от 4 до 100 пунктов.");
-        if(PrintBackground&&string.IsNullOrEmpty(ScanPath))throw new TicketException("Для печати фона сначала загрузите скан.");
+        }
     }
 }
 

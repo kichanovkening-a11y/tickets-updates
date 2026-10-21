@@ -40,7 +40,7 @@ public partial class MainWindow
             MaxWidth=editor.Width,MaxHeight=editor.Height,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch};
         TextElement.SetFontFamily(card,editor.FontFamily);TextElement.SetFontSize(card,editor.FontSize);TextElement.SetFontWeight(card,editor.FontWeight);
         var panel=new DockPanel();card.Child=panel;page.Children.Add(card);
-        var title=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
+        var title=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,editor is PriceEditorWindow?0:8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
         title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         title.ColumnDefinitions.Add(new ColumnDefinition());
         title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});

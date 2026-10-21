@@ -62,6 +62,7 @@ internal sealed class TicketPrintWindow:EditorWindow
     {
         previewInfo=info;
         var document=BuildWithSources(info,SelectedBlank is {} b?Mm(b.PageWidth):794,SelectedBlank is {} b2?Mm(b2.PageHeight):1123);pages.Children.Clear();
+        status.Text=(draft?"Предпросмотр. Новые билеты будут выданы после подтверждения печати.":"Повторная печать исходных билетов.")+ $" Страниц: {document.Pages.Count}";
         for(var i=0;i<document.Pages.Count;i++)pages.Children.Add(new DocumentPageView{DocumentPaginator=document.DocumentPaginator,PageNumber=i,Margin=new Thickness(0,0,0,12)});
     }
     private void Print()
@@ -69,28 +70,34 @@ internal sealed class TicketPrintWindow:EditorWindow
         var submitted=false;
         try
         {
-            var dialog=new PrintDialog();if(dialog.ShowDialog()!=true)return;
-            if(draft&&IssueId==0)
+            UnifiedPrintPreview.Show(DialogOwner,"Билеты",(dialog,allowOverflow)=>
             {
-                // Recheck the draft after the printer dialog. Issue performs the
-                // final transaction check and reads each current selected price.
                 if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
-                var provisional=Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied);
-                // Reject unusable paper settings before creating the issuance.
-                BuildWithSources(provisional,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight,dialog).DocumentPaginator.ComputePageCount();
-                IssueId=Store.Issue(eventId,draftSeatIds,recipient,series,firstNumber);
-                issuedSnapshot=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
-                status.Text=$"Выдача № {IssueId} сохранена. При ошибке печати повторная попытка использует те же билеты.";
-            }
-            issuedSnapshot??=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
-            var current=Store.TicketReprint(eventId,seatIds);
-            if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(issuedSnapshot.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
-                throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
-            var info=issuedSnapshot;Preview(info);
-            var document=BuildWithSources(info,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight,dialog);
-            dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
-            Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());Printed=true;
-            status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
+                var info=issuedSnapshot??Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied);
+                var size=UnifiedPrintPreview.PageSize(dialog);
+                return BuildWithSources(info,size.Width,size.Height,dialog,allowOverflow);
+            },(dialog,preview)=>
+            {
+                // All cancellation and printable-area checks happen before issuance.
+                if(draft&&IssueId==0)
+                {
+                    if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
+                    Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber);
+                    IssueId=Store.Issue(eventId,draftSeatIds,recipient,series,firstNumber);
+                    issuedSnapshot=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
+                    status.Text=$"Выдача № {IssueId} сохранена. При ошибке печати повторная попытка использует те же билеты.";
+                }
+                var info=issuedSnapshot!;
+                var current=Store.TicketReprint(eventId,seatIds);
+                if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(info.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
+                    throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
+                // Recreate from the issued snapshot with the exact preview settings.
+                var size=UnifiedPrintPreview.PageSize(dialog);var document=BuildWithSources(info,size.Width,size.Height,dialog,true);
+                dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
+                try{Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());}
+                catch(Exception ex){MessageBox.Show(DialogOwner,"Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);}
+                Preview(info);status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
+            },landscape:SelectedBlank is {} chosen&&chosen.PageWidth>chosen.PageHeight,preferredMedia:SelectedBlank is {} media?new Size(Mm(media.PageWidth),Mm(media.PageHeight)):null);
         }
         catch(Exception ex)
         {
@@ -109,21 +116,36 @@ internal sealed class TicketPrintWindow:EditorWindow
             throw new TicketException("Ранее выбранные билеты возвращены или заменены. Откройте актуальные билеты заново.");
     }
 
-    private FixedDocument BuildWithSources(InvoiceInfo invoice,double pageWidth,double pageHeight,PrintDialog? printer=null)
+    private FixedDocument BuildWithSources(InvoiceInfo invoice,double pageWidth,double pageHeight,PrintDialog? printer=null,bool allowOverflow=false)
     {
         var headers=new Dictionary<long,InvoiceInfo>();
         foreach(var issue in invoice.Tickets.Where(t=>t.IssueId>0).GroupBy(t=>t.IssueId))
         {var original=Store.Invoice(eventId,issue.Key);foreach(var ticket in issue)headers[ticket.Id]=original;}
-        return SelectedBlank is {} blank?BuildBlankDocument(invoice,blank,pageWidth,pageHeight,headers,printer):BuildDocumentCore(invoice,pageWidth,pageHeight,headers);
+        if(SelectedBlank is {} blank)return BuildBlankDocument(invoice,blank,pageWidth,pageHeight,headers,printer,allowOverflow);
+        var document=BuildDocumentCore(invoice,pageWidth,pageHeight,headers);
+        var area=printer?.PrintQueue?.GetPrintCapabilities(printer.PrintTicket).PageImageableArea;
+        if(area is not null)ValidatePrintableArea(document,new Rect(area.OriginWidth,area.OriginHeight,area.ExtentWidth,area.ExtentHeight),allowOverflow);
+        return document;
+    }
+    internal static void ValidatePrintableArea(FixedDocument document,Rect area,bool allowOverflow)
+    {
+        if(allowOverflow)return;
+        foreach(var content in document.Pages)
+        foreach(var element in content.Child.Children.OfType<FrameworkElement>())
+        {
+            var x=FixedPage.GetLeft(element);var y=FixedPage.GetTop(element);
+            if(x<area.Left-.5||y<area.Top-.5||x+element.Width>area.Right+.5||y+element.Height>area.Bottom+.5)
+                throw new PrintAreaWarning("Билет стандартного бланка выходит за печатную область принтера. Выберите принтер с меньшими полями. Исходные координаты и масштаб сохраняются.");
+        }
     }
     private const double DipsPerMm=96.0/25.4;
     private static double Mm(double value)=>value*DipsPerMm;
     internal static string BlankSample(string key)=>key switch {"event"=>"Название мероприятия","venue"=>"Название площадки","date"=>"21.10.2026 19:00","sector"=>"Партер","row"=>"Ряд 5","seat"=>"Место 12","price"=>"1 500 ₽","number"=>"АБ 000001",_=>key};
-    private FixedDocument BuildBlankDocument(InvoiceInfo invoice,TicketBlank blank,double printableWidth,double printableHeight,IReadOnlyDictionary<long,InvoiceInfo> headers,PrintDialog? printer)
+    private FixedDocument BuildBlankDocument(InvoiceInfo invoice,TicketBlank blank,double printableWidth,double printableHeight,IReadOnlyDictionary<long,InvoiceInfo> headers,PrintDialog? printer,bool allowOverflow)
     {
         blank.Validate();var width=Mm(blank.PageWidth);var height=Mm(blank.PageHeight);
         var originX=0.0;var originY=0.0;var mediaWidth=printableWidth;var mediaHeight=printableHeight;
-        if(printer is not null)
+        if(printer?.PrintQueue is not null)
         {
             var capabilities=printer.PrintQueue.GetPrintCapabilities(printer.PrintTicket);
             var area=capabilities.PageImageableArea;
@@ -131,16 +153,18 @@ internal sealed class TicketPrintWindow:EditorWindow
             mediaWidth=capabilities.OrientedPageMediaWidth??mediaWidth;
             mediaHeight=capabilities.OrientedPageMediaHeight??mediaHeight;
         }
-        if(!double.IsFinite(printableWidth)||!double.IsFinite(printableHeight)||!double.IsFinite(mediaWidth)||!double.IsFinite(mediaHeight)||(blank.Legacy is null&&(width>mediaWidth+0.5||height>mediaHeight+0.5)))
-            throw new TicketException($"Бланк «{blank.Name}» ({blank.PageWidth} × {blank.PageHeight} мм) не помещается на бумагу принтера ({mediaWidth/DipsPerMm:0.#} × {mediaHeight/DipsPerMm:0.#} мм). Выберите подходящую бумагу и ориентацию в настройках принтера.");
-        if(printer is not null)
-            foreach(var position in blank.Positions)foreach(var field in blank.Fields.Where(f=>f.Enabled))
+        if(!double.IsFinite(printableWidth)||!double.IsFinite(printableHeight)||!double.IsFinite(mediaWidth)||!double.IsFinite(mediaHeight)||printableWidth<=0||printableHeight<=0||mediaWidth<=0||mediaHeight<=0)
+            throw new TicketException("Принтер сообщил недопустимый размер бумаги или печатной области.");
+        if(!allowOverflow&&blank.Legacy is null&&(width>mediaWidth+0.5||height>mediaHeight+0.5))
+            throw new PrintAreaWarning($"Бланк «{blank.Name}» ({blank.PageWidth} × {blank.PageHeight} мм) не помещается на бумагу принтера ({mediaWidth/DipsPerMm:0.#} × {mediaHeight/DipsPerMm:0.#} мм). Выберите подходящую бумагу и ориентацию в настройках принтера.");
+        if(printer?.PrintQueue is not null&&blank.Legacy is null&&!allowOverflow)
+            foreach(var position in blank.Positions)foreach(var field in TicketBlankEditing.FieldsFor(blank,position).Where(f=>f.Enabled))
             {
                 var x=Mm(position.X+field.X);var y=Mm(position.Y+field.Y);
                 if(x<originX-0.5||y<originY-0.5||x+Mm(field.Width)>originX+printableWidth+0.5||y+Mm(field.Height)>originY+printableHeight+0.5)
-                    throw new TicketException($"Поле «{field.DisplayName}» выходит за печатную область принтера. Переместите поле или позицию билета внутрь листа в разделе «Бланки печати». Непечатаемые поля слева и сверху: {originX/DipsPerMm:0.#} и {originY/DipsPerMm:0.#} мм.");
+                    throw new PrintAreaWarning($"Поле «{field.DisplayName}» выходит за печатную область принтера. Переместите поле или позицию билета внутрь листа в разделе «Бланки печати». Непечатаемые поля слева и сверху: {originX/DipsPerMm:0.#} и {originY/DipsPerMm:0.#} мм.");
             }
-        if(blank.Legacy is not null)return BuildLegacyDocument(invoice,blank,headers,printer is null?width:mediaWidth,printer is null?height:mediaHeight,printer is null?null:new Rect(originX,originY,printableWidth,printableHeight));
+        if(blank.Legacy is not null)return BuildLegacyDocument(invoice,blank,headers,printer?.PrintQueue is null?width:mediaWidth,printer?.PrintQueue is null?height:mediaHeight,printer?.PrintQueue is null?null:new Rect(originX,originY,printableWidth,printableHeight),allowOverflow);
         BitmapImage? background=null;
         if(blank.PrintBackground){var path=Store.TicketBlankScanPath(blank.ScanPath);if(!System.IO.File.Exists(path))throw new TicketException("Скан бланка не найден. Загрузите его заново в разделе «Бланки печати». ");background=new BitmapImage(new Uri(path));}
         var document=new FixedDocument();
@@ -148,22 +172,27 @@ internal sealed class TicketPrintWindow:EditorWindow
         {
             // FixedPage/XPS coordinates start at the physical sheet edge. Hardware
             // margins constrain fields but must never shift calibrated coordinates.
-            var page=new FixedPage{Width=printer is null?width:mediaWidth,Height=printer is null?height:mediaHeight,Background=Brushes.White};
+            var page=new FixedPage{Width=printer?.PrintQueue is null?width:mediaWidth,Height=printer?.PrintQueue is null?height:mediaHeight,Background=Brushes.White};
             if(background is not null){var image=new Image{Source=background,Width=width,Height=height,Stretch=Stretch.Fill};FixedPage.SetLeft(image,0);FixedPage.SetTop(image,0);page.Children.Add(image);}
             for(var i=0;i<blank.Positions.Count&&offset+i<invoice.Tickets.Count;i++)
             {
                 var ticket=invoice.Tickets[offset+i];var source=headers.TryGetValue(ticket.Id,out var original)?original:invoice;var position=blank.Positions[i];
-                foreach(var field in blank.Fields.Where(f=>f.Enabled))
+                foreach(var field in TicketBlankEditing.FieldsFor(blank,position).Where(f=>f.Enabled))
                 {
                     var text=field.Key switch {"event"=>source.Title,"venue"=>source.Venue,"date"=>source.EventDate,"sector"=>ticket.Sector,"row"=>ticket.Row,"seat"=>ticket.Seat,"price"=>InvoiceDocuments.Money(ticket.Amount),"number"=>ticket.Code,_=>""};
-                    var label=new TextBlock{Text=text,FontFamily=new FontFamily("Arial"),FontSize=field.FontSize*96/72,TextWrapping=TextWrapping.NoWrap};
-                    var fit=new Viewbox{Child=label,Width=Mm(field.Width),Height=Mm(field.Height),Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left};
+                    var fit=BlankFieldVisual(field,text,DipsPerMm);
                     FixedPage.SetLeft(fit,Mm(position.X+field.X));FixedPage.SetTop(fit,Mm(position.Y+field.Y));page.Children.Add(fit);
                 }
             }
             document.Pages.Add(new PageContent{Child=page});
         }
         return document;
+    }
+    internal static FrameworkElement BlankFieldVisual(TicketBlankField field,string text,double scale)
+    {
+        var label=new TextBlock{Text=text,FontFamily=new FontFamily(field.FontFamily),FontSize=field.FontSize*96/72*scale/DipsPerMm,TextWrapping=TextWrapping.NoWrap};
+        if(field.Rotation!=0)label.LayoutTransform=new RotateTransform(-field.Rotation);
+        return new Viewbox{Child=label,Width=field.Width*scale,Height=field.Height*scale,Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left};
     }
     internal static string LegacySample(string binding)
     {
@@ -189,22 +218,34 @@ internal sealed class TicketPrintWindow:EditorWindow
         if(field.Rotation!=0)label.LayoutTransform=new RotateTransform(-field.Rotation);
         return new Border{Width=field.Width*scale,Height=field.Height*scale,ClipToBounds=true,Child=label};
     }
-    private FixedDocument BuildLegacyDocument(InvoiceInfo invoice,TicketBlank blank,IReadOnlyDictionary<long,InvoiceInfo> headers,double mediaWidth,double mediaHeight,Rect? printableArea)
+    private FixedDocument BuildLegacyDocument(InvoiceInfo invoice,TicketBlank blank,IReadOnlyDictionary<long,InvoiceInfo> headers,double mediaWidth,double mediaHeight,Rect? printableArea,bool allowOverflow)
     {
         var document=new FixedDocument();var address=Store.TicketVenueAddress(eventId);var printed=DateTime.Now;
+        BitmapImage? background=null;
+        if(blank.PrintBackground)
+        {
+            var path=Store.TicketBlankScanPath(blank.ScanPath);
+            if(!System.IO.File.Exists(path))throw new TicketException("Скан бланка не найден. Загрузите его заново в разделе «Бланки печати».");
+            background=new BitmapImage(new Uri(path));
+        }
         var originalLayout=blank.Legacy!;
         var layout=originalLayout with{ContentWidth=mediaWidth/DipsPerMm-originalLayout.LeftMargin-originalLayout.RightMargin,ContentHeight=mediaHeight/DipsPerMm-originalLayout.TopMargin-originalLayout.BottomMargin};
         foreach(var layoutPage in LegacyTicketTemplates.Paginate(layout,invoice.Tickets.Count))
         {
             var page=new FixedPage{Width=mediaWidth,Height=mediaHeight,Background=Brushes.White};
+            if(background is not null)
+            {
+                var image=new Image{Source=background,Width=Mm(blank.PageWidth),Height=Mm(blank.PageHeight),Stretch=Stretch.Fill};
+                FixedPage.SetLeft(image,0);FixedPage.SetTop(image,0);page.Children.Add(image);
+            }
             foreach(var placement in layoutPage.Elements)
             {
                 var field=placement.Element;var ticket=invoice.Tickets[placement.TicketIndex];var source=headers.TryGetValue(ticket.Id,out var original)?original:invoice;
                 var text=field.Binding.Length==0?field.Text:LegacyTicketTemplates.Value(field.Binding,source,ticket,address,printed,placement.PageNumber);
                 if(text.Length==0)continue;
                 var box=new Rect(Mm(placement.X),Mm(placement.Y),Mm(field.Width),Mm(field.Height));
-                if(printableArea is {} area&&(box.Left<area.Left-.5||box.Top<area.Top-.5||box.Right>area.Right+.5||box.Bottom>area.Bottom+.5))
-                    throw new TicketException($"Поле «{field.Name}» исходного бланка выходит за печатную область принтера. Выберите бумагу и принтер с подходящими полями. Исходные координаты не сдвигаются.");
+                if(!allowOverflow&&printableArea is {} area&&(box.Left<area.Left-.5||box.Top<area.Top-.5||box.Right>area.Right+.5||box.Bottom>area.Bottom+.5))
+                    throw new PrintAreaWarning($"Поле «{field.Name}» исходного бланка выходит за печатную область принтера. Выберите бумагу и принтер с подходящими полями. Исходные координаты не сдвигаются.");
                 var visual=LegacyElementVisual(field,text,DipsPerMm);FixedPage.SetLeft(visual,box.Left);FixedPage.SetTop(visual,box.Top);page.Children.Add(visual);
             }
             document.Pages.Add(new PageContent{Child=page});

@@ -20,7 +20,7 @@ internal static class SourceBusinessForms
     }
     public static string DefaultText(string kind)=>CurrentText(kind,Version012Text(kind));
     internal static string CurrentText(string kind,string text)=>kind==IssueDocumentKinds.Contract
-        ?text.Replace("не позднее ____________.","не позднее 3 дней с момента получения счёта.",StringComparison.Ordinal):text;
+        ?text.Replace("не позднее ____________.","не позднее 3 дней с момента выставления счёта.",StringComparison.Ordinal):text;
     internal static string EventCalendarDate(InvoiceInfo invoice)
     {
         var ru=System.Globalization.CultureInfo.GetCultureInfo("ru-RU");

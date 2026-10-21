@@ -30,11 +30,14 @@ internal sealed class InvoiceWindow : EditorWindow
         var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
         Button(senderActions,"+ Отправитель",()=>Try(()=>EditSender(false)));
         Button(senderActions,"Реквизиты",()=>Try(()=>EditSender(true)));
-        Button(header,"Обновить реквизиты документа",()=>Try(()=>{PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();savedStatus.Text="Реквизиты отправителя и получателя обновлены. "+savedStatus.Text;Refresh();}));
+        Button(header,"Обновить реквизиты документа",()=>Try(EditDocumentOrganizations));
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRowSpan(actionsScroll,2);root.Children.Add(actionsScroll);
-        Square(actions,"Сохранить",()=>Try(()=>{PersistSender();SaveFiles();Refresh();}),Brushes.SteelBlue);
+        Square(actions,"Сохранить",()=>Try(()=>{
+            var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{PersistSender();InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});
+            if(path is not null){savedStatus.Text="Сохранено: "+path;Refresh();}
+        }),Brushes.SteelBlue);
         Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
         Square(actions,"Открыть",()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.InvoiceDocumentPath(issueId),()=>Store.SaveInvoiceDocument(eventId,issueId))),Brushes.SlateGray);
         Grid.SetRow(reader,1);root.Children.Add(reader);reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Document(Store.Invoice(eventId,issueId),reader.ActualWidth-20);};Refresh();
@@ -63,6 +66,19 @@ internal sealed class InvoiceWindow : EditorWindow
         var editor=new SenderEditorWindow(Store,existing?senderBox.Text:"",existing);
         if(editor.ShowDialog()!=true)return;
         senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();Refresh();
+    }
+    private void EditDocumentOrganizations()
+    {
+        PersistSender();
+        var invoice=Store.Invoice(eventId,issueId);
+        var senderEditor=new SenderEditorWindow(Store,invoice.Sender,true);
+        if(senderEditor.ShowDialog()!=true)return;
+        var recipientEditor=new RecipientEditorWindow(Store,invoice.Recipient,true);
+        var recipientSaved=recipientEditor.ShowDialog()==true;
+        // Each editor saves the global directory. Refresh only this issue, including
+        // a saved sender if the recipient editor was cancelled.
+        Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();Refresh();
+        savedStatus.Text=(recipientSaved?"Реквизиты отправителя и получателя обновлены. ":"Реквизиты отправителя обновлены. ")+savedStatus.Text;
     }
     private void PersistSender()
     {

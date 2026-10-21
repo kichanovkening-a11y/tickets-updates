@@ -68,7 +68,7 @@ public sealed partial class Store
         if(businessTemplatesUpgraded)return;
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         foreach(var kind in IssueDocumentKinds.All)
-        foreach(var previous in new[]{BusinessDocumentTemplates.LegacyDefault(kind),BusinessDocumentTemplates.PreviousDefault(kind),BusinessDocumentTemplates.Version011Default(kind),SourceBusinessForms.Version012Text(kind)})
+        foreach(var previous in new[]{BusinessDocumentTemplates.LegacyDefault(kind),BusinessDocumentTemplates.PreviousDefault(kind),BusinessDocumentTemplates.Version011Default(kind),SourceBusinessForms.Version012Text(kind),IssueDocumentKinds.DefaultTemplate(kind).Replace("не позднее 3 дней с момента выставления счёта","не позднее 3 дней с момента получения счёта",StringComparison.Ordinal)})
         foreach(var table in new[]{"document_template","issue_document"})
         {using var cmd=Command(c,$"UPDATE {table} SET template=$new WHERE kind=$k AND replace(replace(template,char(13)||char(10),char(10)),char(13),char(10))=$old","$new",IssueDocumentKinds.DefaultTemplate(kind),"$k",kind,"$old",previous.Replace("\r\n","\n").Replace('\r','\n'));cmd.Transaction=tx;cmd.ExecuteNonQuery();}
         tx.Commit();businessTemplatesUpgraded=true;

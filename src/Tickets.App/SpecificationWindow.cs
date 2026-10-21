@@ -2,7 +2,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
 using System.Windows.Media;
-using Microsoft.Win32;
 using Tickets.Core;
 
 namespace Tickets.App;
@@ -42,8 +41,7 @@ internal sealed class SpecificationWindow : EditorWindow
         body=Field(form,"Текст спецификации");body.AcceptsReturn=true;body.TextWrapping=TextWrapping.Wrap;body.VerticalScrollBarVisibility=ScrollBarVisibility.Auto;body.MinHeight=260;body.MaxHeight=460;
         form.Children.Add(new TextBlock{Text="Введите согласованные условия и реквизиты. Подписи отправителя и получателя добавляются при печати и экспорте.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,0)});
         var actions=new WrapPanel();form.Children.Add(actions);
-        Button(actions,"Сохранить",()=>Try(()=>Save()));
-        Button(actions,"Сохранить в Word…",()=>Try(Export));
+        Button(actions,"Сохранить",()=>Try(Export));
         Button(actions,"Распечатать",()=>Try(Print));
         form.Children.Add(status);
         this.recipient.AddHandler(TextBox.TextChangedEvent,new TextChangedEventHandler((_,_)=>{
@@ -82,7 +80,10 @@ internal sealed class SpecificationWindow : EditorWindow
         }
         reader.Document=Preview();reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);root.Children.Add(actions);
-        InvoiceWindow.Square(actions,"Сохранить",()=>Try(()=>{status.Text="Сохранено: "+Store.SaveIssueSpecificationDocument(eventId,issueId);}),Brushes.SteelBlue);
+        InvoiceWindow.Square(actions,"Сохранить",()=>Try(()=>{
+            var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Спецификация-выдача-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueSpecificationWord(Store.Invoice(eventId,issueId),destination));
+            if(path is not null)status.Text="Сохранено: "+path;
+        }),Brushes.SteelBlue);
         InvoiceWindow.Square(actions,"Распечатать",()=>Try(()=>{
             DocumentPrintPreview.Show(DialogOwner,Title,width=>Preview(width));
         }),Brushes.SeaGreen);
@@ -132,9 +133,11 @@ internal sealed class SpecificationWindow : EditorWindow
 
     private void Export()
     {
-        var info=ForOutput();if(info is null)return;
-        var dialog=new SaveFileDialog{Filter="Документ Word (*.docx)|*.docx",DefaultExt=".docx",AddExtension=true,FileName=$"Спецификация-{info.Id}.docx"};
-        if(dialog.ShowDialog(DialogOwner)==true){InvoiceDocuments.SaveSpecificationWord(info,dialog.FileName);status.Text="Документ Word сохранён: "+dialog.FileName;}
+        var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Спецификация-{current?.Id.ToString()??"новая"}.docx",destination=>{
+            var info=ForOutput();if(info is null)throw new TicketException("Спецификация не сохранена.");
+            InvoiceDocuments.SaveSpecificationWord(info,destination);
+        });
+        if(path is not null)status.Text="Документ Word сохранён: "+path;
     }
 
     private void Print()

@@ -326,6 +326,7 @@ Docs012Checks.Register(Test);
 Docs013Checks.Register(Test);
 Pricing013Checks.Register(Test);
 TicketBlankChecks.Register(Test);
+Test("editable four-ticket A4 blanks retain independent geometry and originals",s=>TicketBlankEditingChecks.Run());
 Test("hall and pricing presentation refinements",s=>HallEditorRefinementChecks.Run());
 BusinessDocumentChecks.Register(Test);
 TicketLifecycleChecks.Register(Test);

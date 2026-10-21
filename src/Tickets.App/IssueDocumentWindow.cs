@@ -23,7 +23,10 @@ internal sealed class IssueDocumentWindow:EditorWindow
         var info=Store.GetIssueDocument(eventId,issueId,kind);original=info.Template;template.Text=original;
         header.Children.Add(new TextBlock{Text="Получатель: "+info.Invoice.Recipient,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap});header.Children.Add(status);
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);Grid.SetRowSpan(actions,2);root.Children.Add(actions);
-        InvoiceWindow.Square(actions,"Сохранить",()=>Try(Save),Brushes.SteelBlue);InvoiceWindow.Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
+        InvoiceWindow.Square(actions,"Сохранить",()=>Try(()=>{
+            var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx",destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});
+            if(path is not null)status.Text="Сохранено: "+path;
+        }),Brushes.SteelBlue);InvoiceWindow.Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
         InvoiceWindow.Square(actions,"Открыть",()=>Try(()=>{SaveForNavigation();IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));}),Brushes.SlateGray);
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});

@@ -29,7 +29,11 @@ public sealed class HallView : FrameworkElement
     private Point worldAnchor;
     private MouseButton gestureButton;
     private readonly DispatcherTimer scrollTimer;
-    private readonly ToolTip seatTip=new() { Placement=PlacementMode.Relative, StaysOpen=true, IsHitTestVisible=false };
+    private readonly ToolTip seatTip=new() {
+        Placement=PlacementMode.Relative, StaysOpen=true, IsHitTestVisible=false,
+        Foreground=Brushes.Black,FontWeight=FontWeights.Bold,Background=Brushes.LightYellow,
+        Opacity=1,Padding=new Thickness(9,6,9,6),BorderBrush=Brushes.Gray,BorderThickness=new Thickness(1)
+    };
     private bool dragging, panning, marquee, removing, rightGesture, panMoved;
     private HashSet<long> gestureSelection=[];
     private long? hoverId;

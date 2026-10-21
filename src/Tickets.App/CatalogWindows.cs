@@ -64,7 +64,7 @@ internal sealed class PriceEditorWindow : EditorWindow
     private readonly Dictionary<long,PriceValue> prices=[];
     private readonly HashSet<long> withdrawn=[];
     private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,10),FontSize=15};
-    private readonly Grid priceSummary=new(){Margin=new Thickness(0,0,0,6)};
+    private readonly Grid priceSummary=new(){Margin=new Thickness(0,0,0,6),HorizontalAlignment=HorizontalAlignment.Left};
     private sealed record SourcePlan(long Id,PriceValue[] Prices,long[] Withdrawn);
     private sealed record PriceState(Dictionary<long,PriceValue> Prices,long[] Withdrawn,long[] Selected,string Name,SourcePlan? Source);
     private sealed record PlanChoice(PlanInfo Plan,string Name);
@@ -73,12 +73,15 @@ internal sealed class PriceEditorWindow : EditorWindow
     public PriceEditorWindow(Store store,long? venueId=null):this(store,venueId,null){}
     public PriceEditorWindow(Store store,long? venueId,long? planId):base(store,"Расценовка")
     {
-        var grid=new Grid{Margin=new Thickness(16,4,16,16)};grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});grid.ColumnDefinitions.Add(new ColumnDefinition());Content=grid;
+        var grid=new Grid{Margin=new Thickness(16,5,16,16)};grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});grid.ColumnDefinitions.Add(new ColumnDefinition());Content=grid;
         var form=new StackPanel{Margin=new Thickness(0,0,15,0)};grid.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         var venue=Combo(form,"Зал",store.Venues(),"Name");
         if(venueId.HasValue)venue.SelectedItem=venue.Items.Cast<VenueInfo>().FirstOrDefault(v=>v.Id==venueId.Value);
         var plans=Combo(form,"Существующая расценовка",Array.Empty<PlanInfo>(),"Name");
         var name=Field(form,"Название новой расценовки");
+        foreach(var label in form.Children.OfType<TextBlock>())
+            if(label.Text is "Зал" or "Существующая расценовка" or "Название новой расценовки")
+            {label.FontSize=FontSize+1;label.FontWeight=FontWeights.ExtraBold;}
         SourcePlan? sourcePlan=null;
         var history=new Stack<PriceState>();Button? undo=null;Action refreshCategory=()=>{};Action refreshSelection=()=>{};
         void Remember(){history.Push(new(new(prices),withdrawn.ToArray(),preview.Selected.ToArray(),name.Text,sourcePlan));if(undo is not null)undo.IsEnabled=true;}
@@ -157,7 +160,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             if(preview.Selected.Count==0)throw new TicketException("Выберите места на схеме.");Remember();
             foreach(var id in preview.Selected){prices.Remove(id);withdrawn.Add(id);}Refresh();preview.Clear();SelectionSummary();
         });
-        Button(form,"Назначить выбранным местам",()=>Assign(false));Button(form,"Назначить всему залу",()=>Assign(true));Button(form,"Убрать из продажи",Withdraw);
+        var assignSelected=Button(form,"Назначить выбранным местам",()=>Assign(false));Button(form,"Назначить всему залу",()=>Assign(true));Button(form,"Убрать из продажи",Withdraw);
         long? lastContextSeat=null;
         preview.SeatContextRequested+=(id,point)=>{
             if(lastContextSeat==id&&preview.Selected.Contains(id))
@@ -170,7 +173,12 @@ internal sealed class PriceEditorWindow : EditorWindow
             var change=new MenuItem{Header="Сменить цену"};change.Click+=(_,_)=>ChangeSelectedPrice();menu.Items.Add(change);
             var remove=new MenuItem{Header="Убрать из продажи"};remove.Click+=(_,_)=>Withdraw();menu.Items.Add(remove);menu.IsOpen=true;
         };
-        amount.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter){Assign(false);e.Handled=true;}};
+        // Hosted input can arrive already handled by an ancestor. Still invoke the
+        // same validated action as the button, before TextBox/default-button processing.
+        amount.AddHandler(Keyboard.PreviewKeyDownEvent,new KeyEventHandler((_,e)=>{
+            if(e.Key!=Key.Enter)return;e.Handled=true;
+            assignSelected.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+        }),true);
         palette.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter){palette.IsDropDownOpen=false;Assign(false);e.Handled=true;}};
         undo=Button(form,"Шаг назад",Undo);undo.IsEnabled=false;
         grid.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Z&&Keyboard.Modifiers==ModifierKeys.Control&&Keyboard.FocusedElement is not TextBox){Undo();e.Handled=true;}};
@@ -192,14 +200,16 @@ internal sealed class PriceEditorWindow : EditorWindow
             CreatedId=store.SavePlan(v.Id,name.Text,prices.Values.ToArray(),withdrawn.ToArray());Finish(true);
         }
         HeaderSaveAction=()=>Try(Save);
-        var standaloneHeader=new Grid{Margin=new Thickness(0,0,0,8)};standaloneHeader.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});standaloneHeader.ColumnDefinitions.Add(new ColumnDefinition());
+        var standaloneHeader=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0)};standaloneHeader.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(306)});standaloneHeader.ColumnDefinitions.Add(new ColumnDefinition());
         var standaloneSave=new Button{Content="Сохранить",Width=140,Margin=new Thickness(0)};standaloneSave.Click+=(_,_)=>HeaderSaveAction();standaloneHeader.Children.Add(standaloneSave);
-        var standaloneTitle=new TextBlock{Text="Расценовка",FontSize=21,FontWeight=FontWeights.SemiBold,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(standaloneTitle,1);standaloneHeader.Children.Add(standaloneTitle);
+        var standaloneTitle=new TextBlock{Text="Расценовка",FontSize=21,FontWeight=FontWeights.Bold,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(standaloneTitle,1);standaloneHeader.Children.Add(standaloneTitle);
         var standaloneClose=new Button{Content="Закрыть",Width=110,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0)};standaloneClose.Click+=(_,_)=>Close();Grid.SetColumn(standaloneClose,1);standaloneHeader.Children.Add(standaloneClose);
         var shell=new DockPanel();Content=shell;DockPanel.SetDock(standaloneHeader,Dock.Top);shell.Children.Add(standaloneHeader);shell.Children.Add(grid);OnShown(()=>standaloneHeader.Visibility=IsInline?Visibility.Collapsed:Visibility.Visible);
         form.Children.Add(new TextBlock{Text="Назначьте цену каждому месту или уберите его из продажи. Цвет каждой цены общий для всех схем.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
-        DockPanel.SetDock(hallTotals,Dock.Top);area.Children.Add(hallTotals);DockPanel.SetDock(priceSummary,Dock.Top);area.Children.Add(priceSummary);area.Children.Add(preview);
+        DockPanel.SetDock(hallTotals,Dock.Top);area.Children.Add(hallTotals);
+        var summaryScroll=new ScrollViewer{Content=priceSummary,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled};
+        DockPanel.SetDock(summaryScroll,Dock.Top);area.Children.Add(summaryScroll);area.Children.Add(preview);
         void LoadPlans()
         {
             if(venue.SelectedItem is not VenueInfo v)return;
@@ -220,11 +230,11 @@ internal sealed class PriceEditorWindow : EditorWindow
         priceSummary.Children.Clear();priceSummary.RowDefinitions.Clear();priceSummary.ColumnDefinitions.Clear();
         var summaries=Pricing012Presentation.Summaries(assigned);
         for(var row=0;row<3;row++)priceSummary.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
-        for(var column=0;column<(summaries.Count+2)/3;column++)priceSummary.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
+        for(var column=0;column<(summaries.Count+2)/3;column++)priceSummary.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         foreach(var item in summaries)
         {
-            var text=new TextBlock{Text=$"{item.Amount:N0} ₽ × {item.Count} = {item.Total:N0} ₽",Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold};
-            var cell=new Border{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,0,5,4),CornerRadius=new CornerRadius(3)};
+            var text=new TextBlock{Text=FormattableString.Invariant($"{item.Amount}₽×{item.Count}={item.Total}₽"),Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.NoWrap,FontWeight=FontWeights.SemiBold};
+            var cell=new Border{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,0,5,4),CornerRadius=new CornerRadius(3),HorizontalAlignment=HorizontalAlignment.Left};
             cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.FocusPrice=preview.FocusPrice==item.Amount?null:item.Amount;e.Handled=true;};
             Grid.SetRow(cell,item.Row);Grid.SetColumn(cell,item.Column);priceSummary.Children.Add(cell);
         }

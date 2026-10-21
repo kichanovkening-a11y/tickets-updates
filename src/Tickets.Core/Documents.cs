@@ -27,6 +27,13 @@ public sealed partial class Store
     {using var c=Open();using var cmd=Command(c,"SELECT value FROM document_setting WHERE name=$n","$n",name);return cmd.ExecuteScalar() as string??fallback;}
     public string Sender { get {var sender=DocumentSetting("sender",DefaultSender);return SenderChoiceAllowed(sender)?sender:DefaultSender;} }
     public string DocumentsDirectory=>DocumentSetting("directory",System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"Documents"));
+    // Manual exports share their last destination without changing managed internal copies.
+    public string DocumentSaveDirectory=>DocumentSetting("manual-save-directory",DocumentsDirectory);
+    public void RememberDocumentSaveDirectory(string directory)
+    {
+        directory=System.IO.Path.GetFullPath(Required(directory,"Папка сохранения"));
+        using var c=Open();using var cmd=Command(c,"INSERT INTO document_setting(name,value) VALUES('manual-save-directory',$d) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$d",directory);cmd.ExecuteNonQuery();
+    }
     public void SaveDocumentSettings(string sender,string directory)
     {
         sender=Required(sender,"От кого");if(!SenderChoiceAllowed(sender))sender=DefaultSender;

@@ -148,7 +148,7 @@ public partial class MainWindow : Window
         PriceBox.Clear();
         if(fit){Hall.FocusPrice=null;recipientUpdating=true;try{RecipientBox.SelectedItem=null;RecipientBox.Text="";}finally{recipientUpdating=false;}}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
-        HistoryGrid.ItemsSource=store.Issues(current.Id);RefreshRecipients();
+        LoadJournal();RefreshRecipients();
         RenderHallLegend(seats);
         HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
         UpdateNumber();
@@ -281,14 +281,13 @@ public partial class MainWindow : Window
     }
     private void ReturnClick(object sender,RoutedEventArgs e)=>Run(()=>ReturnTickets(
         Hall.SelectedSeats.Where(s=>s.TicketId.HasValue).Select(s=>s.TicketId!.Value).ToArray()));
-    private void OpenInvoiceClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(HistoryGrid.SelectedItem is not IssueInfo issue)throw new TicketException("Выберите выдачу.");OpenInvoice(issue.Id);
-    });
     private void HistoryRowClick(object sender,System.Windows.Input.MouseButtonEventArgs e)
     {
         var source=e.OriginalSource as DependencyObject;
+        for(var node=source;node is not null&&node!=HistoryGrid;node=node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
+            if(node is CheckBox)return;
         var row=source is null?null:ItemsControl.ContainerFromElement(HistoryGrid,source) as DataGridRow;
-        if(row?.Item is IssueInfo issue){e.Handled=true;Run(()=>OpenInvoice(issue.Id));}
+        if(row?.Item is JournalIssueRow selected){e.Handled=true;Run(()=>OpenInvoice(selected.Id));}
     }
     private void OpenInvoice(long issueId,bool print=false)
     {

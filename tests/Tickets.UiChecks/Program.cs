@@ -13,6 +13,7 @@ using EventInfo=Tickets.Core.EventInfo;
 
 internal static class Program
 {
+    private static bool expectedSaveDialog;
     [STAThread]
     private static int Main(string[] args)
     {
@@ -23,6 +24,8 @@ internal static class Program
         dialogGuard.Tick+=(_,_)=>EnumWindows((window,_)=>{
             GetWindowThreadProcessId(window,out var process);var name=new System.Text.StringBuilder(128);GetClassName(window,name,name.Capacity);
             if(process!=(uint)Environment.ProcessId||name.ToString()!="#32770")return true;
+            var dialogTitle=new System.Text.StringBuilder(256);GetWindowText(window,dialogTitle,dialogTitle.Capacity);
+            if(expectedSaveDialog&&dialogTitle.ToString()=="Сохранить документ")return true;
             var messages=new List<string>();
             EnumChildWindows(window,(child,_)=>{var text=new System.Text.StringBuilder(2048);GetWindowText(child,text,text.Capacity);if(text.Length>0)messages.Add(text.ToString());return true;},IntPtr.Zero);
             Console.Error.WriteLine("Unexpected modal dialog: "+string.Join(" | ",messages));Environment.Exit(1);return false;
@@ -124,7 +127,9 @@ internal static class Program
             var specType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.SpecificationWindow")!;
             var specWindow=(Window)Activator.CreateInstance(specType,store,"UI organization")!;specWindow.Show();Pump();
             var specFields=Logical(specWindow).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToArray();specFields[^1].Text="Билеты: Партер, ряд А. Условия согласованы.";
-            Click(specWindow,"Сохранить");Check(store.Specifications().Single().Recipient=="UI organization","organization specification persists from form");
+            var manualDocument=Path.Combine(work,"chosen-documents","specification.docx");Directory.CreateDirectory(Path.GetDirectoryName(manualDocument)!);
+            SaveDocumentThroughDialog(specWindow,manualDocument);Check(File.Exists(manualDocument)&&store.DocumentSaveDirectory==Path.GetDirectoryName(manualDocument),"manual Save writes selected path and remembers chosen document folder");
+            Check(!Logical(specWindow).OfType<Button>().Any(button=>Equals(button.Content,"Сохранить в Word…")),"specification has one save action");Check(store.Specifications().Single().Recipient=="UI organization","organization specification persists from form");
             Check(File.Exists(Path.Combine(store.DocumentsDirectory,"Спецификации","Спецификация-1.docx")),"specification automatically saves Word");specWindow.Close();
             var reopened=(Window)Activator.CreateInstance(specType,store,"UI organization")!;reopened.Show();Pump();
             Check(Logical(reopened).OfType<TextBox>().Any(t=>t.Text.Contains("Условия согласованы")),"saved organization specification reopens");reopened.Close();
@@ -212,7 +217,8 @@ internal static class Program
                     Check(Logical(window).OfType<FlowDocumentScrollViewer>().Single().ActualHeight>400,"invoice preview uses enlarged content area");
                     var invoiceTab=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Накладная"));Check(Equals(invoiceTab.Background,Brushes.SteelBlue),"invoice tab is visibly active");
                     var senderField=Logical(window).OfType<ComboBox>().Single();Check(senderField.IsEditable&&senderField.Items.Contains(Store.DefaultSender),"invoice sender supports saved choice and manual entry");
-                    senderField.Text="UI sender";Click(window,"Сохранить");
+                    senderField.Text="UI sender";SaveDocumentThroughDialog(window,Path.Combine(work,"chosen-documents","invoice.docx"));
+                    Check(File.Exists(Path.Combine(work,"chosen-documents","invoice.docx")),"invoice manual Save writes its selected destination");
                     var issuedId=store.Issues(eventId).Single().Id;
                     Check(store.Invoice(eventId,issuedId).Sender=="UI sender","edited invoice sender persists");
                     Check(store.PrepareIssueDocuments(eventId,issuedId).Count==4&&store.PrepareIssueDocuments(eventId,issuedId).All(d=>d.Invoice.Recipient=="UI recipient"&&d.Body.Contains("UI recipient")),"all four documents are automatically prepared for invoice recipient");
@@ -260,6 +266,7 @@ internal static class Program
             Check(hall.Selected.SetEquals(freePreviewSelection)&&((TextBlock)main.FindName("SelectedSummary")).Text==freePreviewSummary,"closing free-seat print preview retains selection and summary");
             var originalInvoice=store.Invoice(eventId,store.Issues(eventId).Single().Id);
             CheckTicketBlankPreview(store,eventId,originalInvoice);
+            Print014Checks.Run(store);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
             Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
             Exception? mixedPreviewError=null;
@@ -341,6 +348,8 @@ internal static class Program
             }catch(Exception ex){directoryError=ex;}finally{selectedPricing?.Close();}}));
             pricingLeaf.IsSelected=true;if(directoryError is not null)throw directoryError;pricingDirectory.Close();
             var priceEditorType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PriceEditorWindow")!;
+            var enterPriceEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId})!;enterPriceEditor.Show();Pump();
+            try{Pricing014Checks.Editor(enterPriceEditor);}finally{enterPriceEditor.Close();}
             var categoryEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId})!;categoryEditor.Show();Pump();
             var categoryFields=Logical(categoryEditor).OfType<TextBox>().ToList();var categoryHall=Logical(categoryEditor).OfType<Tickets.App.HallView>().Single();
             var planSelector=Logical(categoryEditor).OfType<ComboBox>().Skip(1).First();Check(planSelector.SelectedIndex==-1,"new pricing editor starts without an existing plan selected");
@@ -365,7 +374,7 @@ internal static class Program
             var categoryCells=priceSummary.Children.OfType<Border>().ToArray();
             Check(priceSummary.RowDefinitions.Count==3&&priceSummary.ColumnDefinitions.Count==2&&categoryCells.Length==4,"pricing categories fill three rows before adding the next summary column");
             Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(2,0),(0,1)}),"pricing summary orders categories downward then into the next column");
-            Check(categoryCells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount:N0} ₽ × 1 = {amount:N0} ₽")),"colored pricing summary uses descending amounts with quantity and total");
+            Check(categoryCells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount}₽×1={amount}₽")),"colored pricing summary uses descending amounts with quantity and total");
             Check(categoryCells.All(cell=>cell.Background is SolidColorBrush&&((TextBlock)cell.Child).Foreground is SolidColorBrush&&cell.ActualWidth>50&&cell.ActualHeight>20),"pricing summary renders colored readable cells above the hall");categoryEditor.Close();
             var copyEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId,(long?)planId})!;copyEditor.Show();Pump();
             Check(Field(copyEditor,"Название новой расценовки").Text=="","loaded pricing copy leaves the new name empty");
@@ -454,7 +463,7 @@ internal static class Program
             ((TextBox)main.FindName("SearchBox")).Text="no-such-performance-unique";Pump();
             Check(((Grid)main.FindName("Workspace")).Visibility==Visibility.Collapsed&&!((Button)main.FindName("IssueButton")).IsEnabled,"empty search clears previous show and issuance context");
             main.SeparateWindows=false;
-            CheckInvoiceMergeSelection(store);
+            CheckInvoiceMergeSelection(store,main);
             var hostType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EditorWindow")!;
             var guardEditor=(Window)Activator.CreateInstance(hostType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object[]{store,"Проверка закрытия",650d,450d},null)!;guardEditor.Content=new StackPanel();
             var refuseClose=true;guardEditor.Closing+=(_,e)=>e.Cancel=refuseClose;
@@ -523,11 +532,20 @@ internal static class Program
         var editor=(Window)Activator.CreateInstance(blankType,store)!;editor.Show();Pump();
         try
         {
-            var grids=Logical(editor).OfType<DataGrid>().ToArray();
-            Check(grids.Length==2&&grids.All(grid=>!grid.IsReadOnly),"blank positions and field coordinates are editable despite the shared grid style");
-            var fields=grids.Single(grid=>grid.Columns.OfType<DataGridCheckBoxColumn>().Any());
-            Check(fields.Columns.OfType<DataGridCheckBoxColumn>().Any(column=>Equals(column.Header,"Печатать")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="Enabled"),"blank fields expose a Russian print checkbox column");
-            Check(fields.Columns.OfType<DataGridTextColumn>().Any(column=>Equals(column.Header,"Поле")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="DisplayName")&&fields.Items.Cast<TicketBlankField>().Any(field=>field.DisplayName=="Мероприятие"),"blank field names display Russian captions");
+            Check(!Logical(editor).OfType<DataGrid>().Any(),"blank editor uses visual field selection instead of coordinate tables");
+            Click(editor,"Новый А4 · 4 билета");Pump();
+            var draft=(TicketBlank)blankType.GetField("blank",flags)!.GetValue(editor)!;
+            Check(draft.PageWidth==210&&draft.PageHeight==297&&draft.Positions.Count==4,"new blank starts with four ticket blocks on A4");
+            var fieldChoice=(ComboBox)blankType.GetField("fieldChoice",flags)!.GetValue(editor)!;fieldChoice.SelectedIndex=0;Pump();
+            var properties=(StackPanel)blankType.GetField("properties",flags)!.GetValue(editor)!;
+            var printField=properties.Children.OfType<CheckBox>().Single();
+            Check(Equals(printField.Content,"Печатать поле")&&printField.GetBindingExpression(CheckBox.IsCheckedProperty)?.ParentBinding.Path.Path=="Enabled","selected blank field exposes its print checkbox");
+            var propertyBoxes=properties.Children.OfType<TextBox>().ToArray();
+            Check(new[]{"X","Y","Width","Height","FontFamily","FontSize","Rotation"}.All(path=>propertyBoxes.Any(box=>box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path==path)),"selected blank field exposes geometry typography and rotation properties");
+            var xBox=propertyBoxes.Single(box=>box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path=="X");
+            var field=(TicketBlankField)xBox.GetBindingExpression(TextBox.TextProperty)!.ParentBinding.Source;
+            var changedX=field.X+1;xBox.Text=changedX.ToString(System.Globalization.CultureInfo.CurrentCulture);xBox.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
+            Check(field.X==changedX,"numeric visual-field property writes through to editable ticket model");
             var paper=(Canvas)blankType.GetField("paper",flags)!.GetValue(editor)!;
             Check(paper.Width>0&&paper.Height>0&&paper.ActualWidth>0&&paper.ActualHeight>0,"blank editor renders a paper preview with positive physical dimensions");
             var templates=(ComboBox)blankType.GetField("templates",flags)!.GetValue(editor)!;
@@ -623,7 +641,16 @@ internal static class Program
             {
                 preview=app.Windows.Cast<Window>().Single(window=>window.IsVisible&&window.Title.StartsWith("Предварительный просмотр печати · ",StringComparison.Ordinal));
                 Check(ReferenceEquals(preview.Owner,documentWindow)||preview.Owner is not null,"print preview opens inside the current application");
-                Check(Logical(preview).OfType<DocumentViewer>().Any(viewer=>viewer.Document is not null),"print preview renders paginated content before any print job");
+                var pages=Logical(preview).OfType<DocumentPageView>().ToArray();
+                Check(pages.Length>0&&pages.All(page=>page.DocumentPaginator is not null),"print preview renders paginated content before any print job");
+                Check(!Logical(preview).OfType<DocumentViewer>().Any(),"print preview excludes native-dialog print controls");
+                var settings=Logical(preview).OfType<ComboBox>().ToArray();
+                Check(settings.Length>=3&&settings.Any(box=>box.Items.Contains("Книжная")&&box.Items.Contains("Альбомная")),"shared print preview exposes printer paper and orientation settings");
+                var orientation=settings.Single(box=>box.Items.Contains("Книжная"));var originalOrientation=orientation.SelectedIndex;
+                orientation.SelectedIndex=1-originalOrientation;Pump();
+                var rotated=Logical(preview).OfType<DocumentPageView>().First().DocumentPaginator.GetPage(0).Size;
+                Check(orientation.SelectedIndex==1?rotated.Width>rotated.Height:rotated.Height>rotated.Width,"changing print orientation rebuilds the actual preview page geometry");
+                orientation.SelectedIndex=originalOrientation;Pump();
                 Check(Logical(preview).OfType<Button>().Any(button=>Equals(button.Content,"Печатать")),"preview requires a separate explicit print action");
             }
             catch(Exception ex){error=ex;}
@@ -692,7 +719,7 @@ internal static class Program
         Check(paginator.PageCount>0&&paginator.GetPage(0).Visual is not null,caption+" document paginates");
         Check(ReferenceEquals(viewer.Document,document)&&document.ContentStart.HasValidLayout,caption+" pagination preserves the live preview layout");
     }
-    private static void CheckInvoiceMergeSelection(Store store)
+    private static void CheckInvoiceMergeSelection(Store store,Tickets.App.MainWindow main)
     {
         var venue=store.CreateHall("UI merge hall","",Enumerable.Range(0,4).Select(index=>new DraftSeat{Row="1",Number=(index+1).ToString(),X=index*24}).ToArray());
         var seats=store.VenueSeats(venue).Select(seat=>seat.Id).ToArray();var plan=store.SavePlan(venue,"UI merge plan",seats.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
@@ -700,6 +727,19 @@ internal static class Program
         var first=store.Issue(eventId,new[]{seats[0]},"UI merge recipient","UIM",1);
         var second=store.Issue(eventId,new[]{seats[1]}," ui merge recipient ","UIM",2);
         var other=store.Issue(eventId,new[]{seats[2]},"UI other merge recipient","UIM",3);
+        typeof(Tickets.App.MainWindow).GetMethod("RefreshCatalogNavigation",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
+        var history=(DataGrid)main.FindName("HistoryGrid");var tabs=Logical(main).OfType<TabControl>().Single(tab=>Logical(tab).Contains(history));
+        var previousTab=tabs.SelectedIndex;tabs.SelectedIndex=1;Pump();main.Activate();
+        var merge=(Button)main.FindName("MergeInvoicesButton");
+        Check(merge.Visibility==Visibility.Collapsed&&!Logical(tabs).OfType<Button>().Any(button=>Equals(button.Content,"Открыть накладную")),"journal initially hides merge and uses row opening without duplicate action");
+        var journalBoxes=Visual(history).OfType<CheckBox>().Where(box=>box.Tag is long).ToArray();
+        Check(journalBoxes.Length==3,"journal exposes one inline merge checkbox per invoice");
+        var firstBox=journalBoxes.Single(box=>Equals(box.Tag,first));NativeClick(firstBox);Pump();
+        Check(firstBox.IsChecked==true&&merge.Visibility==Visibility.Collapsed&&!Application.Current.Windows.Cast<Window>().Any(window=>window.IsVisible&&window.GetType().Name=="InvoiceWindow"),"one inline journal check selects invoice without opening its document");
+        var secondBox=journalBoxes.Single(box=>Equals(box.Tag,second));secondBox.IsChecked=true;Pump();
+        Check(merge.IsVisible,"checking a second journal invoice reveals merge");
+        secondBox.IsChecked=false;Pump();Check(merge.Visibility==Visibility.Collapsed,"unchecking back to one invoice hides contextual merge");
+        firstBox.IsChecked=false;tabs.SelectedIndex=previousTab;Pump();
         var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.InvoiceMergeWindow")!;
         var window=(Window)Activator.CreateInstance(type,BindingFlags.Instance|BindingFlags.NonPublic,null,new object?[]{store,eventId,new long[]{first}},null)!;window.Show();Pump();
         try
@@ -757,7 +797,11 @@ internal static class Program
         mode.SelectedIndex=0;Pump();var detailBounds=detail.TransformToAncestor(main).TransformBounds(new Rect(detail.RenderSize));
         Check(detail.IsVisible&&!summary.IsVisible&&hall.Selected.SetEquals(selection)&&Math.Abs(summaryBounds.Left-detailBounds.Left)<1&&Math.Abs(summaryBounds.Width-detailBounds.Width)<1,"details and price summary occupy the same sidebar area");
         var legend=(Grid)main.FindName("LegendPanel");Check(legend.RowDefinitions.Count==3&&legend.Children.OfType<Border>().Any(),"main prices use three rows per legend column");
-        var cells=legend.Children.OfType<Border>().ToArray();Check(cells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(Enumerable.Range(0,cells.Length).Select(index=>(index%3,index/3))),"main price legend fills each column downward");
+        var cells=legend.Children.OfType<Border>().ToArray();
+        Check(legend.ColumnDefinitions.All(column=>column.Width.IsAuto)&&cells.All(cell=>cell.Child is TextBlock {TextWrapping:TextWrapping.NoWrap,FontSize:14.3,FontWeight:var weight}&&weight==FontWeights.Bold),"main price legend retains unbroken bold expressions in content-sized columns");
+        var priceGroups=store.Seats(store.Events().Single(show=>show.Title=="UI event").Id).Where(seat=>seat.Amount.HasValue&&!seat.IsBlocked).GroupBy(seat=>seat.Amount!.Value).OrderByDescending(group=>group.Key);
+        Check(cells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(priceGroups.Select(group=>$"{group.Key:0.##}₽×{group.Count()}={group.Sum(seat=>(decimal)seat.Amount!.Value):0.##}₽")),"main price legend shows exact compact price quantity and sum");
+        Check(cells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(Enumerable.Range(0,cells.Length).Select(index=>(index%3,index/3))),"main price legend fills each column downward");
         NativeClick(cells[0]);Pump();Check(hall.FocusPrice.HasValue&&hall.Selected.SetEquals(selection),"clicking price legend focuses its price without changing selection");
         NativeClick(legend.Children.OfType<Border>().First());Pump();Check(hall.FocusPrice is null&&hall.Selected.SetEquals(selection),"clicking focused price again restores all prices without changing selection");
         var recipient=(ComboBox)main.FindName("RecipientBox");recipient.ApplyTemplate();var input=(TextBox)recipient.Template.FindName("PART_EditableTextBox",recipient);
@@ -778,18 +822,16 @@ internal static class Program
         Check(actions.Columns==3&&actions.Children.OfType<Button>().Count()==3&&actions.Children.OfType<Button>().All(button=>button.ActualWidth==72&&button.ActualHeight==72),"sidebar has three compact square actions in three columns");
         Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
-        Check(ReferenceEquals(print.Parent,extend.Parent)&&ReferenceEquals(issue.Parent,extend.Parent)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and invoice issuance share the upper extension toolbar");
-        foreach(var action in new[]{print,issue,extend})
-        {
-            var toolbar=(FrameworkElement)extend.Parent;var bounds=action.TransformToAncestor(toolbar).TransformBounds(new Rect(action.RenderSize));
-            Check(bounds.Left>=0&&bounds.Right<=toolbar.ActualWidth+1&&action.ActualWidth>0,"upper primary action fits without horizontal scrolling: "+action.Name);
-        }
+        var upper=(Grid)main.FindName("UpperActions");var toolbarScroll=(ScrollViewer)upper.Parent;
+        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Vertical}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,upper)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance form a vertical stack in the show toolbar");
+        Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==3&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
+        Check(toolbarScroll.HorizontalScrollBarVisibility==ScrollBarVisibility.Auto&&toolbarScroll.VerticalScrollBarVisibility==ScrollBarVisibility.Disabled&&Grid.GetColumnSpan(toolbarScroll)==1,"show toolbar scrolls horizontally within the hall column");
         Check(print.ActualWidth==72&&print.ActualHeight==72&&issue.ActualWidth==72&&issue.ActualHeight==72&&Equals(print.Style,issue.Style),"main printing and issuance use the same compact square style");
-        var topActions=Logical((DependencyObject)extend.Parent).OfType<Button>().Where(button=>button.IsVisible).ToArray();
-        var actionRow=topActions.Select(button=>button.TransformToAncestor((Visual)extend.Parent).TransformBounds(new Rect(button.RenderSize))).ToArray();
-        Check(actionRow.Length>=5&&actionRow.Max(rect=>rect.Top)-actionRow.Min(rect=>rect.Top)<2,"all show actions render on one row");
-        var printBounds=print.TransformToAncestor((Visual)extend.Parent).TransformBounds(new Rect(print.RenderSize));
-        Check(topActions.Where(button=>button!=print&&button!=issue).All(button=>button.TransformToAncestor((Visual)extend.Parent).TransformBounds(new Rect(button.RenderSize)).Right<=printBounds.Left+1),"printing and issuance sit to the right of other show actions");
+        var whiteActions=upper.Children.OfType<Button>().ToArray();
+        var whiteBounds=whiteActions.Select(button=>button.TransformToAncestor(upper).TransformBounds(new Rect(button.RenderSize))).ToArray();
+        Check(whiteActions.Length==3&&whiteBounds.Max(rect=>rect.Top)-whiteBounds.Min(rect=>rect.Top)<2&&whiteActions.All(button=>double.IsNaN(button.Width)&&button.FontSize==14),"three white show actions retain their type size and share one row");
+        var printBounds=print.TransformToAncestor(upper).TransformBounds(new Rect(print.RenderSize));var issueBounds=issue.TransformToAncestor(upper).TransformBounds(new Rect(issue.RenderSize));
+        Check(whiteBounds.All(rect=>rect.Right<=printBounds.Left+1)&&Math.Abs(printBounds.Left-issueBounds.Left)<1&&issueBounds.Top>=printBounds.Bottom,"colored actions sit immediately right of extension with printing above issuance");
         var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
         var dateBounds=date.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(date.RenderSize));
         var titleBounds=title.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(title.RenderSize));
@@ -797,7 +839,12 @@ internal static class Program
         Console.WriteLine($"Sidebar normal viewport: window {main.ActualWidth}x{main.ActualHeight}; sidebar {sidebar.ActualHeight}; list {list.ActualHeight}; explicit height {list.Height}");
         Check(double.IsNaN(list.Height)&&list.ActualHeight>=220,"selected places fill available height at 1420 by 880");
         var workspace=(Grid)main.FindName("Workspace");var sidebarBounds=sidebar.TransformToAncestor(workspace).TransformBounds(new Rect(sidebar.RenderSize));
-        Check(sidebarBounds.Top>=workspace.RowDefinitions[0].ActualHeight+workspace.RowDefinitions[1].ActualHeight-1&&sidebarBounds.Bottom>=workspace.ActualHeight-1,"sidebar begins below the full-width show actions and spans the hall area");
+        Check(Grid.GetRow(sidebar)==0&&Grid.GetRowSpan(sidebar)==3&&sidebarBounds.Top<=1&&sidebarBounds.Bottom>=workspace.ActualHeight-1,"selection sidebar spans from the workspace top through the hall area");
+        var selectedSummary=(TextBlock)main.FindName("SelectedSummary");var recipient=(ComboBox)main.FindName("RecipientBox");
+        Check(Logical(sidebar).Contains(selectedSummary)&&Logical(sidebar).Contains(recipient),"selection summary recipient and selected-place list share one sidebar");
+        var recipientBounds=recipient.TransformToAncestor(sidebar).TransformBounds(new Rect(recipient.RenderSize));var selectedBounds=selectedSummary.TransformToAncestor(sidebar).TransformBounds(new Rect(selectedSummary.RenderSize));
+        var normalListBounds=list.TransformToAncestor(sidebar).TransformBounds(new Rect(list.RenderSize));
+        Check(selectedBounds.Bottom<=recipientBounds.Top&&recipientBounds.Bottom<=normalListBounds.Top&&normalListBounds.Top-recipientBounds.Bottom<90,"recipient and selected-place list remain contiguous below the selection summary");
         foreach(var button in actions.Children.OfType<Button>())
         {
             var bounds=button.TransformToAncestor(sidebar).TransformBounds(new Rect(button.RenderSize));
@@ -818,10 +865,11 @@ internal static class Program
             foreach(var scale in new[]{1.25,1.5})
             {
                 mainRoot.LayoutTransform=new ScaleTransform(scale,scale);Pump();main.UpdateLayout();Pump();
-                var upper=(FrameworkElement)extend.Parent;var rects=topActions.Select(button=>button.TransformToAncestor(upper).TransformBounds(new Rect(button.RenderSize))).ToArray();
-                Check(rects.All(rect=>rect.Left>=-1&&rect.Right<=upper.ActualWidth+1)&&rects.Max(rect=>rect.Top)-rects.Min(rect=>rect.Top)<2,"show actions remain on one visible row at "+scale+" layout scale");
-                foreach(var button in new[]{print,issue})
+                var rects=whiteActions.Select(button=>button.TransformToAncestor(upper).TransformBounds(new Rect(button.RenderSize))).ToArray();
+                Check(rects.Max(rect=>rect.Top)-rects.Min(rect=>rect.Top)<2&&whiteActions.All(button=>button.FontSize==14),"show actions preserve one row and readable type at "+scale+" layout scale");
+                foreach(var button in whiteActions.Concat(new[]{print,issue}))
                 {
+                    button.BringIntoView();Pump();
                     var wasEnabled=button.IsEnabled;button.IsEnabled=true;
                     try
                     {
@@ -872,6 +920,32 @@ internal static class Program
         Check(anchorAfter==anchor,"edge marquee preserves its world anchor");
         Check(expected.Count>0&&hall.Selected.SetEquals(expected),"edge marquee selects every seat in its final rectangle");
     }
+    private static void SaveDocumentThroughDialog(Window owner,string path)
+    {
+        Exception? error=null;var submitted=false;var started=DateTime.UtcNow;
+        var timer=new DispatcherTimer(DispatcherPriority.Send){Interval=TimeSpan.FromMilliseconds(100)};
+        timer.Tick+=(_,_)=>EnumWindows((window,_)=>{
+            GetWindowThreadProcessId(window,out var process);if(process!=(uint)Environment.ProcessId)return true;
+            var title=new System.Text.StringBuilder(256);GetWindowText(window,title,title.Capacity);
+            if(title.ToString()!="Сохранить документ")return true;
+            try
+            {
+                IntPtr fileName=IntPtr.Zero;
+                EnumChildWindows(window,(child,_)=>{var name=new System.Text.StringBuilder(64);GetClassName(child,name,name.Capacity);if(name.ToString()=="Edit"&&GetDlgCtrlID(child)==1001)fileName=child;return true;},IntPtr.Zero);
+                if(fileName==IntPtr.Zero){if(DateTime.UtcNow-started>TimeSpan.FromSeconds(10))throw new Exception("Save dialog filename edit was not found");return true;}
+                Check(SetWindowText(fileName,path),"native save dialog accepts chosen full document path");
+                submitted=true;timer.Stop();PostMessage(window,0x111,new IntPtr(1),IntPtr.Zero);
+            }
+            catch(Exception ex){error=ex;timer.Stop();PostMessage(window,0x111,new IntPtr(2),IntPtr.Zero);}
+            return true;
+        },IntPtr.Zero);
+        expectedSaveDialog=true;timer.Start();
+        try{Click(owner,"Сохранить");if(error is not null)throw error;Check(submitted,"manual Save opens the application's document save dialog");}
+        finally{timer.Stop();expectedSaveDialog=false;}
+    }
+    [DllImport("user32.dll")]private static extern int GetDlgCtrlID(IntPtr window);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern bool SetWindowText(IntPtr window,string text);
+    [DllImport("user32.dll")]private static extern bool PostMessage(IntPtr window,uint message,IntPtr wParam,IntPtr lParam);
     private static void WaitForInput()
     {
         var frame=new DispatcherFrame();var timer=new DispatcherTimer(DispatcherPriority.Background){Interval=TimeSpan.FromMilliseconds(80)};

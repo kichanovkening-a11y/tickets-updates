@@ -39,10 +39,10 @@ public partial class MainWindow
         var groups=seats.Where(s=>s.Amount.HasValue&&!s.IsBlocked).GroupBy(s=>s.Amount!.Value).OrderByDescending(g=>g.Key).ToList();
         for(var i=0;i<groups.Count;i++)
         {
-            if(i%3==0)LegendPanel.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});
+            if(i%3==0)LegendPanel.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
             var group=groups[i];var price=group.Key;
-            var text=new TextBlock{Text=$"{price:N0} ₽ × {group.Count()} = {group.Sum(s=>(decimal)s.Amount!.Value):N0} ₽",TextWrapping=TextWrapping.Wrap,FontSize=14.3,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
-            var button=new Border{Child=text,Background=HallView.SeatBrush(group.First().Color),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,0,8,4),BorderThickness=new Thickness(Hall.FocusPrice==price?3:1),BorderBrush=Hall.FocusPrice==price?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
+            var text=new TextBlock{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.NoWrap,FontSize=14.3,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
+            var button=new Border{Child=text,HorizontalAlignment=HorizontalAlignment.Left,Background=HallView.SeatBrush(group.First().Color),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,0,8,4),BorderThickness=new Thickness(Hall.FocusPrice==price?3:1),BorderBrush=Hall.FocusPrice==price?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
             button.MouseLeftButtonDown+=(_,e)=>{SetPriceFocus(Hall.FocusPrice==price?null:price);e.Handled=true;};
             Grid.SetRow(button,i%3);Grid.SetColumn(button,i/3);LegendPanel.Children.Add(button);
         }

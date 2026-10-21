@@ -30,6 +30,15 @@ function Read-Scalars($value) {
             $result[$property.Name] = $v
         } catch { $result[$property.Name] = @{ getterError = $_.Exception.Message } }
     }
+    foreach ($field in $value.GetType().GetFields([Reflection.BindingFlags]'Instance,Public') | Sort-Object Name) {
+        $type = $field.FieldType
+        if (-not ($type.IsPrimitive -or $type.IsEnum -or $type -eq [string] -or $type -eq [decimal])) { continue }
+        try {
+            $v = $field.GetValue($value)
+            if ($type.IsEnum) { $v = [string]$v }
+            $result[$field.Name] = $v
+        } catch { $result[$field.Name] = @{ getterError = $_.Exception.Message } }
+    }
     return $result
 }
 # Runtime releases expose different optional metadata collections. Geometry is
@@ -85,6 +94,22 @@ foreach ($file in $files) {
             }
             $sections += [ordered]@{ properties = Read-Scalars $section; format = Property-Scalars $section 'SectionFormat'; objects = $objects }
         }
+        # RAS exposes rotation and formatting omitted from the Engine API.
+        # Read only; do not invoke any controller modification methods.
+        $rasObjects = @()
+        try {
+            foreach ($rasObject in $report.ReportClientDocument.ReportDefController.ReportObjectController.GetAllReportObjects()) {
+                $rasProperties = Read-Scalars $rasObject
+                foreach ($name in @('Name','Kind','Left','Top','Width','Height')) {
+                    try { $rasProperties[$name] = $rasObject.$name } catch { }
+                }
+                $rasFormat = [ordered]@{}
+                foreach ($name in @('TextRotationAngle','EnableSuppress','HorizontalAlignment','EnableCanGrow')) {
+                    try { $rasFormat[$name] = [string]$rasObject.Format.$name } catch { }
+                }
+                $rasObjects += [ordered]@{ properties = $rasProperties; format = $rasFormat }
+            }
+        } catch { $script:metadataWarnings += "RAS metadata failed: $($_.Exception.Message)" }
         $formulas = @()
         foreach ($formula in (Get-OptionalValue $report.DataDefinition 'FormulaFields')) { $formulas += Read-Scalars $formula }
         $databaseFields = @()
@@ -103,7 +128,7 @@ foreach ($file in $files) {
             printOptions = Read-Scalars $report.PrintOptions
             pageMargins = Property-Scalars $report.PrintOptions 'PageMargins'
             sections = $sections; formulas = $formulas; parameters = $parameters; databaseFields = $databaseFields
-            metadataWarnings = $script:metadataWarnings
+            metadataWarnings = $script:metadataWarnings; rasObjects = $rasObjects
         }
         $output = Join-Path $destination ($file.BaseName + '.layout.json')
         $record | ConvertTo-Json -Depth 30 | Set-Content -LiteralPath $output -Encoding UTF8

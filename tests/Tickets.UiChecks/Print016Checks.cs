@@ -39,16 +39,27 @@ internal static class Print016Checks
 
         var main=(Tickets.App.MainWindow)Application.Current.MainWindow;
         var previous=main.SeparateWindows;main.SeparateWindows=false;
-        var before=Application.Current.Windows.OfType<Window>().Count(w=>w.IsVisible);var inspected=false;var built=false;
+        var before=Application.Current.Windows.OfType<Window>().Count(w=>w.IsVisible);var inspected=false;var built=false;Exception? previewError=null;var deadline=DateTime.UtcNow.AddSeconds(10);
         var timer=new DispatcherTimer{Interval=TimeSpan.FromMilliseconds(30)};
         timer.Tick+=(_,_)=>
         {
             var host=Logical(main).OfType<ContentControl>().FirstOrDefault(c=>c.Tag?.GetType().Name=="PrintPreviewWindow");
-            if(host is null)return;
+            if(host is null)
+            {
+                if(DateTime.UtcNow<deadline)return;
+                timer.Stop();previewError=new Exception("Print preview was not embedded within ten seconds");
+                foreach(var pending in Application.Current.Windows.Cast<Window>().Where(w=>w.GetType().Name=="PrintPreviewWindow").ToArray())pending.Close();
+                return;
+            }
             timer.Stop();var editor=(Window)host.Tag;
+            try
+            {
             Check(Application.Current.Windows.OfType<Window>().Count(w=>w.IsVisible)==before,"embedded print preview creates no visible top-level window");
             Check(!editor.IsVisible&&!editor.ShowInTaskbar&&host.ActualHeight>0&&host.ActualHeight<=main.ActualHeight,"print preview fits the embedded host without taskbar entry");
-            inspected=true;editor.Close();
+            inspected=true;
+            }
+            catch(Exception ex){previewError=ex;}
+            finally{editor.Close();}
         };
         timer.Start();
         try
@@ -59,6 +70,7 @@ internal static class Print016Checks
                 built=true;return new FixedDocument();
             };
             previewType.GetMethod("Show",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,new object?[]{main,"UI016",build,(Action<PrintDialog,FixedDocument>)((_,_)=>throw new Exception("cancel submitted print")),true,null,new Size(100,200)});
+            if(previewError is not null)throw previewError;
             Check(inspected&&built,"embedded print preview exercised and cancelled");
         }
         finally{timer.Stop();main.SeparateWindows=previous;}

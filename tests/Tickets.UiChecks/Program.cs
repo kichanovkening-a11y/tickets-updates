@@ -267,10 +267,14 @@ internal static class Program
             CheckTicketBlankPreview(store,eventId,originalInvoice);
             Print014Checks.Run(store);
             FourUp015Checks.Run(store);
-            Blank016Checks.Run(store);
-            Docs016Checks.Run(store);
-            Print016Checks.Run(store);
-            Journal016Checks.Run(store);
+            void Isolated(string name,Action<Store> check)
+            {
+                var folder=Path.Combine(work,name);Directory.CreateDirectory(folder);var isolatedDb=Path.Combine(folder,"tickets.db");File.Copy(args[0],isolatedDb);check(new Store(isolatedDb));
+            }
+            Isolated("blank016",Blank016Checks.Run);
+            Isolated("docs016",Docs016Checks.Run);
+            Isolated("print016",Print016Checks.Run);
+            Isolated("journal016",Journal016Checks.Run);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
             Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
             Exception? mixedPreviewError=null;
@@ -826,7 +830,7 @@ internal static class Program
         Check(legend.ColumnDefinitions.All(column=>column.Width.IsAuto)&&cells.All(cell=>cell.Child is TextBlock {TextWrapping:TextWrapping.NoWrap,FontSize:14.3,FontWeight:var weight}&&weight==FontWeights.Bold),"main price legend retains unbroken bold expressions in content-sized columns");
         var priceGroups=store.Seats(store.Events().Single(show=>show.Title=="UI event").Id).Where(seat=>seat.Amount.HasValue&&!seat.IsBlocked).GroupBy(seat=>seat.Amount!.Value).OrderByDescending(group=>group.Key);
         Check(cells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(priceGroups.Select(group=>$"{group.Key:0.##}₽×{group.Count()}={group.Sum(seat=>(decimal)seat.Amount!.Value):0.##}₽")),"main price legend shows exact compact price quantity and sum");
-        Check(cells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(Enumerable.Range(0,cells.Length).Select(index=>(index%3,index/3))),"main price legend fills each column downward");
+        Check(cells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(Enumerable.Range(0,cells.Length).Select(index=>(index%legend.RowDefinitions.Count,index/legend.RowDefinitions.Count))),"main price legend fills each column downward");
         NativeClick(cells[0]);Pump();Check(hall.FocusPrice.HasValue&&hall.Selected.SetEquals(selection),"clicking price legend focuses its price without changing selection");
         NativeClick(legend.Children.OfType<Border>().First());Pump();Check(hall.FocusPrice is null&&hall.Selected.SetEquals(selection),"clicking focused price again restores all prices without changing selection");
         var recipient=(ComboBox)main.FindName("RecipientBox");recipient.ApplyTemplate();var input=(TextBox)recipient.Template.FindName("PART_EditableTextBox",recipient);
@@ -848,7 +852,7 @@ internal static class Program
         Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
         var upper=(Grid)main.FindName("UpperActions");var toolbarScroll=(ScrollViewer)upper.Parent;
-        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Vertical}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,upper)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance form a vertical stack in the show toolbar");
+        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,upper)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
         Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==3&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
         Check(toolbarScroll.HorizontalScrollBarVisibility==ScrollBarVisibility.Auto&&toolbarScroll.VerticalScrollBarVisibility==ScrollBarVisibility.Disabled&&Grid.GetColumnSpan(toolbarScroll)==1,"show toolbar scrolls horizontally within the hall column");
         Check(print.ActualWidth==72&&print.ActualHeight==72&&issue.ActualWidth==72&&issue.ActualHeight==72&&Equals(print.Style,issue.Style),"main printing and issuance use the same compact square style");

@@ -405,6 +405,8 @@ internal static class Program
     [DllImport("user32.dll")] private static extern void mouse_event(uint flags,uint dx,uint dy,uint data,UIntPtr extra);
     private static void Gesture(Tickets.App.HallView hall,Point from,Point to,bool right=false)
     {
+        // Native resize/activation messages must settle before sampling hall coordinates.
+        Pump();WaitForInput();
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
@@ -532,7 +534,7 @@ internal static class Program
         var listBounds=list.TransformToAncestor(sidebar).TransformBounds(new Rect(list.RenderSize));
         var actionBounds=actions.TransformToAncestor(sidebar).TransformBounds(new Rect(actions.RenderSize));
         Check(listBounds.Bottom<=actionBounds.Top+1&&actionBounds.Bottom<=sidebar.ActualHeight+1,"small viewport keeps selection list and all action rows separate and visible");
-        main.Width=1420;main.Height=880;Pump();
+        main.Width=1420;main.Height=880;Pump();WaitForInput();
     }
     private static void CheckHallNavigation(Tickets.App.HallView hall,SeatInfo[] source)
     {

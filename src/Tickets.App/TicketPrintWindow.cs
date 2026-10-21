@@ -20,7 +20,7 @@ internal sealed class TicketPrintWindow:EditorWindow
     private InvoiceInfo? issuedSnapshot;
     private readonly StackPanel pages=new(){HorizontalAlignment=HorizontalAlignment.Center};
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
-    private readonly ComboBox blankChoice=new(){MinWidth=260,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0)};
+    private readonly ComboBox blankChoice=new(){MinWidth=260,MinHeight=38,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
     private InvoiceInfo? previewInfo;
     private TicketBlank? SelectedBlank=>blankChoice.SelectedItem as TicketBlank;
     public long IssueId{get;private set;}
@@ -45,11 +45,12 @@ internal sealed class TicketPrintWindow:EditorWindow
     {
         var root=new DockPanel{Margin=new Thickness(12)};Content=root;
         var templateBar=new WrapPanel{Margin=new Thickness(0,0,0,10)};
-        templateBar.Children.Add(new TextBlock{Text="На каком бланке печатать:",VerticalAlignment=VerticalAlignment.Center});
-        blankChoice.Items.Add(new {Name="Стандартный"});foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);blankChoice.SelectedIndex=0;
-        templateBar.Children.Add(blankChoice);var manage=new Button{Content="Бланки печати"};templateBar.Children.Add(manage);
-        manage.Click+=(_,_)=>Try(()=>{new TicketBlankWindow(Store).ShowDialog();var id=SelectedBlank?.Id;while(blankChoice.Items.Count>1)blankChoice.Items.RemoveAt(1);foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);blankChoice.SelectedItem=blankChoice.Items.OfType<TicketBlank>().FirstOrDefault(b=>b.Id==id)??blankChoice.Items[0];if(previewInfo is not null)Preview(previewInfo);});
-        blankChoice.SelectionChanged+=(_,_)=>Try(()=>{if(previewInfo is not null)Preview(previewInfo);});
+        templateBar.Children.Add(new TextBlock{Text="На каком бланке печатать:",FontSize=18,FontWeight=FontWeights.Bold,VerticalAlignment=VerticalAlignment.Center});
+        blankChoice.Items.Add(new {Name="Стандартный"});foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);
+        var lastBlankId=Store.LastTicketBlankId;
+        blankChoice.SelectedItem=blankChoice.Items.OfType<TicketBlank>().FirstOrDefault(b=>b.Id==lastBlankId)??blankChoice.Items[0];
+        templateBar.Children.Add(blankChoice);
+        blankChoice.SelectionChanged+=(_,_)=>Try(()=>{Store.RememberTicketBlank(SelectedBlank?.Id);if(previewInfo is not null)Preview(previewInfo);});
         DockPanel.SetDock(templateBar,Dock.Top);root.Children.Add(templateBar);
         DockPanel.SetDock(status,Dock.Top);root.Children.Add(status);
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(actions,Dock.Right);root.Children.Add(actions);
@@ -97,7 +98,7 @@ internal sealed class TicketPrintWindow:EditorWindow
                 try{Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());}
                 catch(Exception ex){MessageBox.Show(DialogOwner,"Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);}
                 Preview(info);status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
-            },landscape:SelectedBlank is {} chosen&&chosen.PageWidth>chosen.PageHeight,preferredMedia:SelectedBlank is {} media?new Size(Mm(media.PageWidth),Mm(media.PageHeight)):null);
+            });
         }
         catch(Exception ex)
         {

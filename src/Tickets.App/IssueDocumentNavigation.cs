@@ -11,13 +11,15 @@ internal static class IssueDocumentNavigation
 {
     internal const string Invoice="invoice",Specification="specification";
 
-    internal static WrapPanel Toolbar(string selected,Action<string> navigate)
+    internal static ScrollViewer Toolbar(string selected,Action<string> navigate)
     {
-        var panel=new WrapPanel{Margin=new Thickness(0,0,0,4)};
+        var panel=new StackPanel{Orientation=Orientation.Horizontal};
         void Add(string key,string caption)
         {
             var active=key==selected;
-            var button=new Button{Content=caption,Width=145,MinHeight=34,Margin=new Thickness(0,0,5,4),
+            // Natural caption widths keep all six documents on one row at the
+            // regular font size. Bypass the shared shrinking/wrapping template.
+            var button=new Button{Content=caption,ContentTemplate=null,Width=double.NaN,MinWidth=60,MinHeight=34,Padding=new Thickness(10,2,10,2),Margin=new Thickness(0,0,5,4),
                 HorizontalContentAlignment=HorizontalAlignment.Center};
             if(active)
             {
@@ -30,7 +32,7 @@ internal static class IssueDocumentNavigation
         Add(Invoice,"Накладная");
         foreach(var kind in IssueDocumentKinds.All)Add(kind,IssueDocumentKinds.Name(kind));
         Add(Specification,"Спецификация");
-        return panel;
+        return new ScrollViewer{Content=panel,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(0,0,0,4)};
     }
 
     internal static void OpenWord(string path,Func<string> create)

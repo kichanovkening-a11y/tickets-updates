@@ -19,6 +19,7 @@ public sealed record TicketBlankField
 public sealed record TicketBlankPosition
 {
     public List<TicketBlankField>? Fields { get; set; }
+    public LegacyTicketLayout? Legacy { get; set; }
     public double X { get; set; } = 10;
     public double Y { get; set; } = 10;
     public double Width { get; set; } = 190;
@@ -60,7 +61,7 @@ public sealed record TicketBlank
             if(a.X<b.X+b.Width-0.001&&b.X<a.X+a.Width-0.001&&a.Y<b.Y+b.Height-0.001&&b.Y<a.Y+a.Height-0.001)
                 throw new TicketException("Позиции билетов на листе не должны перекрываться.");
         }
-        if(Legacy is not null){Legacy.Validate();return;}
+        if(Legacy is not null){Legacy.Validate();foreach(var p in Positions)p.Legacy?.Validate();return;}
         foreach(var activeFields in Positions.Select(p=>p.Fields??Fields))
         {
         if(activeFields is null||activeFields.Count!=FieldKeys.Length||FieldKeys.Any(k=>activeFields.Count(f=>f.Key==k)!=1))throw new TicketException("Бланк должен содержать все восемь полей билета без повторений.");

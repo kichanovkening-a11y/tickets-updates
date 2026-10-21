@@ -9,16 +9,6 @@ public static class FourUpTicketLayouts
         if(ticketCount<=0)return [];
         if(blank.Legacy is not {} layout)throw new TicketException("Выберите исходный макет билета.");
         blank.Validate();
-        var source=new List<(LegacyTicketElement Element,double X,double Y)>();var top=layout.TopMargin;
-        foreach(var kind in new[]{"ReportHeader","PageHeader","Detail","ReportFooter","PageFooter"})
-        foreach(var band in layout.Bands.Where(b=>!b.Suppressed&&b.Kind==kind))
-        {
-            var fields=band.Elements.Where(e=>!e.Suppressed).ToArray();if(fields.Length==0)continue;
-            foreach(var field in fields)source.Add((field,layout.LeftMargin+field.X,top+field.Y));
-            top+=Math.Max(band.Height,fields.Max(f=>f.Y+f.Height));
-        }
-        if(source.Count==0)throw new TicketException("В макете нет печатаемых полей.");
-        var sourceWidth=source.Max(f=>f.X+f.Element.Width);var sourceHeight=source.Max(f=>f.Y+f.Element.Height);
         var pages=new List<LegacyTicketPage>();
         for(var offset=0;offset<ticketCount;offset+=4)
         {
@@ -26,6 +16,18 @@ public static class FourUpTicketLayouts
             for(var index=0;index<4&&offset+index<ticketCount;index++)
             {
                 var position=blank.Positions[index];
+                layout=TicketBlankEditing.LayoutFor(blank,position);
+                var source=new List<(LegacyTicketElement Element,double X,double Y)>();var top=layout.TopMargin;
+                foreach(var kind in new[]{"ReportHeader","PageHeader","Detail","ReportFooter","PageFooter"})
+                foreach(var band in layout.Bands.Where(b=>!b.Suppressed&&b.Kind==kind))
+                {
+                    var fields=band.Elements.Where(e=>!e.Suppressed).ToArray();if(fields.Length==0)continue;
+                    foreach(var field in fields)source.Add((field,layout.LeftMargin+field.X,top+field.Y));
+                    top+=Math.Max(band.Height,fields.Max(f=>f.Y+f.Height));
+                }
+                if(source.Count==0)throw new TicketException("В макете нет печатаемых полей.");
+                var sourceWidth=source.Max(f=>f.X+f.Element.Width);var sourceHeight=source.Max(f=>f.Y+f.Element.Height);
+
                 var normal=Math.Min(1,Math.Min(position.Width/sourceWidth,position.Height/sourceHeight));
                 var rotated=Math.Min(1,Math.Min(position.Width/sourceHeight,position.Height/sourceWidth));
                 var quarterTurn=rotated>normal+.000001;var scale=quarterTurn?rotated:normal;

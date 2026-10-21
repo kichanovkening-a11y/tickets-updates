@@ -35,7 +35,7 @@ public partial class MainWindow
     private void ExtendInvoiceClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(current is null)return;var selected=Hall.SelectedSeats;
         if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите дополнительные свободные места с ценой.");
-        var choice=new InvoiceChoiceWindow(store,current.Id);
+        var choice=new InvoiceChoiceWindow(store,current.Id,RecipientName);
         if(choice.ShowDialog()!=true)return;
         var invoice=store.Invoice(current.Id,choice.SelectedIssueId);
         if(MessageBox.Show(this,$"Добавить {selected.Count} мест в накладную № {invoice.Id} для {invoice.Recipient}?\nОт кого: {invoice.Sender}","Дополнение накладной",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;

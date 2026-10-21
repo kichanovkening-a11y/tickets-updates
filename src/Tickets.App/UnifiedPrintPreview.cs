@@ -14,13 +14,14 @@ internal static class UnifiedPrintPreview
     internal static bool Show(Window owner,string title,Func<PrintDialog,bool,FixedDocument> build,Action<PrintDialog,FixedDocument> submit,bool landscape=false,FrameworkElement? options=null,Size? preferredMedia=null)
     {
         var settings=new PrintDialog{PrintQueue=null,PrintTicket=new PrintTicket()};
-        settings.PrintTicket.PageOrientation=landscape?PageOrientation.Landscape:PageOrientation.Portrait;
-        var window=new Window{Owner=owner,Title="Предварительный просмотр печати · "+title,Width=1120,Height=850,WindowStartupLocation=WindowStartupLocation.CenterOwner};
+        settings.PrintTicket.PageOrientation=PageOrientation.Portrait;
+        settings.PrintTicket.PageMediaSize=A4Media();
+        var window=new PrintPreviewWindow(owner,"Предварительный просмотр печати · "+title);
         var root=new DockPanel{Margin=new Thickness(8)};window.Content=root;
         var toolbar=new WrapPanel{Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(toolbar,Dock.Top);root.Children.Add(toolbar);
         var printers=new ComboBox{Width=270,DisplayMemberPath="FullName",Margin=new Thickness(4)};
         var paper=new ComboBox{Width=170,Margin=new Thickness(4)};
-        var orientation=new ComboBox{Width=120,Margin=new Thickness(4),ItemsSource=new[]{"Книжная","Альбомная"},SelectedIndex=landscape?1:0};
+        var orientation=new ComboBox{Width=120,Margin=new Thickness(4),ItemsSource=new[]{"Книжная","Альбомная"},SelectedIndex=0};
         var copies=new TextBox{Width=45,Text="1",Margin=new Thickness(4),VerticalContentAlignment=VerticalAlignment.Center};
         void Label(string text)=>toolbar.Children.Add(new TextBlock{Text=text,VerticalAlignment=VerticalAlignment.Center});
         Label("Принтер");toolbar.Children.Add(printers);Label("Бумага");toolbar.Children.Add(paper);toolbar.Children.Add(orientation);Label("Копий");toolbar.Children.Add(copies);
@@ -49,7 +50,7 @@ internal static class UnifiedPrintPreview
             try{build(settings,false);}catch(PrintAreaWarning ex){warning=" · Внимание: "+ex.Message;}
             summary.Text=$"{settings.PrintQueue?.FullName??"Принтер не выбран"} · {size.Width*25.4/96:0.#} × {size.Height*25.4/96:0.#} мм · {orientation.SelectedItem} · Копий: {settings.PrintTicket.CopyCount} · Страниц: {pages.Pages.Count}"+warning;
         }
-        void Safe(Action action){try{action();}catch(Exception ex){pages=null;pagesPanel.Children.Clear();print.IsEnabled=false;summary.Text=ex.Message;MessageBox.Show(window,ex.Message,"Параметры печати",MessageBoxButton.OK,MessageBoxImage.Warning);return;}print.IsEnabled=pages is not null&&settings.PrintQueue is not null;}
+        void Safe(Action action){try{action();}catch(Exception ex){pages=null;pagesPanel.Children.Clear();print.IsEnabled=false;summary.Text=ex.Message;MessageBox.Show(window.DialogOwnerForHost,ex.Message,"Параметры печати",MessageBoxButton.OK,MessageBoxImage.Warning);return;}print.IsEnabled=pages is not null&&settings.PrintQueue is not null;}
         void LoadPaper()
         {
             var wasReady=ready;ready=false;
@@ -57,15 +58,13 @@ internal static class UnifiedPrintPreview
             {
             if(printers.SelectedItem is PrintQueue queue){settings.PrintQueue=queue;settings.PrintTicket=queue.DefaultPrintTicket??new PrintTicket();}
             else settings.PrintQueue=null;
-            var selected=settings.PrintTicket.PageMediaSize;
+            var selected=paper.SelectedItem is PaperChoice previous?previous.Size:null;
             var supported=settings.PrintQueue?.GetPrintCapabilities(settings.PrintTicket).PageMediaSizeCapability;
             paper.Items.Clear();
             if(supported is not null)foreach(var size in supported.Where(p=>p.Width>0&&p.Height>0))paper.Items.Add(new PaperChoice(size));
-            if(paper.Items.Count==0)
-                paper.Items.Add(new PaperChoice(preferredMedia is {} custom?new PageMediaSize(Math.Min(custom.Width,custom.Height),Math.Max(custom.Width,custom.Height)):new PageMediaSize(PageMediaSizeName.ISOA4,793.7,1122.5)));
-            paper.SelectedItem=(preferredMedia is {} preferred?paper.Items.OfType<PaperChoice>().OrderBy(p=>Math.Abs(Math.Min(p.Size.Width??0,p.Size.Height??0)-Math.Min(preferred.Width,preferred.Height))+Math.Abs(Math.Max(p.Size.Width??0,p.Size.Height??0)-Math.Max(preferred.Width,preferred.Height))).FirstOrDefault():null)
-                ??paper.Items.OfType<PaperChoice>().FirstOrDefault(p=>p.Size.PageMediaSizeName==selected?.PageMediaSizeName)??paper.Items[0];
-            preferredMedia=null;
+            if(!paper.Items.OfType<PaperChoice>().Any(p=>p.Size.PageMediaSizeName==PageMediaSizeName.ISOA4))paper.Items.Add(new PaperChoice(A4Media()));
+            var selectedMedia=SelectMedia(paper.Items.OfType<PaperChoice>().Select(p=>p.Size),selected);
+            paper.SelectedItem=paper.Items.OfType<PaperChoice>().First(p=>ReferenceEquals(p.Size,selectedMedia));
             }
             finally{ready=wasReady;}
         }
@@ -76,10 +75,10 @@ internal static class UnifiedPrintPreview
         {
             if(settings.PrintQueue is null)throw new InvalidOperationException("Выберите установленный принтер для печати.");
             Rebuild();if(pages is null)return;
-            try{build(settings,false);}catch(PrintAreaWarning ex){if(!ConfirmOverflow(window,ex.Message))return;}
+            try{build(settings,false);}catch(PrintAreaWarning ex){if(!ConfirmOverflow(window.DialogOwnerForHost,ex.Message))return;}
             submit(settings,pages);completed=true;window.Close();
         });
-        window.CommandBindings.Add(new CommandBinding(ApplicationCommands.Print,(_,e)=>{e.Handled=true;print.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}));
+        root.CommandBindings.Add(new CommandBinding(ApplicationCommands.Print,(_,e)=>{e.Handled=true;print.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}));
         try
         {
             using var server=new LocalPrintServer();
@@ -91,6 +90,17 @@ internal static class UnifiedPrintPreview
         catch{settings.PrintQueue=null;}
         LoadPaper();ready=true;Safe(Rebuild);
         window.ShowDialog();return completed;
+    }
+    internal static PageMediaSize A4Media()=>new(PageMediaSizeName.ISOA4,210*96/25.4,297*96/25.4);
+    internal static PageMediaSize SelectMedia(IEnumerable<PageMediaSize> supported,PageMediaSize? explicitlySelected=null)
+    {
+        var media=supported.ToArray();
+        if(explicitlySelected is not null)
+        {
+            var match=media.FirstOrDefault(p=>p.PageMediaSizeName==explicitlySelected.PageMediaSizeName&&Math.Abs((p.Width??0)-(explicitlySelected.Width??0))<1&&Math.Abs((p.Height??0)-(explicitlySelected.Height??0))<1);
+            if(match is not null)return match;
+        }
+        return media.FirstOrDefault(p=>p.PageMediaSizeName==PageMediaSizeName.ISOA4)??A4Media();
     }
     internal static Size PageSize(PrintDialog settings)
     {
@@ -105,12 +115,12 @@ internal static class UnifiedPrintPreview
     }
     private static bool ConfirmOverflow(Window owner,string message)
     {
-        var dialog=new Window{Owner=owner,Title="Поле за печатной областью",Width=560,SizeToContent=SizeToContent.Height,WindowStartupLocation=WindowStartupLocation.CenterOwner,ResizeMode=ResizeMode.NoResize};
+        var dialog=new PrintPreviewWindow(owner,"Поле за печатной областью",650,450);
         var panel=new StackPanel{Margin=new Thickness(18)};dialog.Content=panel;
         panel.Children.Add(new TextBlock{Text=message+"\nЧасть текста может не попасть на бумагу. Исходные координаты и масштаб будут сохранены.",TextWrapping=TextWrapping.Wrap});
         var actions=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0,16,0,0)};panel.Children.Add(actions);
-        var cancel=new Button{Content="Отмена",IsCancel=true,Padding=new Thickness(12,8,12,8),Margin=new Thickness(0,0,8,0)};actions.Children.Add(cancel);
-        var proceed=new Button{Content="Всё равно распечатать",Padding=new Thickness(12,8,12,8)};actions.Children.Add(proceed);proceed.Click+=(_,_)=>dialog.DialogResult=true;
+        var cancel=new Button{Content="Отмена",Padding=new Thickness(12,8,12,8),Margin=new Thickness(0,0,8,0)};actions.Children.Add(cancel);cancel.Click+=(_,_)=>dialog.Close();
+        var proceed=new Button{Content="Всё равно распечатать",Padding=new Thickness(12,8,12,8)};actions.Children.Add(proceed);proceed.Click+=(_,_)=>dialog.Confirm();
         return dialog.ShowDialog()==true;
     }
 }

@@ -33,13 +33,15 @@ internal sealed class InvoiceExtensionWindow:EditorWindow
 internal sealed class InvoiceChoiceWindow:EditorWindow
 {
     public long SelectedIssueId{get;private set;}
-    internal InvoiceChoiceWindow(Store store,long eventId):base(store,"Выберите накладную для дополнения",850,650)
+    internal InvoiceChoiceWindow(Store store,long eventId,string recipient):base(store,"Выберите накладную для дополнения",850,650)
     {
+        if(string.IsNullOrWhiteSpace(recipient))throw new TicketException("Выберите получателя для дополнения накладной.");
+        var recipientKey=CatalogText.Key(recipient);
         var root=new DockPanel{Margin=new Thickness(16)};Content=root;
+        var heading=new TextBlock{Text="Получатель: "+recipient,TextWrapping=TextWrapping.Wrap};DockPanel.SetDock(heading,Dock.Top);root.Children.Add(heading);
         var search=new TextBox{Margin=new Thickness(0,8,0,8),ToolTip="Поиск получателя"};DockPanel.SetDock(search,Dock.Top);root.Children.Add(search);
         var select=new Button{Content="Выбрать",Margin=new Thickness(0,8,0,0),IsEnabled=false};DockPanel.SetDock(select,Dock.Bottom);root.Children.Add(select);
-        var active=store.History(eventId).Where(t=>t.ReturnedAt is null&&!t.IsReserved).Select(t=>t.IssueId).ToHashSet();
-        var issues=store.Issues(eventId).Where(i=>active.Contains(i.Id)&&i.ReservedCount==0).ToArray();
+        var issues=store.Issues(eventId).Where(i=>i.Count>i.ReturnedCount&&i.ReservedCount==0&&CatalogText.Key(i.Recipient)==recipientKey).ToArray();
         var list=new ListBox{DisplayMemberPath="Caption"};root.Children.Add(list);
         void Filter()=>list.ItemsSource=issues.Where(i=>SearchText.Matches(i.Recipient,search.Text)||i.Id.ToString()==search.Text.Trim()).Select(i=>new Choice(i.Id,$"№ {i.Id} · {i.Recipient} · {i.Count} бил. · {i.Total:N0} ₽")).ToArray();
         search.TextChanged+=(_,_)=>Filter();list.SelectionChanged+=(_,_)=>select.IsEnabled=list.SelectedItem is Choice;

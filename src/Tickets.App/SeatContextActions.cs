@@ -24,7 +24,7 @@ public partial class MainWindow
         Action("Забронировать",ReserveButton.IsEnabled,()=>ReserveClick(this,new RoutedEventArgs()));
         Action("Дополнить накладную",ExtendInvoiceButton.IsEnabled,()=>ExtendInvoiceClick(this,new RoutedEventArgs()));
         menu.Items.Add(new Separator());
-        Action("Изменить цену",ApplyPriceButton.IsEnabled,()=>{if(PriceEditorPanel.Visibility!=Visibility.Visible)TogglePriceClick(this,new RoutedEventArgs());PriceBox.Focus();PriceBox.SelectAll();});
+        Action("Изменить цену",ApplyPriceButton.IsEnabled,()=>TogglePriceClick(this,new RoutedEventArgs()));
         Action(SaleStateButton.Content?.ToString()??"Снять с продажи",SaleStateButton.IsEnabled,()=>SaleStateClick(this,new RoutedEventArgs()));
         Action("Вернуть выбранные",ReturnButton.IsEnabled,()=>ReturnClick(this,new RoutedEventArgs()));
         var invoiceIds=Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().ToArray();

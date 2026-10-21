@@ -11,6 +11,7 @@ namespace Tickets.App;
 internal class EditorWindow : Window
 {
     protected readonly Store Store;
+    internal Store PrintStore=>Store;
     internal EditorWindow(Store store,string title,double width=1100,double height=760)
     {
         Store=store; Title=title; Owner=Application.Current.MainWindow; WindowStartupLocation=WindowStartupLocation.CenterOwner;
@@ -73,6 +74,7 @@ internal sealed class PriceEditorWindow : EditorWindow
     public PriceEditorWindow(Store store,long? venueId=null):this(store,venueId,null){}
     public PriceEditorWindow(Store store,long? venueId,long? planId):base(store,"Расценовка")
     {
+        PriceSummaryLayout.Install(priceSummary);
         var grid=new Grid{Margin=new Thickness(16,5,16,16)};grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});grid.ColumnDefinitions.Add(new ColumnDefinition());Content=grid;
         var form=new StackPanel{Margin=new Thickness(0,0,15,0)};grid.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
         var venue=Combo(form,"Зал",store.Venues(),"Name");
@@ -229,15 +231,14 @@ internal sealed class PriceEditorWindow : EditorWindow
         hallTotals.Text=$"Всего мест: {seats.Count} · В продаже: {sellable.Count} · Снято: {withdrawn.Count} · Без цены: {sellable.Count(s=>!prices.ContainsKey(s.Id))}\nОбщая сумма: {assigned.Sum(p=>(decimal)p.Amount):N0} ₽";
         priceSummary.Children.Clear();priceSummary.RowDefinitions.Clear();priceSummary.ColumnDefinitions.Clear();
         var summaries=Pricing012Presentation.Summaries(assigned);
-        for(var row=0;row<3;row++)priceSummary.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
-        for(var column=0;column<(summaries.Count+2)/3;column++)priceSummary.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         foreach(var item in summaries)
         {
             var text=new TextBlock{Text=FormattableString.Invariant($"{item.Amount}₽×{item.Count}={item.Total}₽"),Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.NoWrap,FontWeight=FontWeights.SemiBold};
             var cell=new Border{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,0,5,4),CornerRadius=new CornerRadius(3),HorizontalAlignment=HorizontalAlignment.Left};
             cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.FocusPrice=preview.FocusPrice==item.Amount?null:item.Amount;e.Handled=true;};
-            Grid.SetRow(cell,item.Row);Grid.SetColumn(cell,item.Column);priceSummary.Children.Add(cell);
+            priceSummary.Children.Add(cell);
         }
+        PriceSummaryLayout.Arrange(priceSummary);
         var ids=preview.Selected.ToArray();
         preview.Load(seats.Select(s=>prices.TryGetValue(s.Id,out var p)?s with{Amount=p.Amount,Color=p.Color,IsBlocked=withdrawn.Contains(s.Id)}:s with{Amount=null,IsBlocked=withdrawn.Contains(s.Id)}).ToList(),
             seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(x=>x.X),g.Min(x=>x.Y)-26)).ToList(),fit);preview.SetSelection(ids);

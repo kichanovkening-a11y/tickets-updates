@@ -58,11 +58,15 @@ public sealed partial class Store
     private List<IssueInfo> MergeIssueSummaries(long eventId)
     {
         using var c=Open();EnsureInvoiceMergeTable(c);var links=InvoiceMergeLinks(c);
+        var senders=new Dictionary<long,string>();
+        using(var command=Command(c,"SELECT id,sender FROM issue_batch WHERE event_id=$e","$e",eventId))
+        using(var rows=command.ExecuteReader())
+            while(rows.Read())senders.Add(rows.GetInt64(0),rows.GetString(1));
         var tickets=History(eventId);var originals=tickets.GroupBy(t=>t.IssueId).ToDictionary(g=>g.Key,g=>g.First());
         return tickets.GroupBy(t=>ResolveInvoiceId(t.IssueId,links)).Select(g=>{
             var original=originals[g.Key];
             return new IssueInfo(g.Key,eventId,original.Recipient,original.IssuedAt,g.Count(),g.Count(t=>t.ReturnedAt is not null),
-                g.Sum(t=>(decimal)t.Amount),g.Count(t=>t.ReturnedAt is null&&t.IsReserved),g.Count(t=>t.ReturnedAt is null&&t.IsPrinted));
+                g.Sum(t=>(decimal)t.Amount),g.Count(t=>t.ReturnedAt is null&&t.IsReserved),g.Count(t=>t.ReturnedAt is null&&t.IsPrinted)){Sender=senders[g.Key]};
         }).OrderByDescending(i=>i.Id).ToList();
     }
 

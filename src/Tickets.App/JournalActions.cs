@@ -1,4 +1,7 @@
+using System.ComponentModel;
 using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Windows.Threading;
 using System.Windows;
 using System.Windows.Controls;
 using Tickets.Core;
@@ -21,16 +24,33 @@ public partial class MainWindow
                     column.Width=new DataGridLength(saved.Width,saved.Unit);column.DisplayIndex=saved.Order;column.Visibility=saved.Visibility;
                 }
         }
-        catch(System.IO.IOException){}catch(JsonException){}catch(ArgumentException){}
+        catch(System.IO.IOException){}catch(UnauthorizedAccessException){}catch(JsonException){}catch(ArgumentException){}
         var selector=HistoryGrid.Columns.OfType<DataGridTemplateColumn>().FirstOrDefault();
         if(selector is not null){selector.DisplayIndex=0;selector.Visibility=Visibility.Visible;selector.Width=new DataGridLength(38);selector.MinWidth=38;selector.CanUserReorder=false;}
-        Closing+=(_,_)=>{
+        // Column sizes belong to the workstation, not to the currently displayed show.
+        // Persist actual user changes during the session, so reopening a window does
+        // not restore stale widths from before the last application shutdown.
+        var pendingSave=new DispatcherTimer(DispatcherPriority.Background,Dispatcher){Interval=TimeSpan.FromMilliseconds(250)};
+        void Save()
+        {
+            pendingSave.Stop();
             try
             {
                 var columns=HistoryGrid.Columns.Select(c=>new JournalColumn(c.Header?.ToString()??"",c.DisplayIndex,c.Width.Value,c.Width.UnitType,c.Visibility)).ToArray();
                 System.IO.File.WriteAllText(path+".tmp",JsonSerializer.Serialize(columns));System.IO.File.Move(path+".tmp",path,true);
             }
             catch(System.IO.IOException){}catch(UnauthorizedAccessException){}
+        }
+        void Changed(object? sender,EventArgs args){pendingSave.Stop();pendingSave.Start();}
+        pendingSave.Tick+=(_,_)=>Save();
+        var width=DependencyPropertyDescriptor.FromProperty(DataGridColumn.WidthProperty,typeof(DataGridColumn));
+        var visibility=DependencyPropertyDescriptor.FromProperty(DataGridColumn.VisibilityProperty,typeof(DataGridColumn));
+        foreach(var column in HistoryGrid.Columns){width.AddValueChanged(column,Changed);visibility.AddValueChanged(column,Changed);}
+        HistoryGrid.ColumnDisplayIndexChanged+=(_,_)=>Changed(null,EventArgs.Empty);
+        Closing+=(_,_)=>Save();
+        Closed+=(_,_)=>{
+            pendingSave.Stop();
+            foreach(var column in HistoryGrid.Columns){width.RemoveValueChanged(column,Changed);visibility.RemoveValueChanged(column,Changed);}
         };
     }
     private readonly HashSet<long> journalSelection=[];
@@ -41,6 +61,7 @@ public partial class MainWindow
         public long Id=>Issue.Id;
         public string Date=>Issue.Date;
         public string Recipient=>Issue.Recipient;
+        public string SenderKind=>Regex.Match(CatalogText.Key(Issue.Sender),@"^(ООО|ИП)(?=$|[^\p{L}\p{Nd}])").Value;
         public int Count=>Issue.Count;
         public int ReturnedCount=>Issue.ReturnedCount;
         public decimal Total=>Issue.Total;

@@ -29,8 +29,8 @@ internal sealed class InvoiceWindow : EditorWindow
         senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
         var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
         Button(senderActions,"+ Отправитель",()=>Try(()=>EditSender(false)));
-        Button(senderActions,"Реквизиты",()=>Try(()=>EditSender(true)));
-        Button(header,"Обновить реквизиты документа",()=>Try(EditDocumentOrganizations));
+        Button(senderActions,"Реквизиты",()=>Try(EditRecipient)).ToolTip="Реквизиты получателя";
+        Button(header,"Обновить реквизиты",()=>Try(EditRecipient)).ToolTip="Реквизиты получателя";
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRowSpan(actionsScroll,2);root.Children.Add(actionsScroll);
@@ -67,18 +67,15 @@ internal sealed class InvoiceWindow : EditorWindow
         if(editor.ShowDialog()!=true)return;
         senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();Refresh();
     }
-    private void EditDocumentOrganizations()
+    private void EditRecipient()
     {
-        PersistSender();
         var invoice=Store.Invoice(eventId,issueId);
-        var senderEditor=new SenderEditorWindow(Store,invoice.Sender,true);
-        if(senderEditor.ShowDialog()!=true)return;
         var recipientEditor=new RecipientEditorWindow(Store,invoice.Recipient,true);
-        var recipientSaved=recipientEditor.ShowDialog()==true;
-        // Each editor saves the global directory. Refresh only this issue, including
-        // a saved sender if the recipient editor was cancelled.
-        Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();Refresh();
-        savedStatus.Text=(recipientSaved?"Реквизиты отправителя и получателя обновлены. ":"Реквизиты отправителя обновлены. ")+savedStatus.Text;
+        if(recipientEditor.ShowDialog()!=true)return;
+        // The editor persists the recipient directory for future issues. Refresh
+        // only this issue's recipient; keep the historical sender snapshot.
+        Store.RefreshInvoiceRecipient(eventId,issueId);SaveFiles();Refresh();
+        savedStatus.Text="Реквизиты получателя обновлены. "+savedStatus.Text;
     }
     private void PersistSender()
     {

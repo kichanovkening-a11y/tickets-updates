@@ -170,14 +170,11 @@ internal static class Program
             Check(hall.Selected.Count==4,"another left drag accumulates another group");
             Gesture(hall,new Point(38,38),new Point(38,38));
             Check(hall.Selected.Count==3&&!hall.Selected.Contains(seatIds[3]),"repeat click deselects one place only");
-            Click(main,"Изменить цену");Pump();var activePricePanel=(StackPanel)main.FindName("PriceEditorPanel");Check(activePricePanel.IsVisible,"price editor opens within the selection sidebar");
-            var activeSidebar=(Border)main.FindName("SelectionSidebar");var activeList=(ListBox)main.FindName("SelectedList");
-            Check(activeList.TransformToAncestor(activeSidebar).TransformBounds(new Rect(activeList.RenderSize)).Bottom<=activePricePanel.TransformToAncestor(activeSidebar).TransformBounds(new Rect(activePricePanel.RenderSize)).Top+1,"price editing actions stay below the place list without separating recipient and places");
-            ((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");
+            SetSelectionPrice(main,123);
             Check(hall.Selected.Count==0,"applying price clears selection");
             Check(new Store(db).Seats(eventId).Where(s=>seatIds.Take(3).Contains(s.Id)).All(s=>s.Amount==123&&s.Color==store.PriceColors().Single(c=>c.Amount==123).Color),"price and category color persist and update scheme data");
             Click(main,"Отменить изменение цены");Check(store.Seats(eventId).All(s=>s.Amount==500),"price undo restores previous category");
-            hall.SetSelection(seatIds.Take(3));Click(main,"Изменить цену");((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");hall.SetSelection(seatIds.Take(3));
+            hall.SetSelection(seatIds.Take(3));SetSelectionPrice(main,123);hall.SetSelection(seatIds.Take(3));
             Check(((ComboBox)main.FindName("RecipientBox")).Text=="","show opens without a previous recipient");
             foreach(var expander in Logical(main).OfType<Expander>())expander.IsExpanded=true;Pump();
             Exception? inlineRecipientError=null;
@@ -270,6 +267,10 @@ internal static class Program
             CheckTicketBlankPreview(store,eventId,originalInvoice);
             Print014Checks.Run(store);
             FourUp015Checks.Run(store);
+            Blank016Checks.Run(store);
+            Docs016Checks.Run(store);
+            Print016Checks.Run(store);
+            Journal016Checks.Run(store);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
             Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
             Exception? mixedPreviewError=null;
@@ -375,8 +376,8 @@ internal static class Program
             {categoryHall.SetSelection(new[]{seatIds[categoryIndex]});categoryFields[1].Text=((categoryIndex+1)*1000).ToString();Click(categoryEditor,"Назначить выбранным местам");}
             Pump();var priceSummary=(Grid)priceEditorType.GetField("priceSummary",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(categoryEditor)!;
             var categoryCells=priceSummary.Children.OfType<Border>().ToArray();
-            Check(priceSummary.RowDefinitions.Count==3&&priceSummary.ColumnDefinitions.Count==2&&categoryCells.Length==4,"pricing categories fill three rows before adding the next summary column");
-            Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(2,0),(0,1)}),"pricing summary orders categories downward then into the next column");
+            Check(priceSummary.RowDefinitions.Count==2&&priceSummary.ColumnDefinitions.Count==2&&categoryCells.Length==4,"pricing categories use two rows when two columns fit");
+            Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(0,1),(1,1)}),"pricing summary orders categories downward then into the next column");
             Check(categoryCells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount}₽×1={amount}₽")),"colored pricing summary uses descending amounts with quantity and total");
             Check(categoryCells.All(cell=>cell.Background is SolidColorBrush&&((TextBlock)cell.Child).Foreground is SolidColorBrush&&cell.ActualWidth>50&&cell.ActualHeight>20),"pricing summary renders colored readable cells above the hall");categoryEditor.Close();
             var copyEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId,(long?)planId})!;copyEditor.Show();Pump();
@@ -528,6 +529,22 @@ internal static class Program
         Gesture(hall,new Point(8,8),new Point(38,8),true);
         Check(contexts.Count==1&&((Vector)offsetField.GetValue(hall)!)!=before&&hall.Selected.Count==0,"right drag pans without opening seat context or changing selection");
     }
+    private static void SetSelectionPrice(Tickets.App.MainWindow main,long price)
+    {
+        Exception? error=null;Window? popup=null;
+        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+            try
+            {
+                popup=Application.Current.Windows.Cast<Window>().Single(w=>w.GetType().Name=="SeatPriceWindow");
+                var input=Logical(popup).OfType<TextBox>().First();input.Text=price.ToString();
+                var enter=new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(popup)!,0,Key.Enter){RoutedEvent=Keyboard.PreviewKeyDownEvent};input.RaiseEvent(enter);
+                Check(enter.Handled,"Enter confirms the seat price dialog");
+            }
+            catch(Exception ex){error=ex;popup?.Close();}
+        }));
+        Click(main,"Изменить цену");Pump();if(error is not null)throw error;
+        Check(!Application.Current.Windows.Cast<Window>().Any(w=>w.IsVisible&&w.GetType().Name=="SeatPriceWindow"),"price confirmation closes the dialog");
+    }
     private static void CheckTicketBlankPreview(Store store,long eventId,InvoiceInfo originalInvoice)
     {
         var appAssembly=typeof(Tickets.App.App).Assembly;var flags=BindingFlags.Instance|BindingFlags.NonPublic;
@@ -538,7 +555,8 @@ internal static class Program
             Check(!Logical(editor).OfType<DataGrid>().Any(),"blank editor uses visual field selection instead of coordinate tables");
             Click(editor,"Новый А4 · 4 билета");Pump();
             var draft=(TicketBlank)blankType.GetField("blank",flags)!.GetValue(editor)!;
-            Check(draft.PageWidth==210&&draft.PageHeight==297&&draft.Positions.Count==4,"new blank starts with four ticket blocks on A4");
+            Check(draft.PageWidth==210&&draft.PageHeight==297&&draft.Positions.Count==4&&draft.Legacy is not null,"new blank starts with four ticket blocks and vertical tear-offs on A4");
+            blankType.GetMethod("Load",flags)!.Invoke(editor,new object[]{TicketBlankEditing.CreateA4()});Pump();
             var fieldChoice=(ComboBox)blankType.GetField("fieldChoice",flags)!.GetValue(editor)!;fieldChoice.SelectedIndex=0;Pump();
             var properties=(StackPanel)blankType.GetField("properties",flags)!.GetValue(editor)!;
             var printField=properties.Children.OfType<CheckBox>().Single();
@@ -575,6 +593,7 @@ internal static class Program
         Check(saved.Positions.Count==4&&saved.PageWidth==210&&saved.PageHeight==297,"custom one-ticket A4 blank is normalized to four positions for print preview");
         var printType=appAssembly.GetType("Tickets.App.TicketPrintWindow")!;
         var historyCount=store.History(eventId).Count;var issueCount=store.Issues(eventId).Count;
+        store.RememberTicketBlank(null);
         var preview=(Window)Activator.CreateInstance(printType,new object[]{store,eventId,originalInvoice.Tickets.Select(ticket=>ticket.SeatId).ToArray()})!;preview.Show();Pump();
         try
         {
@@ -802,7 +821,7 @@ internal static class Program
         var summaryBounds=summary.TransformToAncestor(main).TransformBounds(new Rect(summary.RenderSize));
         mode.SelectedIndex=0;Pump();var detailBounds=detail.TransformToAncestor(main).TransformBounds(new Rect(detail.RenderSize));
         Check(detail.IsVisible&&!summary.IsVisible&&hall.Selected.SetEquals(selection)&&Math.Abs(summaryBounds.Left-detailBounds.Left)<1&&Math.Abs(summaryBounds.Width-detailBounds.Width)<1,"details and price summary occupy the same sidebar area");
-        var legend=(Grid)main.FindName("LegendPanel");Check(legend.RowDefinitions.Count==3&&legend.Children.OfType<Border>().Any(),"main prices use three rows per legend column");
+        var legend=(Grid)main.FindName("LegendPanel");Check(legend.RowDefinitions.Count is >=1 and <=3&&legend.Children.OfType<Border>().Any(),"main prices use two rows with a third only when needed");
         var cells=legend.Children.OfType<Border>().ToArray();
         Check(legend.ColumnDefinitions.All(column=>column.Width.IsAuto)&&cells.All(cell=>cell.Child is TextBlock {TextWrapping:TextWrapping.NoWrap,FontSize:14.3,FontWeight:var weight}&&weight==FontWeights.Bold),"main price legend retains unbroken bold expressions in content-sized columns");
         var priceGroups=store.Seats(store.Events().Single(show=>show.Title=="UI event").Id).Where(seat=>seat.Amount.HasValue&&!seat.IsBlocked).GroupBy(seat=>seat.Amount!.Value).OrderByDescending(group=>group.Key);
@@ -837,7 +856,7 @@ internal static class Program
         var whiteBounds=whiteActions.Select(button=>button.TransformToAncestor(upper).TransformBounds(new Rect(button.RenderSize))).ToArray();
         Check(whiteActions.Length==3&&whiteBounds.Max(rect=>rect.Top)-whiteBounds.Min(rect=>rect.Top)<2&&whiteActions.All(button=>double.IsNaN(button.Width)&&button.FontSize==14),"three white show actions retain their type size and share one row");
         var printBounds=print.TransformToAncestor(upper).TransformBounds(new Rect(print.RenderSize));var issueBounds=issue.TransformToAncestor(upper).TransformBounds(new Rect(issue.RenderSize));
-        Check(whiteBounds.All(rect=>rect.Right<=printBounds.Left+1)&&Math.Abs(printBounds.Left-issueBounds.Left)<1&&issueBounds.Top>=printBounds.Bottom,"colored actions sit immediately right of extension with printing above issuance");
+        Check(whiteBounds.All(rect=>rect.Right<=printBounds.Left+1)&&Math.Abs(printBounds.Top-issueBounds.Top)<1&&issueBounds.Left>=printBounds.Right,"colored actions sit immediately right of extension with issuance to the right of printing");
         var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
         var dateBounds=date.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(date.RenderSize));
         var titleBounds=title.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(title.RenderSize));

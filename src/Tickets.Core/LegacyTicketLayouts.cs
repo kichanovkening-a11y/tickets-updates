@@ -56,6 +56,7 @@ public sealed record LegacyTicketLayout
         static bool Finite(double x)=>double.IsFinite(x)&&x>=0&&x<=2000;
         if(string.IsNullOrEmpty(SourceFile)||SourceSha256.Length!=64||!Finite(ContentWidth)||!Finite(ContentHeight)||ContentWidth<1||ContentHeight<1||new[]{LeftMargin,TopMargin,RightMargin,BottomMargin}.Any(x=>!Finite(x)))throw new TicketException("Повреждён исходный макет печати.");
         if(Bands.Count==0||Bands.Any(b=>!Finite(b.Height)||b.Kind is not ("ReportHeader" or "PageHeader" or "Detail" or "ReportFooter" or "PageFooter")))throw new TicketException("Неподдерживаемая секция исходного макета.");
+        if(!Bands.Where(b=>!b.Suppressed).SelectMany(b=>b.Elements).Any(e=>!e.Suppressed))throw new TicketException("Включите печать хотя бы одного поля билета.");
         foreach(var e in Bands.SelectMany(b=>b.Elements))
             if(new[]{e.X,e.Y,e.Width,e.Height}.Any(x=>!Finite(x))||e.Width<=0||e.Height<=0||!double.IsFinite(e.FontSize)||e.FontSize is <1 or >200||e.Rotation is not (0 or 90 or 180 or 270)||(!string.IsNullOrEmpty(e.Binding)&&!LegacyTicketTemplates.Bindings.Contains(e.Binding)))throw new TicketException("Повреждено поле исходного макета.");
     }
@@ -65,7 +66,7 @@ public sealed record LegacyTicketPage(IReadOnlyList<LegacyTicketPlacement> Eleme
 
 public static class LegacyTicketTemplates
 {
-    public static readonly string[] Bindings=["theatre_name","theatre_adress","ticket_number","perf_name","perf_date","perf_small_date","ticket_zone","ticket_place","ticket_price","small_info1","small_info2","small_info3","PrintDate","PageNumber"];
+    public static readonly string[] Bindings=["theatre_name","theatre_adress","ticket_number","perf_name","perf_date","perf_small_date","ticket_zone","ticket_place","ticket_price","small_info1","small_info2","small_info3","ticket_series","ticket_serial","event_date","event_time","ticket_row","ticket_seat","ticket_amount","PrintDate","PageNumber"];
     public static double Millimetres(double twips)=>twips*25.4/1440.0;
     public static IReadOnlyList<TicketBlank> All()
     {
@@ -123,6 +124,9 @@ public static class LegacyTicketTemplates
         var price="Цена: "+ticket.Amount.ToString(CultureInfo.InvariantCulture)+"р.";
         return binding switch
         {
+            "ticket_series"=>ticket.Series,"ticket_serial"=>ticket.Number.ToString("D6",CultureInfo.InvariantCulture),
+            "event_date"=>date.ToString("dd.MM.yyyy",ru),"event_time"=>date.ToString("HH:mm",ru),
+            "ticket_row"=>ticket.Row,"ticket_seat"=>ticket.Seat,"ticket_amount"=>ticket.Amount.ToString(CultureInfo.InvariantCulture),
             "theatre_name"=>source.Venue,"theatre_adress"=>venueAddress,"ticket_number"=>number,
             "perf_name"=>source.Title.Trim().ToUpper(ru),"perf_date"=>date.ToString("D",ru)+" "+date.Hour+" ч. "+date.ToString("mm",ru)+" мин.","perf_small_date"=>date.ToString("dd.MM.yyyy HH:mm",ru),
             "ticket_zone"=>ticket.Sector,"ticket_place"=>"Ряд: "+ticket.Row+"   Место: "+ticket.Seat,"ticket_price"=>price,

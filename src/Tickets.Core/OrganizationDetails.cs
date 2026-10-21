@@ -89,6 +89,13 @@ public sealed partial class Store
         // Another editor may have refreshed this invoice after our read. Respect its value.
         return cmd.ExecuteScalar() is string saved?JsonSerializer.Deserialize<OrganizationDetails>(saved)??current:current;
     }
+    public void RefreshInvoiceRecipient(long eventId,long issueId)
+    {
+        using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        using var read=Command(c,"SELECT recipient FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId);read.Transaction=tx;
+        var recipient=read.ExecuteScalar() as string??throw new TicketException("Накладная не найдена в этом показе.");
+        CaptureIssueOrganization(c,tx,issueId,recipient,false);tx.Commit();
+    }
     public void RefreshInvoiceOrganizations(long eventId,long issueId)
     {
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);

@@ -24,6 +24,7 @@ public sealed class TicketException(string message) : Exception(message);
 
 public sealed record IssueInfo(long Id,long EventId,string Recipient,string IssuedAt,int Count,int ReturnedCount,decimal Total,int ReservedCount=0,int PrintedCount=0)
 {
+    public string Sender { get; init; } = "";
     public string Status=>ReturnedCount==Count?"Возвращено":ReturnedCount>0?"Частичный возврат":
         ReservedCount==Count?"Забронировано":ReservedCount>0?"Частично выдана накладная":
         PrintedCount==Count?"Накладная выдана, билеты напечатаны":PrintedCount>0?"Накладная выдана, частично напечатано":"Накладная выдана, не напечатано";

@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();
+        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
@@ -180,7 +180,7 @@ public partial class MainWindow : Window
         var reservedInvoice=selected.Count>0&&selected.All(s=>s.IsReserved)&&selected.Select(s=>s.IssueId).Distinct().Count()==1;
         if(reservedInvoice)IssueButton.IsEnabled=!archived;
         IssueButton.Content=reservedInvoice?"Оформить накладную":"Выдать накладную";
-        ExtendInvoiceButton.IsEnabled=!archived&&selected.Count>0&&free==selected.Count;
+        ExtendInvoiceButton.IsEnabled=!archived&&selected.Count>0&&free==selected.Count&&!string.IsNullOrWhiteSpace(RecipientName);
         PrintTicketsButton.IsEnabled=(selected.Count>0&&issued==selected.Count)||(!archived&&selected.Count>0&&selected.All(s=>s.Available||s.TicketId.HasValue)&&free>0&&!string.IsNullOrWhiteSpace(RecipientName)&&!string.IsNullOrWhiteSpace(SeriesBox.Text)&&long.TryParse(NumberBox.Text,out var printNumber)&&printNumber>0);
         PrintTicketsButton.Content=selected.Count>0&&selected.All(s=>s.IsPrinted)?"Повторная печать":"Печать билетов";
         var allBlocked=selected.Count>0&&selected.All(x=>x.IsBlocked);
@@ -202,7 +202,16 @@ public partial class MainWindow : Window
         if(!ready) return;
         NumberBox.Text=store.NextNumber(SeriesBox.Text).ToString(CultureInfo.InvariantCulture); UpdateSelection();
     }
-    private void TogglePriceClick(object sender,RoutedEventArgs e){PriceEditorPanel.Visibility=PriceEditorPanel.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;if(PriceEditorPanel.Visibility==Visibility.Visible)PriceBox.Focus();}
+    private void TogglePriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
+        if(current is null||currentArchived)return;
+        var selected=Hall.SelectedSeats;if(selected.Count==0)throw new TicketException("Выберите места на схеме.");
+        if(selected.Any(s=>s.TicketId.HasValue))throw new TicketException("Для изменения цены выберите свободные места.");
+        var initial=selected.First().Amount??0;
+        var editor=new SeatPriceWindow(store,initial,selected.Count);
+        if(editor.ShowDialog()!=true)return;
+        PriceBox.Text=editor.Amount.ToString(CultureInfo.InvariantCulture);PriceColorBox.SelectedItem=editor.Color;
+        ApplyPriceClick(this,new RoutedEventArgs());
+    });
     private void PriceAmountChanged(object sender,TextChangedEventArgs e)
     {
         if(!ready)return;

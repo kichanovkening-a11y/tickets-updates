@@ -1,0 +1,29 @@
+name: Keep two latest Tickets releases
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/retain-releases.yml', '.github/release_retention.py', '.github/test_release_retention.py']
+  workflow_run:
+    workflows: [Build and publish Tickets]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: tickets-release-retention
+  cancel-in-progress: false
+jobs:
+  retain:
+    if: github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - name: Verify retention rules
+        run: python3 -m unittest discover -s .github -p test_release_retention.py -v
+      - name: Keep latest and previous complete release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 .github/release_retention.py --apply

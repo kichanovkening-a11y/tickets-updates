@@ -42,22 +42,22 @@
       </Border>
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <StackPanel Margin="8,0,0,10"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-          <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap"/></StackPanel>
-        <WrapPanel Grid.Row="1" Margin="8,0,0,6">
+          <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" MaxHeight="80" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
+        <ScrollViewer Grid.Row="1" Margin="8,0,0,6" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal">
           <Button Content="Изменить цену" Click="TogglePriceClick" Margin="0,0,6,4"/>
           <Button x:Name="UndoPriceButton" Content="Отменить изменение цены" Click="UndoPriceClick" IsEnabled="False" Margin="0,0,6,4"/>
           <Button x:Name="ExtendInvoiceButton" Content="Дополнить накладную" Click="ExtendInvoiceClick" IsEnabled="False" Margin="0,0,6,4"/>
-        </WrapPanel>
+        </StackPanel></ScrollViewer>
         <TabControl Grid.Row="2" BorderBrush="#CBD5E1" Background="White">
           <TabItem Header="  Схема зала  ">
             <Grid>
               <DockPanel>
-                <WrapPanel DockPanel.Dock="Top" Margin="10">
-                  <Button Content="Весь зал" Click="FitClick"/><Button Content="−" Click="ZoomOutClick"/><Button Content="+" Click="ZoomInClick"/>
-                </WrapPanel>
-                <TextBlock DockPanel.Dock="Bottom" Text="Колесо — масштаб · Правая кнопка — сдвиг · Левая кнопка + протянуть — выбрать места; начните с выбранного, чтобы снять группу" Foreground="#64748B" FontSize="14.3" Margin="10,7" TextWrapping="Wrap"/>
-                <TextBlock x:Name="HallTotals" DockPanel.Dock="Bottom" Margin="10,4" FontWeight="Bold" TextWrapping="Wrap"/>
-                <WrapPanel x:Name="LegendPanel" DockPanel.Dock="Bottom" Margin="10,4"/>
+                <ScrollViewer DockPanel.Dock="Top" Margin="10" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
+                  <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Click="FitClick"/><Button Content="−" Click="ZoomOutClick"/><Button Content="+" Click="ZoomInClick"/></StackPanel>
+                </ScrollViewer>
+                <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="110" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                  <StackPanel><TextBlock x:Name="HallTotals" Margin="10,4" FontWeight="Bold" TextWrapping="Wrap"/><WrapPanel x:Name="LegendPanel" Margin="10,4"/></StackPanel>
+                </ScrollViewer>
                 <local:HallView x:Name="Hall" Margin="5"/>
               </DockPanel>
 

@@ -534,6 +534,7 @@ internal static class Program
         main.Width=1000;main.Height=700;Pump();WaitForInput();
         Console.WriteLine($"Sidebar small viewport: window {main.ActualWidth}x{main.ActualHeight}; sidebar {sidebar.ActualHeight}; list {list.ActualHeight}");
         Check(list.ActualHeight>=120,"small viewport retains a usable selected-place list");
+        Check(((Tickets.App.HallView)main.FindName("Hall")).ActualHeight>=100,"small viewport retains a visible and clickable hall beside the sidebar");
         var listBounds=list.TransformToAncestor(sidebar).TransformBounds(new Rect(list.RenderSize));
         var actionBounds=actions.TransformToAncestor(sidebar).TransformBounds(new Rect(actions.RenderSize));
         Check(listBounds.Bottom<=actionBounds.Top+1&&actionBounds.Bottom<=sidebar.ActualHeight+1,"small viewport keeps selection list and all action rows separate and visible");

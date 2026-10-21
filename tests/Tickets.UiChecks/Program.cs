@@ -145,7 +145,10 @@ internal static class Program
             var currentShowRow=performanceGroup.Items.OfType<TreeViewItem>().Single(i=>i.Tag is EventInfo e&&e.Id==eventId);
             Check(currentShowRow.Header is TextBlock selectedTitle&&Equals(selectedTitle.Foreground,Brushes.White)&&Equals(selectedTitle.Background,Brushes.DarkSlateBlue),"selected show text has contrast against its background");
             var hall=(Tickets.App.HallView)main.FindName("Hall");CheckSelectionSidebar(main);main.Activate();hall.Focus();hall.Fit();Pump();
-            ((ComboBox)main.FindName("RecipientBox")).Text="UI context availability";hall.SetSelection(seatIds.Take(2));Gesture(hall,new Point(8,8),new Point(8,8),true);
+            ((ComboBox)main.FindName("RecipientBox")).Text="UI context availability";hall.SetSelection(seatIds.Take(2));
+            var mainContextCalls=0;hall.SeatContextRequested+=(_,_)=>mainContextCalls++;
+            Gesture(hall,new Point(8,8),new Point(8,8),true);
+            Console.WriteLine($"Main context: callbacks={mainContextCalls}; menuNull={hall.ContextMenu is null}; menuOpen={hall.ContextMenu?.IsOpen}; active={main.IsActive}; hall={hall.ActualWidth}x{hall.ActualHeight}; mouse={Mouse.GetPosition(hall)}; over={Mouse.DirectlyOver?.GetType().Name}");
             Check(hall.Selected.SetEquals(seatIds.Take(2)),"seat context preserves an existing selected group");
             var seatMenu=hall.ContextMenu;Check(seatMenu is not null&&seatMenu.IsOpen,"right click opens main seat actions");
             var contextItems=seatMenu!.Items.OfType<MenuItem>().ToArray();
@@ -410,7 +413,7 @@ internal static class Program
         var flags=BindingFlags.Instance|BindingFlags.NonPublic;
         var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
         var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
-        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");WaitForInput();}
+        void Position(Point p){var point=hall.PointToScreen(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y));Console.WriteLine($"Gesture point {point}; hall offset {offset}; zoom {zoom}; hit {hall.InputHitTest(new Point(p.X*zoom+offset.X,p.Y*zoom+offset.Y))?.GetType().Name}");if(!SetCursorPos((int)point.X,(int)point.Y))throw new Exception("Windows test desktop cannot move the cursor");WaitForInput();}
         Position(from);mouse_event(right?8u:2u,0,0,0,UIntPtr.Zero);WaitForInput();
         Position(to);mouse_event(right?16u:4u,0,0,0,UIntPtr.Zero);WaitForInput();
         Console.WriteLine($"Mouse gesture {from} -> {to}; selected: {string.Join(',',hall.Selected)}");

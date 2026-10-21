@@ -12,10 +12,13 @@ var total = 0;
 void Test(string name, Action<Store> body)
 {
     total++;
-    var path = System.IO.Path.Combine(root, total + ".db");
+    var caseDirectory=System.IO.Path.Combine(root,total.ToString());
+    Directory.CreateDirectory(caseDirectory);
+    var path = System.IO.Path.Combine(caseDirectory,"tickets.db");
     File.Copy(seed, path);
     try { body(new Store(path)); Console.WriteLine("PASS " + name); }
     catch (Exception ex) { failed++; Console.WriteLine("FAIL " + name + ": " + ex.Message); }
+    finally { SqliteConnection.ClearAllPools(); Directory.Delete(caseDirectory,true); }
 }
 void Check(bool condition, string message = "assertion failed") { if (!condition) throw new Exception(message); }
 void Reject(Action action)
@@ -314,6 +317,9 @@ Test("41-ticket complete document package uses recipient and exact totals",s=>{
     var directory=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-docqa");Directory.CreateDirectory(directory);
     foreach(var file in s.SaveAllDocuments(e.Id,issue))File.Copy(file,System.IO.Path.Combine(directory,System.IO.Path.GetFileName(file)),true);
 });
+DocsLayoutChecks.Register(Test);
+TicketBlankChecks.Register(Test);
+Test("hall and pricing presentation refinements",s=>HallEditorRefinementChecks.Run());
 BusinessDocumentChecks.Register(Test);
 TicketLifecycleChecks.Register(Test);
 PricingEditorChecks.Register(Test);

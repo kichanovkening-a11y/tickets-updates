@@ -3,6 +3,7 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using Tickets.Core;
 
 namespace Tickets.App;
@@ -19,6 +20,9 @@ internal sealed class TicketPrintWindow:EditorWindow
     private InvoiceInfo? issuedSnapshot;
     private readonly StackPanel pages=new(){HorizontalAlignment=HorizontalAlignment.Center};
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
+    private readonly ComboBox blankChoice=new(){MinWidth=260,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0)};
+    private InvoiceInfo? previewInfo;
+    private TicketBlank? SelectedBlank=>blankChoice.SelectedItem as TicketBlank;
     public long IssueId{get;private set;}
     public bool Printed{get;private set;}
 
@@ -40,6 +44,13 @@ internal sealed class TicketPrintWindow:EditorWindow
     private void Initialize(InvoiceInfo info)
     {
         var root=new DockPanel{Margin=new Thickness(12)};Content=root;
+        var templateBar=new WrapPanel{Margin=new Thickness(0,0,0,10)};
+        templateBar.Children.Add(new TextBlock{Text="На каком бланке печатать:",VerticalAlignment=VerticalAlignment.Center});
+        blankChoice.Items.Add(new {Name="Стандартный"});foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);blankChoice.SelectedIndex=0;
+        templateBar.Children.Add(blankChoice);var manage=new Button{Content="Бланки печати"};templateBar.Children.Add(manage);
+        manage.Click+=(_,_)=>Try(()=>{new TicketBlankWindow(Store).ShowDialog();var id=SelectedBlank?.Id;while(blankChoice.Items.Count>1)blankChoice.Items.RemoveAt(1);foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);blankChoice.SelectedItem=blankChoice.Items.OfType<TicketBlank>().FirstOrDefault(b=>b.Id==id)??blankChoice.Items[0];if(previewInfo is not null)Preview(previewInfo);});
+        blankChoice.SelectionChanged+=(_,_)=>Try(()=>{if(previewInfo is not null)Preview(previewInfo);});
+        DockPanel.SetDock(templateBar,Dock.Top);root.Children.Add(templateBar);
         DockPanel.SetDock(status,Dock.Top);root.Children.Add(status);
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(actions,Dock.Right);root.Children.Add(actions);
         InvoiceWindow.Square(actions,"Распечатать",Print,Brushes.SeaGreen);
@@ -49,7 +60,8 @@ internal sealed class TicketPrintWindow:EditorWindow
     }
     private void Preview(InvoiceInfo info)
     {
-        var document=BuildWithSources(info,794,1123);pages.Children.Clear();
+        previewInfo=info;
+        var document=BuildWithSources(info,SelectedBlank is {} b?Mm(b.PageWidth):794,SelectedBlank is {} b2?Mm(b2.PageHeight):1123);pages.Children.Clear();
         for(var i=0;i<document.Pages.Count;i++)pages.Children.Add(new DocumentPageView{DocumentPaginator=document.DocumentPaginator,PageNumber=i,Margin=new Thickness(0,0,0,12)});
     }
     private void Print()
@@ -65,7 +77,7 @@ internal sealed class TicketPrintWindow:EditorWindow
                 if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
                 var provisional=Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied);
                 // Reject unusable paper settings before creating the issuance.
-                BuildWithSources(provisional,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight).DocumentPaginator.ComputePageCount();
+                BuildWithSources(provisional,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight,dialog).DocumentPaginator.ComputePageCount();
                 IssueId=Store.Issue(eventId,draftSeatIds,recipient,series,firstNumber);
                 issuedSnapshot=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
                 status.Text=$"Выдача № {IssueId} сохранена. При ошибке печати повторная попытка использует те же билеты.";
@@ -75,7 +87,7 @@ internal sealed class TicketPrintWindow:EditorWindow
             if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(issuedSnapshot.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
                 throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
             var info=issuedSnapshot;Preview(info);
-            var document=BuildWithSources(info,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight);
+            var document=BuildWithSources(info,dialog.PrintableAreaWidth,dialog.PrintableAreaHeight,dialog);
             dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
             Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());Printed=true;
             status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
@@ -97,12 +109,60 @@ internal sealed class TicketPrintWindow:EditorWindow
             throw new TicketException("Ранее выбранные билеты возвращены или заменены. Откройте актуальные билеты заново.");
     }
 
-    private FixedDocument BuildWithSources(InvoiceInfo invoice,double pageWidth,double pageHeight)
+    private FixedDocument BuildWithSources(InvoiceInfo invoice,double pageWidth,double pageHeight,PrintDialog? printer=null)
     {
         var headers=new Dictionary<long,InvoiceInfo>();
         foreach(var issue in invoice.Tickets.Where(t=>t.IssueId>0).GroupBy(t=>t.IssueId))
         {var original=Store.Invoice(eventId,issue.Key);foreach(var ticket in issue)headers[ticket.Id]=original;}
-        return BuildDocumentCore(invoice,pageWidth,pageHeight,headers);
+        return SelectedBlank is {} blank?BuildBlankDocument(invoice,blank,pageWidth,pageHeight,headers,printer):BuildDocumentCore(invoice,pageWidth,pageHeight,headers);
+    }
+    private const double DipsPerMm=96.0/25.4;
+    private static double Mm(double value)=>value*DipsPerMm;
+    internal static string BlankSample(string key)=>key switch {"event"=>"Название мероприятия","venue"=>"Название площадки","date"=>"21.10.2026 19:00","sector"=>"Партер","row"=>"Ряд 5","seat"=>"Место 12","price"=>"1 500 ₽","number"=>"АБ 000001",_=>key};
+    private FixedDocument BuildBlankDocument(InvoiceInfo invoice,TicketBlank blank,double printableWidth,double printableHeight,IReadOnlyDictionary<long,InvoiceInfo> headers,PrintDialog? printer)
+    {
+        blank.Validate();var width=Mm(blank.PageWidth);var height=Mm(blank.PageHeight);
+        var originX=0.0;var originY=0.0;var mediaWidth=printableWidth;var mediaHeight=printableHeight;
+        if(printer is not null)
+        {
+            var capabilities=printer.PrintQueue.GetPrintCapabilities(printer.PrintTicket);
+            var area=capabilities.PageImageableArea;
+            if(area is not null){originX=area.OriginWidth;originY=area.OriginHeight;printableWidth=area.ExtentWidth;printableHeight=area.ExtentHeight;}
+            mediaWidth=capabilities.OrientedPageMediaWidth??mediaWidth;
+            mediaHeight=capabilities.OrientedPageMediaHeight??mediaHeight;
+        }
+        if(!double.IsFinite(printableWidth)||!double.IsFinite(printableHeight)||!double.IsFinite(mediaWidth)||!double.IsFinite(mediaHeight)||width>mediaWidth+0.5||height>mediaHeight+0.5)
+            throw new TicketException($"Бланк «{blank.Name}» ({blank.PageWidth} × {blank.PageHeight} мм) не помещается на бумагу принтера ({mediaWidth/DipsPerMm:0.#} × {mediaHeight/DipsPerMm:0.#} мм). Выберите подходящую бумагу и ориентацию в настройках принтера.");
+        if(printer is not null)
+            foreach(var position in blank.Positions)foreach(var field in blank.Fields.Where(f=>f.Enabled))
+            {
+                var x=Mm(position.X+field.X);var y=Mm(position.Y+field.Y);
+                if(x<originX-0.5||y<originY-0.5||x+Mm(field.Width)>originX+printableWidth+0.5||y+Mm(field.Height)>originY+printableHeight+0.5)
+                    throw new TicketException($"Поле «{field.DisplayName}» выходит за печатную область принтера. Переместите поле или позицию билета внутрь листа в разделе «Бланки печати». Непечатаемые поля слева и сверху: {originX/DipsPerMm:0.#} и {originY/DipsPerMm:0.#} мм.");
+            }
+        BitmapImage? background=null;
+        if(blank.PrintBackground){var path=Store.TicketBlankScanPath(blank.ScanPath);if(!System.IO.File.Exists(path))throw new TicketException("Скан бланка не найден. Загрузите его заново в разделе «Бланки печати». ");background=new BitmapImage(new Uri(path));}
+        var document=new FixedDocument();
+        for(var offset=0;offset<invoice.Tickets.Count;offset+=blank.Positions.Count)
+        {
+            // FixedPage/XPS coordinates start at the physical sheet edge. Hardware
+            // margins constrain fields but must never shift calibrated coordinates.
+            var page=new FixedPage{Width=printer is null?width:mediaWidth,Height=printer is null?height:mediaHeight,Background=Brushes.White};
+            if(background is not null){var image=new Image{Source=background,Width=width,Height=height,Stretch=Stretch.Fill};FixedPage.SetLeft(image,0);FixedPage.SetTop(image,0);page.Children.Add(image);}
+            for(var i=0;i<blank.Positions.Count&&offset+i<invoice.Tickets.Count;i++)
+            {
+                var ticket=invoice.Tickets[offset+i];var source=headers.TryGetValue(ticket.Id,out var original)?original:invoice;var position=blank.Positions[i];
+                foreach(var field in blank.Fields.Where(f=>f.Enabled))
+                {
+                    var text=field.Key switch {"event"=>source.Title,"venue"=>source.Venue,"date"=>source.EventDate,"sector"=>ticket.Sector,"row"=>ticket.Row,"seat"=>ticket.Seat,"price"=>InvoiceDocuments.Money(ticket.Amount),"number"=>ticket.Code,_=>""};
+                    var label=new TextBlock{Text=text,FontFamily=new FontFamily("Arial"),FontSize=field.FontSize*96/72,TextWrapping=TextWrapping.NoWrap};
+                    var fit=new Viewbox{Child=label,Width=Mm(field.Width),Height=Mm(field.Height),Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left};
+                    FixedPage.SetLeft(fit,Mm(position.X+field.X));FixedPage.SetTop(fit,Mm(position.Y+field.Y));page.Children.Add(fit);
+                }
+            }
+            document.Pages.Add(new PageContent{Child=page});
+        }
+        return document;
     }
     internal static FixedDocument BuildDocument(InvoiceInfo invoice,double pageWidth=794,double pageHeight=1123)
         =>BuildDocumentCore(invoice,pageWidth,pageHeight,null);

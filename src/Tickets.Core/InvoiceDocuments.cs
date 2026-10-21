@@ -29,8 +29,7 @@ public static class InvoiceDocuments
             Paragraph("Мероприятие: "+invoice.Title,true),Paragraph("Дата и время: "+invoice.EventDate),
             Paragraph("Площадка: "+invoice.Venue),Paragraph("Отправитель: "+invoice.Sender),
             Paragraph("Получатель: "+invoice.Recipient),Paragraph(""));
-        body.Add(Paragraph("Реквизиты отправителя",true),Paragraph(BusinessDocumentTemplates.Requisites(invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender))),
-            Paragraph("Реквизиты получателя",true),Paragraph(BusinessDocumentTemplates.Requisites(invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient))));
+        body.Add(RequisitesTable(invoice,"Отправитель","Получатель"),Paragraph("",false,8));
         var widths=new[]{1300,800,1900,900,1100,1200,1400};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",
             new XElement(W+"tblW",new XAttribute(W+"w",widths.Sum()),new XAttribute(W+"type","dxa")),
@@ -54,31 +53,57 @@ public static class InvoiceDocuments
         var body=new XElement(W+"body");
         var total=DocumentTotals.Total(document.Invoice.Tickets.Count,document.Invoice.Total);
         var firstLine=true;
-        var lines=document.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
-        for(var index=0;index<lines.Length;index++)
+        var lines=BusinessDocumentTemplates.Layout(document);
+        for(var index=0;index<lines.Count;index++)
         {
-            var line=lines[index];
+            if(lines[index].Requisites){var labels=BusinessDocumentTemplates.PartyLabels(document.Kind);body.Add(RequisitesTable(document.Invoice,labels.Seller,labels.Buyer,document.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act,document.Kind==IssueDocumentKinds.Waybill?14050:9600));continue;}
+            var line=lines[index].Text;
             if(line.StartsWith("№ | Билеты и места |",StringComparison.Ordinal))
             {
                 var rows=new List<string[]>();
-                do{rows.Add(lines[index].Split('|').Select(value=>value.Trim()).ToArray());index++;}
-                while(index<lines.Length&&lines[index].Split('|').Length==6);
-                index--;body.Add(BusinessTable(rows));continue;
+                var columns=line.Split('|').Length;
+                do{rows.Add(lines[index].Text.Split('|').Select(value=>value.Trim()).ToArray());index++;}
+                while(index<lines.Count&&!lines[index].Requisites&&lines[index].Text.Split('|').Length==columns);
+                index--;body.Add(BusinessTable(rows,document.Kind));continue;
             }
-            var heading=firstLine||IsBusinessHeading(line);
-            var paragraph=Paragraph(line,heading||line.Contains(total,StringComparison.Ordinal),firstLine?30:20);
-            if(document.Kind==IssueDocumentKinds.Contract&&line=="6. Реквизиты и подписи сторон")paragraph.Element(W+"pPr")!.Add(new XElement(W+"pageBreakBefore"));
+            var formNote=document.Kind==IssueDocumentKinds.Waybill&&(line.StartsWith("Унифицированная форма",StringComparison.Ordinal)||line.StartsWith("Утверждена постановлением",StringComparison.Ordinal)||line.StartsWith("Форма по ОКУД",StringComparison.Ordinal));
+            var title=IsDocumentTitle(line);
+            var heading=(!formNote&&firstLine)||title||IsBusinessHeading(line);
+            var paragraph=Paragraph(line,heading||line.Contains(total,StringComparison.Ordinal),title?30:formNote?16:20);
+            if(title||formNote)paragraph.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",title?"center":"right")));
             body.Add(paragraph);firstLine=false;
         }
-        SaveDocument(body,destination);
+        if(document.Kind==IssueDocumentKinds.Contract)
+        {
+            foreach(var font in body.Descendants(W+"rFonts")){font.SetAttributeValue(W+"ascii","Times New Roman");font.SetAttributeValue(W+"hAnsi","Times New Roman");}
+            foreach(var size in body.Descendants(W+"sz"))
+            {var value=(string?)size.Attribute(W+"val");size.SetAttributeValue(W+"val",value=="30"?26:size.Ancestors(W+"tbl").Any()?22:24);}
+        }
+        SaveDocument(body,destination,document.Kind==IssueDocumentKinds.Waybill);
+    }
+    public static bool IsDocumentTitle(string line)=>line.StartsWith("ДОГОВОР №",StringComparison.Ordinal)||line.StartsWith("АКТ №",StringComparison.Ordinal)||line.StartsWith("ТОВАРНАЯ НАКЛАДНАЯ №",StringComparison.Ordinal)||line.StartsWith("СЧЁТ НА ОПЛАТУ №",StringComparison.Ordinal);
+    private static XElement RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,int width=9600)
+    {
+        var details=new[]{invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender),invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)};
+        var labels=new[]{seller,buyer};
+        return new XElement(W+"tbl",new XElement(W+"tblPr",
+            new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),
+            new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),
+            new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"w",100),new XAttribute(W+"type","dxa"))))),
+            new XElement(W+"tblGrid",new XElement(W+"gridCol",new XAttribute(W+"w",width/2)),new XElement(W+"gridCol",new XAttribute(W+"w",width/2))),
+            new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),details.Select((detail,index)=>
+                new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa")),new XElement(W+"vAlign",new XAttribute(W+"val","top"))),
+                    Paragraph(labels[index],true,20),BusinessDocumentTemplates.Requisites(detail).Split('\n').Select(line=>Paragraph(line,false,19)),
+                    signatures?Paragraph("Подпись: ______________ / "+BusinessDocumentTemplates.Missing(detail.Signatory)+" /",false,19):null))));
     }
     public static bool IsBusinessHeading(string line)=>System.Text.RegularExpressions.Regex.IsMatch(line,@"^\d+\. [^\d]")
         ||line.StartsWith("Реквизиты ",StringComparison.Ordinal)||line is "Продавец" or "Покупатель" or "Поставщик и получатель платежа" or "Покупатель и плательщик" or "Грузоотправитель и поставщик" or "Грузополучатель и плательщик";
-    private static XElement BusinessTable(IReadOnlyList<string[]> rows)
+    private static XElement BusinessTable(IReadOnlyList<string[]> rows,string kind)
     {
-        var widths=new[]{450,4450,600,850,1150,1300};
+        var widths=BusinessDocumentTemplates.ItemWidths(kind);
+        if(widths.Length!=rows[0].Length)widths=BusinessDocumentTemplates.ItemWidths(IssueDocumentKinds.Contract);
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",
-            new XElement(W+"tblW",new XAttribute(W+"w",8800),new XAttribute(W+"type","dxa")),
+            new XElement(W+"tblW",new XAttribute(W+"w",widths.Sum()),new XAttribute(W+"type","dxa")),
             new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),
             new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"w",80),new XAttribute(W+"type","dxa")))),
             new XElement(W+"tblBorders",new[]{"top","left","bottom","right","insideH","insideV"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"val","single"),new XAttribute(W+"sz",4),new XAttribute(W+"color","D9D9D9"))))),
@@ -87,7 +112,7 @@ public static class InvoiceDocuments
             table.Add(new XElement(W+"tr",new XElement(W+"trPr",r==0?new XElement(W+"tblHeader"):null),
                 rows[r].Select((value,c)=>new XElement(W+"tc",new XElement(W+"tcPr",
                     new XElement(W+"tcW",new XAttribute(W+"w",widths[c]),new XAttribute(W+"type","dxa")),
-                    new XElement(W+"vAlign",new XAttribute(W+"val","center")),r==0?new XElement(W+"shd",new XAttribute(W+"fill","E8EDF3")):null),Paragraph(value,r==0,19)))));
+                    new XElement(W+"vAlign",new XAttribute(W+"val","center")),r==0?new XElement(W+"shd",new XAttribute(W+"fill","E8EDF3")):null),Paragraph(value,r==0,kind==IssueDocumentKinds.Waybill?16:19)))));
         return table;
     }
     public static void SaveSpecificationWord(SpecificationInfo specification,string destination)
@@ -99,9 +124,9 @@ public static class InvoiceDocuments
         body.Add(Paragraph(""),Paragraph("Отправитель: ____________________    Получатель: ____________________"));
         SaveDocument(body,destination);
     }
-    private static void SaveDocument(XElement body,string destination)
+    private static void SaveDocument(XElement body,string destination,bool landscape=false)
     {
-        body.Add(new XElement(W+"sectPr",new XElement(W+"pgSz",new XAttribute(W+"w",11906),new XAttribute(W+"h",16838)),
+        body.Add(new XElement(W+"sectPr",new XElement(W+"pgSz",new XAttribute(W+"w",landscape?16838:11906),new XAttribute(W+"h",landscape?11906:16838),landscape?new XAttribute(W+"orient","landscape"):null),
             new XElement(W+"pgMar",new XAttribute(W+"top",1134),new XAttribute(W+"bottom",1134),new XAttribute(W+"left",1134),new XAttribute(W+"right",1134))));
         var document=new XDocument(new XElement(W+"document",new XAttribute(XNamespace.Xmlns+"w",W),body));
         var temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";

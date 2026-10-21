@@ -7,6 +7,15 @@ namespace Tickets.App;
 
 internal sealed class PerformanceWindow : EditorWindow
 {
+    private static TreeViewItem? NearestItem(DependencyObject? source)
+    {
+        while(source is not null)
+        {
+            if(source is TreeViewItem item)return item;
+            source=source is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D?VisualTreeHelper.GetParent(source):LogicalTreeHelper.GetParent(source);
+        }
+        return null;
+    }
     public long SelectedEventId {get;private set;}
     public PerformanceWindow(Store store):base(store,"Спектакли",800,780)
     {
@@ -25,6 +34,10 @@ internal sealed class PerformanceWindow : EditorWindow
             {
                 var node=new TreeViewItem{Header=new TextBlock{Text=performance.Title,FontSize=13,FontWeight=FontWeights.SemiBold},Tag=performance};
                 tree.Items.Add(node);
+                node.PreviewMouseLeftButtonDown+=(_,e)=>{
+                    if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),node))
+                    {node.IsSelected=true;node.IsExpanded=!node.IsExpanded;foreach(var child in node.Items.OfType<TreeViewItem>().Where(i=>i.Tag is null))child.IsExpanded=node.IsExpanded;e.Handled=true;}
+                };
                 var shows=events.Where(e=>CatalogText.Key(e.Title)==CatalogText.Key(performance.Title)).OrderBy(e=>e.SortDate).ToList();
                 void Add(ItemsControl parent,IEnumerable<Tickets.Core.EventInfo> items)
                 {
@@ -42,13 +55,13 @@ internal sealed class PerformanceWindow : EditorWindow
                     if(MessageBox.Show(DialogOwner,$"Удалить спектакль «{performance.Title}»?\n\nПоказы переместятся в архив удалённых. Выдачи, документы и возвраты сохранятся.","Удаление спектакля",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
                     store.DeletePerformance(performance.Id);Refresh();
                 });
-                node.PreviewMouseRightButtonDown+=(_,e)=>{e.Handled=true;if(e.OriginalSource is DependencyObject source&&ReferenceEquals(ItemsControl.ContainerFromElement(tree,source),node)){node.IsSelected=true;menu.IsOpen=true;}};
+                node.PreviewMouseRightButtonDown+=(_,e)=>{e.Handled=true;if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),node)){node.IsSelected=true;menu.IsOpen=true;}};
             }
         }
         tree.SelectedItemChanged+=(_,_)=>{
             if(tree.SelectedItem is not TreeViewItem item)return;
             if(item.Tag is Tickets.Core.EventInfo showing){SelectedEventId=showing.Id;Finish(true);}
-            else item.IsExpanded=true;
+            else if(item.Tag is not PerformanceInfo)item.IsExpanded=true;
         };
         search.TextChanged+=(_,_)=>Try(Refresh);Refresh();
     }
@@ -80,7 +93,7 @@ internal sealed class PricingDirectoryWindow : EditorWindow
                 var node=new TreeViewItem{Header=$"{venue.Name} ({plans.Count})",Tag=venue,IsExpanded=venue.Id==expand};tree.Items.Add(node);
                 foreach(var plan in matching)
                 {
-                    var leaf=new TreeViewItem{Header=plan.Name,Tag=plan};node.Items.Add(leaf);
+                    var leaf=new TreeViewItem{Header=store.PricePlanCaption(plan),Tag=plan};node.Items.Add(leaf);
                     var menu=new ContextMenu();var delete=new MenuItem{Header="Удалить"};menu.Items.Add(delete);leaf.ContextMenu=menu;
                     delete.Click+=(_,_)=>Try(()=>{
                         if(MessageBox.Show(DialogOwner,$"Удалить расценовку «{plan.Name}»?\n\nЦены существующих показов и история сохранятся.","Удаление расценовки",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;

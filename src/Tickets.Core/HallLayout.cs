@@ -41,6 +41,20 @@ public static class HallLayout
         return first==first.ToLowerInvariant()?result.ToLowerInvariant():result;
     }
 
+    public sealed record AisleChoice(int After,string Caption);
+    public static IReadOnlyList<AisleChoice> AisleChoices(HallRowLayout row,string firstSeat,bool reverse)
+    {
+        if(row.SeatCount is <1 or >300)throw new TicketException("Количество мест: от 1 до 300.");
+        var start=string.IsNullOrWhiteSpace(row.FirstSeat)?firstSeat:row.FirstSeat;
+        var labels=Enumerable.Range(0,row.SeatCount).Select(i=>Label(start,i)).ToArray();
+        if(reverse)Array.Reverse(labels);
+        var choices=new List<AisleChoice>{new(0,"Нет прохода")};
+        for(var i=1;i<labels.Length;i++)choices.Add(new(i,$"Между {labels[i-1]} и {labels[i]}"));
+        // Keep previously saved edge gaps selectable without changing existing layouts.
+        if(row.AisleAfter==row.SeatCount)choices.Add(new(row.SeatCount,$"После {labels[^1]} (край ряда)"));
+        return choices;
+    }
+
     public static IReadOnlyList<DraftSeat> Generate(string sector,IReadOnlyList<HallRowLayout> rows,string firstSeat,bool reverse,double y)
     {
         sector=sector.Trim();

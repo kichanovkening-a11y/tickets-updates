@@ -84,6 +84,7 @@ internal sealed class InvoiceWindow : EditorWindow
         void Text(string text,bool bold=false,double size=13)=>doc.Blocks.Add(new Paragraph(new Run(text)){FontWeight=bold?FontWeights.Bold:FontWeights.Normal,FontSize=size,Margin=new Thickness(0,0,0,7)});
         Text($"НАКЛАДНАЯ № {invoice.Id}",true,22);Text("на передачу билетов");Text("Дата выдачи: "+invoice.Date);
         Text("Мероприятие: "+invoice.Title,true);Text("Дата и время: "+invoice.EventDate);Text("Площадка: "+invoice.Venue);Text("От кого: "+invoice.Sender);Text("Получатель: "+invoice.Recipient);
+        doc.Blocks.Add(IssueDocumentWindow.RequisitesTable(invoice,"Отправитель","Получатель"));
         var table=new Table{CellSpacing=0,BorderThickness=new Thickness(0.5),BorderBrush=Brushes.SlateGray};
         foreach(var width in new[]{1.5,.6,2.5,.8,1.0,1.1,1.3})table.Columns.Add(new TableColumn{Width=new GridLength(width,GridUnitType.Star)});
         var rows=new TableRowGroup();table.RowGroups.Add(rows);

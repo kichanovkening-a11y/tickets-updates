@@ -32,6 +32,7 @@ public partial class MainWindow : Window
         MinWidth=Math.Min(800,workArea.Width);
         MinHeight=Math.Min(500,workArea.Height);
         Hall.SelectionChanged+=UpdateSelection;
+        Hall.SeatContextRequested+=OpenSeatContext;
         Loaded+=(_,_)=>Run(()=> {
             ReadEventCatalog(); ready=true; ApplyFilter();RefreshRecipients();RefreshSenders();
             HomeSummary.Text=$"В базе мероприятий: {events.Count}. Старые выдачи не переносились.";
@@ -65,6 +66,13 @@ public partial class MainWindow : Window
                 item.Unselected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.Transparent;label.Foreground=normal;}};
                 root.Items.Add(item);
             }
+            root.PreviewMouseLeftButtonDown+=(_,e)=>{
+                if(e.OriginalSource is not DependencyObject source||ItemsControl.ContainerFromElement(EventsList,source) is not TreeViewItem clicked||!ReferenceEquals(clicked,root))return;
+                // Leave the built-in expander arrow to TreeView; only a header click toggles the group.
+                for(DependencyObject? node=source;node is not null&&!ReferenceEquals(node,root);node=node is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D?System.Windows.Media.VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
+                    if(node is System.Windows.Controls.Primitives.ToggleButton)return;
+                var expand=!root.IsExpanded;root.IsSelected=true;root.IsExpanded=expand;e.Handled=true;
+            };
             return root;
         }
         foreach(var group in EventSchedule.Groups(filtered,false,now))EventsList.Items.Add(Group(group,false));
@@ -135,7 +143,7 @@ public partial class MainWindow : Window
         currentArchived=store.IsEventArchived(current.Id);
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;
-        EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Выдано: {seats.Count(s=>s.TicketId.HasValue)}";
+        EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
         PriceBox.Clear();
         if(fit){recipientUpdating=true;try{RecipientBox.SelectedItem=null;RecipientBox.Text="";}finally{recipientUpdating=false;}}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
@@ -144,7 +152,7 @@ public partial class MainWindow : Window
         foreach(var price in seats.Where(s=>s.Amount.HasValue&&!s.IsBlocked).GroupBy(s=>s.Amount).OrderBy(s=>s.Key))
             AddLegend($"{price.Key:N0} ₽ × {price.Count()} = {price.Sum(s=>(decimal)s.Amount!.Value):N0} ₽",HallView.SeatBrush(price.First().Color));
         HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
-        AddLegend("Бронь / накладная",Brushes.Black);AddLegend("Распечатаны",Brushes.Red);AddLegend("Снято с продажи",Brushes.DarkOrange); AddLegend("Нет цены",Brushes.Gainsboro);
+        AddLegend("Бронь / накладная",Brushes.Black);AddLegend("Распечатаны",Brushes.Red);AddLegend("× Снято с продажи",Brushes.Gray); AddLegend("Нет цены",Brushes.Gainsboro);
         UpdateNumber();
     }
     private void AddLegend(string text,Brush brush)
@@ -159,7 +167,7 @@ public partial class MainWindow : Window
         if(!ready) return;
         var selected=Hall.SelectedSeats;
         SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0),AlertBrush=s.TicketId.HasValue||s.IsBlocked?Brushes.Red:Brushes.Black}).ToList();
-        IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Выдано: {g.Key} — мест: {g.Count()}"));
+        IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Получатель: {g.Key} — мест: {g.Count()}"));
         var archived=currentArchived;
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
         SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count}\nСумма: {selected.Sum(s=>(decimal)(s.Amount??0)):N0} ₽";

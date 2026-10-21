@@ -48,34 +48,60 @@ internal sealed class IssueDocumentWindow:EditorWindow
     }
     private void Print()
     {
-        Save();var dialog=new PrintDialog();if(dialog.ShowDialog()!=true)return;
+        Save();var dialog=new PrintDialog();if(kind==IssueDocumentKinds.Waybill)dialog.PrintTicket.PageOrientation=System.Printing.PageOrientation.Landscape;if(dialog.ShowDialog()!=true)return;
         var document=Document(Store.GetIssueDocument(eventId,issueId,kind));document.PageWidth=dialog.PrintableAreaWidth;document.PageHeight=dialog.PrintableAreaHeight;document.PagePadding=new Thickness(32);document.ColumnWidth=dialog.PrintableAreaWidth;
         dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator,Title);
     }
     internal static FlowDocument Document(IssueDocumentInfo info)
     {
-        var document=new FlowDocument{FontFamily=new FontFamily("Arial"),FontSize=13,PageWidth=794,PagePadding=new Thickness(25),ColumnWidth=744};
+        var wide=info.Kind==IssueDocumentKinds.Waybill;
+        var contract=info.Kind==IssueDocumentKinds.Contract;
+        var document=new FlowDocument{FontFamily=new FontFamily(contract?"Times New Roman":"Arial"),FontSize=contract?16:13,PageWidth=wide?1123:794,PagePadding=new Thickness(25),ColumnWidth=wide?1073:744};
         var firstLine=true;
-        var lines=info.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
-        for(var index=0;index<lines.Length;index++)
+        var lines=BusinessDocumentTemplates.Layout(info);
+        for(var index=0;index<lines.Count;index++)
         {
-            var line=lines[index];
+            if(lines[index].Requisites){var labels=BusinessDocumentTemplates.PartyLabels(info.Kind);document.Blocks.Add(RequisitesTable(info.Invoice,labels.Seller,labels.Buyer,info.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act,contract));continue;}
+            var line=lines[index].Text;
             if(line.StartsWith("№ | Билеты и места |",StringComparison.Ordinal))
             {
                 var table=new Table{CellSpacing=0,Margin=new Thickness(0,5,0,10)};
-                foreach(var width in new[]{35d,330,45,65,85,90})table.Columns.Add(new TableColumn{Width=new GridLength(width)});
+                var columns=line.Split('|').Length;
+                var widths=BusinessDocumentTemplates.ItemWidths(info.Kind);
+                if(widths.Length!=columns)widths=BusinessDocumentTemplates.ItemWidths(IssueDocumentKinds.Contract);
+                foreach(var width in widths)table.Columns.Add(new TableColumn{Width=new GridLength(width,GridUnitType.Star)});
                 var group=new TableRowGroup();table.RowGroups.Add(group);var header=true;
                 do
                 {
                     var row=new TableRow();group.Rows.Add(row);
-                    foreach(var value in lines[index].Split('|'))row.Cells.Add(new TableCell(new Paragraph(new Run(value.Trim())){Margin=new Thickness(0)}){Padding=new Thickness(4),BorderBrush=Brushes.LightGray,BorderThickness=new Thickness(.5),FontSize=12,FontWeight=header?FontWeights.Bold:FontWeights.Normal,Background=header?Brushes.AliceBlue:Brushes.White});
+                    foreach(var value in lines[index].Text.Split('|'))row.Cells.Add(new TableCell(new Paragraph(new Run(value.Trim())){Margin=new Thickness(0)}){Padding=new Thickness(4),BorderBrush=Brushes.LightGray,BorderThickness=new Thickness(.5),FontSize=contract?14.67:wide?10.67:12,FontWeight=header?FontWeights.Bold:FontWeights.Normal,Background=header?Brushes.AliceBlue:Brushes.White});
                     header=false;index++;
-                }while(index<lines.Length&&lines[index].Split('|').Length==6);
+                }while(index<lines.Count&&!lines[index].Requisites&&lines[index].Text.Split('|').Length==columns);
                 index--;document.Blocks.Add(table);continue;
             }
-            var bold=firstLine||InvoiceDocuments.IsBusinessHeading(line)||line.Contains(DocumentTotals.Total(info.Invoice.Tickets.Count,info.Invoice.Total),StringComparison.Ordinal);
-            document.Blocks.Add(new Paragraph(new Run(line)){FontSize=firstLine?22:13,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,KeepWithNext=bold,Margin=new Thickness(0,0,0,7)});firstLine=false;
+            var formNote=wide&&(line.StartsWith("Унифицированная форма",StringComparison.Ordinal)||line.StartsWith("Утверждена постановлением",StringComparison.Ordinal)||line.StartsWith("Форма по ОКУД",StringComparison.Ordinal));
+            var title=InvoiceDocuments.IsDocumentTitle(line);
+            var bold=(!formNote&&firstLine)||title||InvoiceDocuments.IsBusinessHeading(line)||line.Contains(DocumentTotals.Total(info.Invoice.Tickets.Count,info.Invoice.Total),StringComparison.Ordinal);
+            document.Blocks.Add(new Paragraph(new Run(line)){FontSize=title?contract?17.33:22:formNote?10:contract?16:13,TextAlignment=title?TextAlignment.Center:formNote?TextAlignment.Right:TextAlignment.Left,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,KeepWithNext=bold,Margin=new Thickness(0,0,0,7)});firstLine=false;
         }
         return document;
+    }
+    internal static Table RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,bool contract=false)
+    {
+        var table=new Table{CellSpacing=0,Margin=new Thickness(0,5,0,12)};
+        table.Columns.Add(new TableColumn{Width=new GridLength(1,GridUnitType.Star)});
+        table.Columns.Add(new TableColumn{Width=new GridLength(1,GridUnitType.Star)});
+        var group=new TableRowGroup();table.RowGroups.Add(group);var row=new TableRow();group.Rows.Add(row);
+        var details=new[]{invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender),invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)};
+        var labels=new[]{seller,buyer};
+        for(var index=0;index<2;index++)
+        {
+            var cell=new TableCell{Padding=new Thickness(6),FontSize=contract?14.67:12};
+            cell.Blocks.Add(new Paragraph(new Run(labels[index])){FontWeight=FontWeights.Bold,KeepWithNext=true,Margin=new Thickness(0,0,0,5)});
+            foreach(var line in BusinessDocumentTemplates.Requisites(details[index]).Split('\n'))cell.Blocks.Add(new Paragraph(new Run(line)){Margin=new Thickness(0,0,0,4)});
+            if(signatures)cell.Blocks.Add(new Paragraph(new Run("Подпись: ______________ / "+BusinessDocumentTemplates.Missing(details[index].Signatory)+" /")){Margin=new Thickness(0,5,0,0)});
+            row.Cells.Add(cell);
+        }
+        return table;
     }
 }

@@ -1,10 +1,79 @@
 namespace Tickets.Core;
 
+public sealed record BusinessDocumentLine(string Text,bool Requisites=false);
+
 /// <summary>Editable business forms based on the supplied contract, act, bill and goods waybill.</summary>
 public static class BusinessDocumentTemplates
 {
+    public static (string Seller,string Buyer) PartyLabels(string kind)=>kind switch
+    {
+        IssueDocumentKinds.Act=>("Исполнитель","Заказчик"),
+        IssueDocumentKinds.Bill=>("Поставщик и получатель платежа","Покупатель и плательщик"),
+        IssueDocumentKinds.Waybill=>("Грузоотправитель и поставщик","Грузополучатель и плательщик"),
+        _=>("Продавец","Покупатель")
+    };
+    // Layout is shared by printing and Word export, including already saved templates.
+    // The editable text remains plain text; its two requisite placeholders become one row.
+    public static IReadOnlyList<BusinessDocumentLine> Layout(IssueDocumentInfo document)
+    {
+        var lines=document.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+        var omitted=new HashSet<int>();var insertion=lines.Length;
+        foreach(var details in new[]{document.Invoice.SenderDetails??new OrganizationDetails(Name:document.Invoice.Sender),document.Invoice.RecipientDetails??new OrganizationDetails(Name:document.Invoice.Recipient)})
+        {
+            var block=Requisites(details).Split('\n');
+            for(var i=0;i<=lines.Length-block.Length;i++)
+            {
+                if(omitted.Contains(i)||!lines.Skip(i).Take(block.Length).SequenceEqual(block))continue;
+                var start=i;
+                if(i>0&&IsPartyHeading(lines[i-1]))start--;
+                insertion=Math.Min(insertion,start);
+                for(var j=start;j<i+block.Length;j++)omitted.Add(j);
+            }
+        }
+        if(document.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act)
+        {
+            var labels=PartyLabels(document.Kind);
+            var parties=new[]{(labels.Seller,document.Invoice.SenderDetails),(labels.Buyer,document.Invoice.RecipientDetails)};
+            foreach(var (label,details) in parties)
+            {
+                var signature=$"{label}: {Missing(details?.Position??"")} ____________ / {Missing(details?.Signatory??"")} /";
+                for(var i=0;i<lines.Length;i++)if(lines[i]==signature)omitted.Add(i);
+            }
+        }
+        var result=new List<BusinessDocumentLine>();
+        for(var i=0;i<=lines.Length;i++)
+        {
+            if(i==insertion)result.Add(new("",true));
+            if(i<lines.Length&&!omitted.Contains(i))result.Add(new(lines[i]));
+        }
+        return result;
+    }
+    private static bool IsPartyHeading(string line)=>line is "Продавец" or "Покупатель" or "Реквизиты исполнителя" or "Реквизиты заказчика" or "Поставщик и получатель платежа" or "Покупатель и плательщик" or "Грузоотправитель и поставщик" or "Грузополучатель и плательщик";
     public static string LegacyDefault(string kind)=>IssueDocumentKinds.Name(kind)+" № {issueId}\nДата: {date}\nОтправитель: {sender}\nПолучатель: {recipient}\nМероприятие: {event}\nДата мероприятия: {eventDate}\nПлощадка: {venue}\n\nПередача билетов по указанной выдаче.\n\n{summary}\n{total}\n\nПередал: ____________________    Получил: ____________________";
-    public static string Default(string kind)=>kind switch
+    public static string Default(string kind)
+    {
+        var template=PreviousDefault(kind);
+        return kind switch
+        {
+            IssueDocumentKinds.Contract=>template
+                .Replace("1.1. Продавец обязуется передать Покупателю театральные билеты на мероприятие «{event}» на площадке {venue}. Дата и время мероприятия: {eventDate}. Количество: {count} шт. Стоимость: {amount} руб.","1.1. Продавец принимает на себя обязательства по организации и проведению культурно-массового мероприятия и продаже театральных билетов Покупателю.\nТеатральные билеты на мероприятие «{event}» на площадке {venue}. Дата и время: {eventDate}. Количество: {count} шт., общая сумма: {amount} руб. ({amountWords}).")
+                .Replace("2.2. Покупатель перечисляет оплату на расчётный счёт Продавца. Размер предоплаты: ____________. Срок оплаты: ____________.","2.2. Покупатель осуществляет 100% оплату на расчётный счёт Продавца в размере {amount} руб. ({amountWords}). Срок оплаты: ____________.")
+                .Replace("2.3. Срок и порядок передачи билетов: ____________.","2.3. После поступления денежных средств на расчётный счёт Продавца последний обязуется в течение 10 дней предоставить Покупателю билеты в количестве {count} шт.")
+                .Replace("3.2. При отмене мероприятия по причинам, за которые отвечает Продавец, порядок и срок возврата платежей: ____________.","3.2. Если мероприятие не состоится по причинам, за которые отвечает Продавец, последний обязуется полностью возвратить Покупателю полученные платежи не позднее пяти банковских дней от назначенной даты мероприятия.")
+                .Replace("4. Разрешение споров","3.4. В случае отказа Покупателя от мероприятия последний должен компенсировать Продавцу понесённые им убытки на момент отказа.\n4. Разрешение споров")
+                .Replace("4.1. Разногласия разрешаются путём переговоров. При недостижении соглашения спор передаётся на рассмотрение суда в установленном порядке.","4.1. Споры и разногласия по вопросам выполнения обязательств по договору разрешаются путём переговоров на основании действующего законодательства РФ.\n4.2. Если Стороны не придут к соглашению, спор подлежит разрешению в Арбитражном суде г. Москвы.")
+                .Replace("5.2. Договор действует с момента подписания до исполнения обязательств. Договор составлен в двух экземплярах, по одному для каждой стороны.","5.2. Договор вступает в силу с момента подписания обеими Сторонами и действует до выполнения обязательств по договору.\n5.3. Об изменении реквизитов, а также других изменениях, касающихся договора, Стороны обязаны своевременно извещать друг друга в письменном виде.\n5.4. Договор составлен в двух экземплярах, имеющих одинаковую юридическую силу, по одному для каждой Стороны."),
+            IssueDocumentKinds.Waybill=>template
+                .Replace("ТОВАРНАЯ НАКЛАДНАЯ № {issueId}","Унифицированная форма № ТОРГ-12\nУтверждена постановлением Госкомстата России от 25.12.98 № 132\nФорма по ОКУД: 0330212. По ОКПО: ____________.\nТОВАРНАЯ НАКЛАДНАЯ № {issueId}")
+                .Replace("Всего отпущено билетов: {count} ({countWords}).","Всего по накладной: {count} шт., на сумму {amount} руб.\nТоварная накладная имеет приложение на ____________ листах.\nВсего мест: {count} ({countWords}).\nМасса груза (нетто): ____________. Масса груза (брутто): ____________.\nПриложение (паспорта, сертификаты и т.п.) на ____________ листах.\nВсего отпущено на сумму: {amountWords}.")
+                .Replace("Отпуск произвёл:","Главный (старший) бухгалтер: ____________ / ____________ /\nОтпуск произвёл:")
+                .Replace("По доверенности № ____________ от ____________.","По доверенности № ____________ от ____________, выданной ____________.")+"\nМ.П. отправителя                          М.П. получателя",
+            IssueDocumentKinds.Act=>template.Replace("НДС: ____________.","Без налога (НДС): ____________.\nВсего оказано услуг на сумму {amount} руб. ({amountWords}).")+"\nМ.П. исполнителя                          М.П. заказчика",
+            IssueDocumentKinds.Bill=>template.Replace("НДС: ____________.","Всего к оплате: {amount} руб. ({amountWords}).\nНДС: ____________."),
+            _=>template
+        };
+    }
+    public static string PreviousDefault(string kind)=>kind switch
     {
         IssueDocumentKinds.Contract=>"""
             ДОГОВОР № {issueId}
@@ -99,18 +168,38 @@ public static class BusinessDocumentTemplates
             """,
         _=>throw new TicketException("Неизвестный вид документа.")
     };
-    public static string Items(InvoiceInfo invoice)
+    public static int[] ItemWidths(string kind)=>kind switch
     {
-        var rows=new List<string>{"№ | Билеты и места | Ед. | Кол-во | Цена, ₽ | Сумма, ₽"};
+        IssueDocumentKinds.Waybill=>[400,3800,600,500,650,650,700,700,750,700,1000,1000,650,750,1200],
+        IssueDocumentKinds.Bill=>[350,3500,500,650,850,1000,750,1100,650],
+        _=>[450,4450,600,850,1150,1300]
+    };
+    public static string Items(InvoiceInfo invoice,string kind="contract")
+    {
+        var rows=new List<string>{kind switch
+        {
+            IssueDocumentKinds.Waybill=>"№ | Билеты и места | Код | Ед. | ОКЕИ | Упак. | В месте | Мест, шт. | Брутто | Кол-во | Цена, ₽ | Без НДС, ₽ | НДС, % | НДС, ₽ | С НДС, ₽",
+            IssueDocumentKinds.Bill=>"№ | Билеты и места | Ед. | Кол-во | Цена, ₽ | Сумма, ₽ | НДС | С НДС, ₽ | Валюта",
+            _=>"№ | Билеты и места | Ед. | Кол-во | Цена, ₽ | Сумма, ₽"
+        }};
         var index=0;
         foreach(var line in InvoiceDocuments.Lines(invoice))
-            rows.Add($"{++index} | {Cell(line.Sector)}, ряд {Cell(line.Row)}, места {Cell(line.Seats)} | шт. | {line.Count} | {DocumentTotals.Amount(line.Price)} | {DocumentTotals.Amount(line.Total)}");
+        {
+            var description=$"Театральные билеты: {Cell(invoice.Title)}. {Cell(invoice.Venue)}. {Cell(invoice.EventDate)}. {Cell(line.Sector)}, ряд {Cell(line.Row)}, места {Cell(line.Seats)}";
+            var total=DocumentTotals.Amount(line.Total);var price=DocumentTotals.Amount(line.Price);
+            rows.Add(kind switch
+            {
+                IssueDocumentKinds.Waybill=>$"{++index} | {description} | — | шт. | 796 | — | — | {line.Count} | — | {line.Count} | {price} | {total} | — | — | {total}",
+                IssueDocumentKinds.Bill=>$"{++index} | {description} | шт. | {line.Count} | {price} | {total} | — | {total} | RUB",
+                _=>$"{++index} | {description} | шт. | {line.Count} | {price} | {total}"
+            });
+        }
         return string.Join("\n",rows);
     }
     private static string Cell(string value)=>value.Replace('|','/').Replace('\r',' ').Replace('\n',' ');
     public static string Requisites(OrganizationDetails details)=>string.Join("\n",new[]{details.Name,
         "ИНН: "+Missing(details.Inn)+"; КПП: "+Missing(details.Kpp)+"; ОГРН / ОГРНИП: "+Missing(details.Ogrn),
-        "Адрес: "+Missing(details.Address),"Банк: "+Missing(details.Bank)+"; БИК: "+Missing(details.Bik),
+        "Адрес: "+Missing(details.Address),"ОКПО: "+Missing(details.Okpo)+"; ОКВЭД: "+Missing(details.Okved)+"; ОКАТО: "+Missing(details.Okato),"Банк: "+Missing(details.Bank)+"; БИК: "+Missing(details.Bik),
         "Расчётный счёт: "+Missing(details.Account),"Корр. счёт: "+Missing(details.CorrespondentAccount),
         "Подписант: "+Missing(details.Signatory)+"; должность: "+Missing(details.Position),"Телефон: "+Missing(details.Phone)});
     public static string Missing(string value)=>string.IsNullOrWhiteSpace(value)?"[не заполнено]":value;

@@ -6,3 +6,7 @@ release/
 Data/tickets.db
 Backups/
 github-release/
+
+data/seed.db
+**/PrintBlanks/
+**/Documents/

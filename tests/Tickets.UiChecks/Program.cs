@@ -30,11 +30,11 @@ internal static class Program
         try
         {
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
-            var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.Show();Pump();
+            var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
             var actions=Logical(main).OfType<Button>().ToList();
             Check(actions.Count>=15,"main actions found");
             Check(!actions.Any(b=>Equals(b.Content,"Спецификации")||Equals(b.Content,"Свернуть")||Equals(b.Content,"В окно")),"main toolbar omits duplicate window controls and specifications");
-            Check(actions.Where(b=>b.IsVisible).All(b=>b.ActualWidth==200&&b.ActualHeight==44),"all main action buttons have equal rendered size");
+            Check(actions.Where(b=>b.IsVisible).All(b=>b.ActualWidth==200&&b.ActualHeight==44),"home and navigation actions keep the shared rendered size");
             foreach(var button in actions.Where(b=>b.IsVisible))
             {
                 var label=Visual(button).OfType<TextBlock>().FirstOrDefault();if(label is null)continue;
@@ -57,8 +57,8 @@ internal static class Program
             var date=Logical(editor).OfType<DatePicker>().Single();Check(date.FontSize==26,"date text is doubled");Click(editor,"Календарь");Pump();
             var popup=(Popup)date.Template.FindName("PART_Popup",date);
             var calendar=Visual(popup.Child).OfType<Calendar>().Single();
-            Check(calendar.LayoutTransform.Value.IsIdentity,"calendar remains at normal size");
-            Check(calendar.DesiredSize.Width<300,"calendar popup has original layout bounds");
+            Check(Math.Abs(calendar.LayoutTransform.Value.M11-1.3)<.01&&Math.Abs(calendar.LayoutTransform.Value.M22-1.3)<.01,"calendar popup renders at 130 percent scale");
+            Check(calendar.DesiredSize.Width>200&&calendar.DesiredSize.Height>200,"enlarged calendar has usable layout bounds");
             date.IsDropDownOpen=false;
             Exception? nestedError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
@@ -81,11 +81,14 @@ internal static class Program
             Exception? hallError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
             var hallFields=Logical(hallEditor).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
-            hallFields[0].Text="UI row hall";hallFields[3].Text="20";hallFields[5].Text="А";
+            hallFields[0].Text="UI row hall";var rowCount=Field(hallEditor,"Количество рядов (1–200)");rowCount.Text="20";Field(hallEditor,"Ряды: начало или А, 1").Text="А";
+            var rowsTab=Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Ряды"));rowsTab.IsSelected=true;Pump();
+            Check(rowCount.IsVisible&&Field(hallEditor,"Мест в каждом ряду (1–300)").IsVisible,"row and seat counts are visible above the editable row table");
+            Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Схема")).IsSelected=true;Pump();
             var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
             Check(!rowGrid.IsReadOnly,"per-row seats and aisles are editable");
             Check(rowGrid.Items.Count==20,"row count produces a configuration row for every hall row");
-            ((HallRowLayout)rowGrid.Items[9]).SeatCount=17;hallFields[3].Text="2";hallFields[3].Text="20";
+            ((HallRowLayout)rowGrid.Items[9]).SeatCount=17;rowCount.Text="2";rowCount.Text="20";
             Check(((HallRowLayout)rowGrid.Items[9]).SeatCount==17,"intermediate row-count typing preserves customized row settings");
             var configurations=rowGrid.Items.Cast<HallRowLayout>().ToArray();
             foreach(var row in configurations){row.SeatCount=1;row.AisleAfter=0;}configurations[0].SeatCount=23;configurations[0].AisleAfter=10;
@@ -104,7 +107,7 @@ internal static class Program
             Exception? automaticError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
                 var inputs=Logical(automaticHall).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
-                inputs[0].Text="UI mixed automatic hall";inputs[3].Text="3";inputs[5].Text="А, 1";inputs[6].Text="А, 1";
+                inputs[0].Text="UI mixed automatic hall";Field(automaticHall,"Количество рядов (1–200)").Text="3";Field(automaticHall,"Ряды: начало или А, 1").Text="А, 1";Field(automaticHall,"Места: начало или А, 1").Text="А, 1";
                 var layoutGrid=Logical(automaticHall).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
                 foreach(var row in layoutGrid.Items.Cast<HallRowLayout>()){row.SeatCount=3;row.AisleAfter=0;}
                 var save=Logical(automaticHall).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить как новый зал"));
@@ -138,10 +141,16 @@ internal static class Program
             var sixSeats=Enumerable.Range(0,6).Select(i=>new SeatInfo(i+1,"Партер",(i/3+1).ToString(),(i%3+1).ToString(),i%3*20,i/3*20,1000,"#00E676",null,"","",null)).ToArray();
             six.Load(sixSeats,Array.Empty<SectorInfo>(),true);Pump();sixWindow.Activate();six.Focus();
             Gesture(six,new Point(15,1),new Point(41,21));Check(six.Selected.Count==6,"partial rectangular overlap selects all six touched places");
-            Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");CheckSeatRenderingAndContext(six,sixSeats);sixWindow.Close();
+            Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");CheckSeatRenderingAndContext(six,sixSeats);CheckHallNavigation(six,sixSeats);sixWindow.Close();
             var currentShowRow=performanceGroup.Items.OfType<TreeViewItem>().Single(i=>i.Tag is EventInfo e&&e.Id==eventId);
             Check(currentShowRow.Header is TextBlock selectedTitle&&Equals(selectedTitle.Foreground,Brushes.White)&&Equals(selectedTitle.Background,Brushes.DarkSlateBlue),"selected show text has contrast against its background");
-            var hall=(Tickets.App.HallView)main.FindName("Hall");main.Activate();hall.Focus();hall.Fit();Pump();
+            var hall=(Tickets.App.HallView)main.FindName("Hall");CheckSelectionSidebar(main);main.Activate();hall.Focus();hall.Fit();Pump();
+            ((ComboBox)main.FindName("RecipientBox")).Text="UI context availability";hall.SetSelection(seatIds.Take(2));Gesture(hall,new Point(8,8),new Point(8,8),true);
+            Check(hall.Selected.SetEquals(seatIds.Take(2)),"seat context preserves an existing selected group");
+            var seatMenu=hall.ContextMenu;Check(seatMenu is not null&&seatMenu.IsOpen,"right click opens main seat actions");
+            var contextItems=seatMenu!.Items.OfType<MenuItem>().ToArray();
+            Check(new[]{"IssueButton","PrintTicketsButton","ReserveButton","SaleStateButton","ReturnButton"}.All(name=>contextItems.Any(item=>Equals(item.Header,((Button)main.FindName(name)).Content)&&item.IsEnabled==((Button)main.FindName(name)).IsEnabled)),"context menu mirrors available issuance printing reservation sale and return actions without opening dialogs");
+            seatMenu.IsOpen=false;hall.Clear();((ComboBox)main.FindName("RecipientBox")).Text="";
             Gesture(hall,new Point(8,8),new Point(8,8));
             Gesture(hall,new Point(38,38),new Point(38,38));
             Check(hall.Selected.SetEquals(new[]{seatIds[0],seatIds[3]}),"separate single clicks accumulate places");
@@ -158,6 +167,7 @@ internal static class Program
             Click(main,"Отменить изменение цены");Check(store.Seats(eventId).All(s=>s.Amount==500),"price undo restores previous category");
             hall.SetSelection(seatIds.Take(3));Click(main,"Изменить цену");((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");hall.SetSelection(seatIds.Take(3));
             Check(((ComboBox)main.FindName("RecipientBox")).Text=="","show opens without a previous recipient");
+            foreach(var expander in Logical(main).OfType<Expander>())expander.IsExpanded=true;Pump();
             Exception? inlineRecipientError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? creation=null;try{
                 creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="RecipientEditorWindow"&&w.IsVisible);
@@ -231,6 +241,7 @@ internal static class Program
             }catch(Exception ex){ticketPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(ticketPreviewError is not null)throw ticketPreviewError;
             Check(store.History(eventId).Count==3&&!store.Recipients().Contains("UI print preview only"),"closing ticket print preview reserves neither seats nor recipient");
             var originalInvoice=store.Invoice(eventId,store.Issues(eventId).Single().Id);
+            CheckTicketBlankPreview(store,eventId,originalInvoice);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
             Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
             Exception? mixedPreviewError=null;
@@ -306,17 +317,25 @@ internal static class Program
             var priceEditorType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PriceEditorWindow")!;
             var categoryEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId})!;categoryEditor.Show();Pump();
             var categoryFields=Logical(categoryEditor).OfType<TextBox>().ToList();var categoryHall=Logical(categoryEditor).OfType<Tickets.App.HallView>().Single();
-            categoryHall.SetSelection(seatIds.Take(2));categoryFields[1].Text="1000";Click(categoryEditor,"Назначить выбранным местам");
+            Check(!Logical(categoryEditor).OfType<Button>().Any(b=>Equals(b.Content,"Весь зал")),"pricing uses empty-space double click instead of a fit button");
+            categoryHall.SetSelection(seatIds.Take(2));categoryFields[1].Text="1000";
+            categoryFields[1].RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(categoryFields[1]),Environment.TickCount,Key.Enter){RoutedEvent=Keyboard.PreviewKeyDownEvent});Pump();
             Check(categoryHall.Selected.Count==0,"pricing editor clears selection after first price assignment");
             categoryHall.SetSelection(seatIds.Skip(2));categoryFields[1].Text="2000";Click(categoryEditor,"Назначить выбранным местам");
             var assigned=(System.Collections.IDictionary)priceEditorType.GetField("prices",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(categoryEditor)!;
             Check(((PriceValue)assigned[seatIds[0]]!).Amount==1000&&((PriceValue)assigned[seatIds[1]]!).Amount==1000&&((PriceValue)assigned[seatIds[2]]!).Amount==2000,"next price assignment preserves earlier differently priced places");
-            Check(categoryHall.Selected.Count==0&&!Logical(categoryEditor).OfType<Button>().Any(b=>Equals(b.Content,"Снять выделение")),"pricing uses automatic clearing without extra clear button");categoryEditor.Close();
+            Check(categoryHall.Selected.Count==0&&!Logical(categoryEditor).OfType<Button>().Any(b=>Equals(b.Content,"Снять выделение")),"pricing uses automatic clearing without extra clear button");
+            categoryHall.SetSelection(seatIds.Take(2));Gesture(categoryHall,new Point(8,8),new Point(8,8),true);
+            var pricingContext=OpenContextMenu();Check(categoryHall.Selected.SetEquals(seatIds.Take(2))&&pricingContext is not null,"pricing context preserves selected group");pricingContext!.IsOpen=false;
+            Gesture(categoryHall,new Point(8,8),new Point(8,8),true);
+            Check(categoryHall.Selected.SetEquals(new[]{seatIds[1]})&&OpenContextMenu() is null,"repeated right click removes only its selected seat without reopening the menu");categoryEditor.Close();
             var performanceDirectoryType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PerformanceWindow")!;
             var performanceDirectory=(Window)Activator.CreateInstance(performanceDirectoryType,store)!;performanceDirectory.Show();Pump();
             var performanceTree=Logical(performanceDirectory).OfType<TreeView>().Single();
-            var activePerformance=performanceTree.Items.OfType<TreeViewItem>().Single(i=>i.Tag is PerformanceInfo p&&p.Title=="UI event");activePerformance.IsSelected=true;Pump();
-            Check(activePerformance.IsExpanded&&activePerformance.Items.OfType<TreeViewItem>().Any(i=>i.Tag is EventInfo e&&e.Id==eventId),"performance directory opens its active showing list");
+            var activePerformance=performanceTree.Items.OfType<TreeViewItem>().Single(i=>i.Tag is PerformanceInfo p&&p.Title=="UI event");activePerformance.BringIntoView();Pump();NativeClick((FrameworkElement)activePerformance.Header);Pump();
+            Check(activePerformance.IsExpanded&&Logical(activePerformance).OfType<TreeViewItem>().Any(i=>i.Tag is EventInfo e&&e.Id==eventId),"performance directory opens its active showing list");
+            NativeClick((FrameworkElement)activePerformance.Header);Check(!activePerformance.IsExpanded,"repeated performance title click collapses its showing list");
+            NativeClick((FrameworkElement)activePerformance.Header);Check(activePerformance.IsExpanded,"another performance title click reopens its showing list");
             Check(activePerformance.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Удалить"))&&!Logical(performanceDirectory).OfType<Button>().Any(b=>Equals(b.Content,"Удалить спектакль")),"performance deletion uses context menu without extra button");performanceDirectory.Close();
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Прошедшие")==true),"past performances have a single expandable section");
             var recipients=(ComboBox)main.FindName("RecipientBox");recipients.Text="СТС";Pump();
@@ -398,25 +417,151 @@ internal static class Program
     {
         var states=new[]{source[0] with{Number="",Row="",X=0,Y=0,TicketId=101,IsReserved=false,IsPrinted=false},
             source[1] with{Number="",Row="",X=24,Y=0,TicketId=102,IsReserved=false,IsPrinted=true},
-            source[2] with{Number="",Row="",X=48,Y=0,TicketId=103,IsReserved=true,IsPrinted=false}};
+            source[2] with{Number="",Row="",X=48,Y=0,TicketId=103,IsReserved=true,IsPrinted=false},
+            source[3] with{Number="",Row="",X=72,Y=0,TicketId=null,IsReserved=false,IsPrinted=false,IsBlocked=true}};
         hall.Load(states,Array.Empty<SectorInfo>(),true);Pump();
         var drawing=(DrawingGroup)typeof(Tickets.App.HallView).GetField("drawing",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(hall)!;
         var visual=new DrawingVisual();using(var dc=visual.RenderOpen()){dc.PushTransform(new ScaleTransform(8,8));dc.DrawDrawing(drawing);}
-        var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap(520,144,96,96,PixelFormats.Pbgra32);bitmap.Render(visual);
-        var pixels=new byte[520*144*4];bitmap.CopyPixels(pixels,520*4,0);
+        var bitmap=new System.Windows.Media.Imaging.RenderTargetBitmap(712,144,96,96,PixelFormats.Pbgra32);bitmap.Render(visual);
+        var pixels=new byte[712*144*4];bitmap.CopyPixels(pixels,712*4,0);
         int Count(int seat,Func<byte,byte,byte,bool> match)
         {
-            var count=0;for(var y=16;y<112;y++)for(var x=seat*192+16;x<seat*192+112;x++){var i=(y*520+x)*4;if(pixels[i+3]==255&&match(pixels[i+2],pixels[i+1],pixels[i]))count++;}return count;
+            var count=0;for(var y=16;y<112;y++)for(var x=seat*192+16;x<seat*192+112;x++){var i=(y*712+x)*4;if(pixels[i+3]==255&&match(pixels[i+2],pixels[i+1],pixels[i]))count++;}return count;
         }
         Check(Count(0,(r,g,b)=>r<20&&g<20&&b<20)>1000&&Count(0,(r,g,b)=>r>220&&g>220&&b>220)>500,"invoice-only occupied seat renders black with dense white hatching");
         Check(Count(1,(r,g,b)=>r>230&&g<20&&b<20)>1000&&Count(1,(r,g,b)=>r<20&&g<20&&b<20)>500,"issued and printed seat renders red with dense black hatching");
         Check(Count(2,(r,g,b)=>r<20&&g<20&&b<20)>1000&&Count(2,(r,g,b)=>r>220&&g>220&&b>220)>500,"reserved seat renders black with white hatching");
-        Check(pixels[(64*520+136)*4+3]==0,"seat hatching remains clipped inside seat bounds");
+        Check(Count(3,(r,g,b)=>r>180&&r<230&&Math.Abs(r-g)<3&&Math.Abs(g-b)<3)>1000&&Count(3,(r,g,b)=>r<20&&g<20&&b<20)>500,"withdrawn seat renders gray with a black cross");
+        Check(pixels[(64*712+136)*4+3]==0,"seat hatching remains clipped inside seat bounds");
+        CheckSelectionBorder(hall,states[0]);hall.Clear();
         var contexts=new List<long>();hall.SeatContextRequested+=(id,_)=>contexts.Add(id);var offsetField=typeof(Tickets.App.HallView).GetField("offset",BindingFlags.Instance|BindingFlags.NonPublic)!;
         var before=(Vector)offsetField.GetValue(hall)!;Gesture(hall,new Point(8,8),new Point(8,8),true);
         Check(contexts.SequenceEqual(new[]{states[0].Id})&&((Vector)offsetField.GetValue(hall)!)==before,"stationary right click requests seat context without panning");
         Gesture(hall,new Point(8,8),new Point(38,8),true);
         Check(contexts.Count==1&&((Vector)offsetField.GetValue(hall)!)!=before&&hall.Selected.Count==0,"right drag pans without opening seat context or changing selection");
+    }
+    private static void CheckTicketBlankPreview(Store store,long eventId,InvoiceInfo originalInvoice)
+    {
+        var appAssembly=typeof(Tickets.App.App).Assembly;var flags=BindingFlags.Instance|BindingFlags.NonPublic;
+        var blankType=appAssembly.GetType("Tickets.App.TicketBlankWindow")!;
+        var editor=(Window)Activator.CreateInstance(blankType,store)!;editor.Show();Pump();
+        try
+        {
+            var grids=Logical(editor).OfType<DataGrid>().ToArray();
+            Check(grids.Length==2&&grids.All(grid=>!grid.IsReadOnly),"blank positions and field coordinates are editable despite the shared grid style");
+            var fields=grids.Single(grid=>grid.Columns.OfType<DataGridCheckBoxColumn>().Any());
+            Check(fields.Columns.OfType<DataGridCheckBoxColumn>().Any(column=>Equals(column.Header,"Печатать")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="Enabled"),"blank fields expose a Russian print checkbox column");
+            Check(fields.Columns.OfType<DataGridTextColumn>().Any(column=>Equals(column.Header,"Поле")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="DisplayName")&&fields.Items.Cast<TicketBlankField>().Any(field=>field.DisplayName=="Мероприятие"),"blank field names display Russian captions");
+            var paper=(Canvas)blankType.GetField("paper",flags)!.GetValue(editor)!;
+            Check(paper.Width>0&&paper.Height>0&&paper.ActualWidth>0&&paper.ActualHeight>0,"blank editor renders a paper preview with positive physical dimensions");
+        }
+        finally{editor.Close();}
+        var blank=new TicketBlank{Name="UI custom blank",PageWidth=210,PageHeight=297};store.SaveTicketBlank(blank);
+        var saved=store.TicketBlanks().Single(item=>item.Id==blank.Id);
+        Check(saved.Positions.Count==1&&saved.PageWidth==210&&saved.PageHeight==297,"custom one-ticket A4 blank persists for print preview");
+        var printType=appAssembly.GetType("Tickets.App.TicketPrintWindow")!;
+        var historyCount=store.History(eventId).Count;var issueCount=store.Issues(eventId).Count;
+        var preview=(Window)Activator.CreateInstance(printType,new object[]{store,eventId,originalInvoice.Tickets.Select(ticket=>ticket.SeatId).ToArray()})!;preview.Show();Pump();
+        try
+        {
+            var choice=(ComboBox)printType.GetField("blankChoice",flags)!.GetValue(preview)!;
+            Check(choice.IsVisible&&choice.SelectedIndex==0&&Logical(preview).OfType<DocumentPageView>().Count()==1,"ticket preview opens with the standard blank and all three tickets on one page");
+            choice.SelectedItem=choice.Items.OfType<TicketBlank>().Single(item=>item.Id==saved.Id);Pump();
+            var pages=Logical(preview).OfType<DocumentPageView>().ToArray();
+            Check(choice.SelectedItem is TicketBlank selected&&selected.Id==saved.Id&&pages.Length==3,"selecting a saved one-position blank immediately rebuilds three preview pages");
+            var document=(FixedDocument)pages[0].DocumentPaginator.Source;
+            var firstPage=document.Pages[0].Child;var firstField=firstPage.Children.OfType<Viewbox>().First();const double mm=96.0/25.4;
+            Check(Math.Abs(firstPage.Width-210*mm)<.001&&Math.Abs(firstPage.Height-297*mm)<.001,"custom preview uses the physical A4 page size");
+            Check(Math.Abs(FixedPage.GetLeft(firstField)-15*mm)<.001&&Math.Abs(FixedPage.GetTop(firstField)-13*mm)<.001,"custom ticket field stays at calibrated position plus field offset in millimeters");
+            Check(firstField.Child is TextBlock title&&title.Text==originalInvoice.Title,"custom ticket preview renders the original invoice event");
+        }
+        finally{preview.Close();}
+        var unchanged=store.Invoice(eventId,originalInvoice.Id);
+        Check(store.History(eventId).Count==historyCount&&store.Issues(eventId).Count==issueCount&&unchanged.Tickets.SequenceEqual(originalInvoice.Tickets)&&unchanged.Sender==originalInvoice.Sender,"closing custom blank preview preserves original tickets invoice and print state");
+    }
+    private static void CheckSelectionBorder(Tickets.App.HallView hall,SeatInfo seat)
+    {
+        byte[] Render()
+        {
+            var width=(int)Math.Ceiling(hall.ActualWidth);var height=(int)Math.Ceiling(hall.ActualHeight);
+            var image=new System.Windows.Media.Imaging.RenderTargetBitmap(width,height,96,96,PixelFormats.Pbgra32);image.Render(hall);
+            var data=new byte[width*height*4];image.CopyPixels(data,width*4,0);return data;
+        }
+        hall.Clear();Pump();var before=Render();hall.SetSelection(new[]{seat.Id});Pump();var selected=Render();
+        var flags=BindingFlags.Instance|BindingFlags.NonPublic;var zoom=(double)typeof(Tickets.App.HallView).GetField("zoom",flags)!.GetValue(hall)!;
+        var offset=(Vector)typeof(Tickets.App.HallView).GetField("offset",flags)!.GetValue(hall)!;
+        int Pixel(double x,double y)=>((int)Math.Round(y)*(int)Math.Ceiling(hall.ActualWidth)+(int)Math.Round(x))*4;
+        var middle=Pixel(offset.X+(seat.X+8)*zoom,offset.Y+(seat.Y+8)*zoom);
+        Check(before.AsSpan(middle,4).SequenceEqual(selected.AsSpan(middle,4)),"selection border preserves the original seat fill and hatching");
+        var outer=Pixel(offset.X+seat.X*zoom-3,offset.Y+(seat.Y+8)*zoom);
+        var inner=Pixel(offset.X+seat.X*zoom-1,offset.Y+(seat.Y+8)*zoom);
+        Check(selected[outer]<30&&selected[outer+1]<30&&selected[outer+2]<30&&selected[inner]>225&&selected[inner+1]>225&&selected[inner+2]>225,"selected seat has black outer and white inner borders");
+    }
+    private static TextBox Field(DependencyObject root,string label)
+    {
+        var caption=Logical(root).OfType<TextBlock>().Single(text=>text.Text==label);
+        var panel=(Panel)caption.Parent;return (TextBox)panel.Children[panel.Children.IndexOf(caption)+1];
+    }
+    private static ContextMenu? OpenContextMenu()
+        =>PresentationSource.CurrentSources.Cast<PresentationSource>().Where(source=>source.RootVisual is not null).SelectMany(source=>Visual(source.RootVisual!)).OfType<ContextMenu>().SingleOrDefault(menu=>menu.IsOpen);
+    private static void NativeClick(FrameworkElement element)
+    {
+        var point=element.PointToScreen(new Point(Math.Min(10,element.ActualWidth/2),element.ActualHeight/2));
+        Check(SetCursorPos((int)point.X,(int)point.Y),"Windows test desktop can move cursor");WaitForInput();
+        mouse_event(2,0,0,0,UIntPtr.Zero);WaitForInput();mouse_event(4,0,0,0,UIntPtr.Zero);WaitForInput();
+    }
+    private static void CheckSelectionSidebar(Tickets.App.MainWindow main)
+    {
+        var sidebar=(Border)main.FindName("SelectionSidebar");var list=(ListBox)main.FindName("SelectedList");
+        var actions=(System.Windows.Controls.Primitives.UniformGrid)main.FindName("SelectionActions");
+        var options=(Expander)main.FindName("SelectionOptions");options.IsExpanded=false;Pump();
+        Check(actions.Columns==3&&actions.Children.OfType<Button>().All(button=>button.ActualWidth==80&&button.ActualHeight==80),"sidebar actions use compact square buttons in three columns");
+        Check(double.IsNaN(list.Height)&&list.ActualHeight>=220,"selected places fill available height at 1420 by 880");
+        var workspace=(Grid)main.FindName("Workspace");var sidebarBounds=sidebar.TransformToAncestor(workspace).TransformBounds(new Rect(sidebar.RenderSize));
+        Check(sidebarBounds.Top<=1&&sidebarBounds.Bottom>=workspace.ActualHeight-1,"sidebar spans the show header toolbar and tabs");
+        foreach(var button in actions.Children.OfType<Button>())
+        {
+            var bounds=button.TransformToAncestor(sidebar).TransformBounds(new Rect(button.RenderSize));
+            Check(bounds.Top>=0&&bounds.Bottom<=sidebar.ActualHeight+1,"sidebar action is visible: "+button.Content);
+        }
+        main.Width=1000;main.Height=700;Pump();
+        Check(list.ActualHeight>=120,"small viewport retains a usable selected-place list");
+        var listBounds=list.TransformToAncestor(sidebar).TransformBounds(new Rect(list.RenderSize));
+        var actionBounds=actions.TransformToAncestor(sidebar).TransformBounds(new Rect(actions.RenderSize));
+        Check(listBounds.Bottom<=actionBounds.Top+1&&actionBounds.Bottom<=sidebar.ActualHeight+1,"small viewport keeps selection list and all action rows separate and visible");
+        main.Width=1420;main.Height=880;Pump();
+    }
+    private static void CheckHallNavigation(Tickets.App.HallView hall,SeatInfo[] source)
+    {
+        var flags=BindingFlags.Instance|BindingFlags.NonPublic;var hallType=typeof(Tickets.App.HallView);
+        var zoomField=hallType.GetField("zoom",flags)!;var offsetField=hallType.GetField("offset",flags)!;
+        hall.Load(source,Array.Empty<SectorInfo>(),true);Pump();
+        var fittedZoom=(double)zoomField.GetValue(hall)!;var fittedOffset=(Vector)offsetField.GetValue(hall)!;
+        hall.Zoom(.5);Pump();
+        var empty=new Point(hall.ActualWidth-15,hall.ActualHeight-15);var screen=hall.PointToScreen(empty);
+        Check(SetCursorPos((int)screen.X,(int)screen.Y),"cursor reaches empty hall space");WaitForInput();
+        for(var i=0;i<2;i++){mouse_event(2,0,0,0,UIntPtr.Zero);WaitForInput();mouse_event(4,0,0,0,UIntPtr.Zero);WaitForInput();}
+        Check(Math.Abs((double)zoomField.GetValue(hall)!-fittedZoom)<.001&&((Vector)offsetField.GetValue(hall)!-fittedOffset).Length<.001,"double clicking empty hall space restores fit");
+        var tip=(ToolTip)hallType.GetField("seatTip",flags)!.GetValue(hall)!;
+        var offset=(Vector)offsetField.GetValue(hall)!;var zoom=(double)zoomField.GetValue(hall)!;
+        var hover=new Point(source[0].X*zoom+offset.X+8*zoom,source[0].Y*zoom+offset.Y+8*zoom);
+        hallType.GetMethod("UpdateTip",flags)!.Invoke(hall,new object[]{hover});Pump();
+        Check(tip.IsOpen&&tip.Content?.ToString()?.Contains(source[0].Status)==true,"cursor tooltip includes seat status");
+        Check(tip.HorizontalOffset>=0&&tip.VerticalOffset>=0&&tip.HorizontalOffset+tip.DesiredSize.Width<=hall.ActualWidth&&tip.VerticalOffset+tip.DesiredSize.Height<=hall.ActualHeight,"cursor tooltip stays inside hall bounds");
+        hallType.GetMethod("UpdateTip",flags)!.Invoke(hall,new object[]{empty});Check(!tip.IsOpen,"tooltip closes over empty space");
+        var wide=Enumerable.Range(0,80).Select(i=>source[0] with{Id=i+1,X=i*20,Y=0,Number="",Row="",TicketId=null,IsReserved=false,IsPrinted=false}).ToArray();
+        hall.Load(wide,Array.Empty<SectorInfo>(),true);hall.Zoom(3);Pump();
+        offset=(Vector)offsetField.GetValue(hall)!;zoom=(double)zoomField.GetValue(hall)!;
+        var start=new Point(hall.ActualWidth/2,offset.Y+8*zoom);var edge=new Point(hall.ActualWidth-2,start.Y);
+        void Position(Point p){var point=hall.PointToScreen(p);Check(SetCursorPos((int)point.X,(int)point.Y),"cursor moves during edge marquee");WaitForInput();}
+        Position(start);mouse_event(2,0,0,0,UIntPtr.Zero);WaitForInput();
+        var anchor=(Point)hallType.GetField("worldAnchor",flags)!.GetValue(hall)!;Position(edge);
+        for(var i=0;i<4;i++)WaitForInput();
+        var after=(Vector)offsetField.GetValue(hall)!;var anchorAfter=(Point)hallType.GetField("worldAnchor",flags)!.GetValue(hall)!;
+        mouse_event(4,0,0,0,UIntPtr.Zero);WaitForInput();
+        var end=new Point((edge.X-after.X)/zoom,(edge.Y-after.Y)/zoom);
+        var expected=SeatSelection.ApplyRectangle(wide,new HashSet<long>(),anchor.X,anchor.Y,end.X,end.Y,false);
+        Check(after.X<offset.X&&anchorAfter==anchor&&hall.Selected.SetEquals(expected),"marquee auto-pans at viewport edge while preserving its world anchor and selected range");
     }
     private static void WaitForInput()
     {

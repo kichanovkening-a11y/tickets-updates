@@ -19,15 +19,15 @@ internal sealed class HallEditorWindow : EditorWindow
     private readonly TabControl tabs=new();
     private readonly TextBlock summary=new(){Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap};
     private readonly Dictionary<int,HallRowLayout> spareRows=[];
-    private TextBox? countInput,firstLabelInput;
-    private sealed record HallState(List<DraftSeat> Seats,List<HallRowLayout> Rows,int[] Selected,Dictionary<int,HallRowLayout> Spare,string CountText,string FirstLabel);
+    private TextBox? countInput,firstLabelInput,placesInput;
+    private sealed record HallState(List<DraftSeat> Seats,List<HallRowLayout> Rows,int[] Selected,Dictionary<int,HallRowLayout> Spare,string CountText,string FirstLabel,string PlacesText);
     private static HallRowLayout CloneRow(HallRowLayout row)=>new(){Label=row.Label,SeatCount=row.SeatCount,AisleAfter=row.AisleAfter,FirstSeat=row.FirstSeat};
     private readonly Stack<HallState> history=[];
     private Button? undo;
     private HallState? pendingTableEdit;
     private bool restoring;
     private static DraftSeat Clone(DraftSeat s)=>new(){Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y};
-    private HallState Capture()=>new(seats.Select(Clone).ToList(),rowLayouts.Select(CloneRow).ToList(),Selection().Select(s=>seats.IndexOf(s)).ToArray(),spareRows.ToDictionary(p=>p.Key,p=>CloneRow(p.Value)),countInput?.Text??rowLayouts.Count.ToString(),firstLabelInput?.Text??"1");
+    private HallState Capture()=>new(seats.Select(Clone).ToList(),rowLayouts.Select(CloneRow).ToList(),Selection().Select(s=>seats.IndexOf(s)).ToArray(),spareRows.ToDictionary(p=>p.Key,p=>CloneRow(p.Value)),countInput?.Text??rowLayouts.Count.ToString(),firstLabelInput?.Text??"1",placesInput?.Text??"1");
     private void Remember(HallState? state=null){history.Push(state??Capture());if(undo is not null)undo.IsEnabled=true;}
     private void Undo()
     {
@@ -40,7 +40,7 @@ internal sealed class HallEditorWindow : EditorWindow
             seats.Clear();foreach(var seat in state.Seats)seats.Add(Clone(seat));
             rowLayouts.Clear();foreach(var row in state.Rows)rowLayouts.Add(CloneRow(row));
             spareRows.Clear();foreach(var pair in state.Spare)spareRows[pair.Key]=CloneRow(pair.Value);
-            if(countInput is not null)countInput.Text=state.CountText;if(firstLabelInput is not null)firstLabelInput.Text=state.FirstLabel;
+            if(countInput is not null)countInput.Text=state.CountText;if(firstLabelInput is not null)firstLabelInput.Text=state.FirstLabel;if(placesInput is not null)placesInput.Text=state.PlacesText;
             Refresh(false);table.SelectedItems.Clear();
             foreach(var index in state.Selected.Where(i=>i>=0&&i<seats.Count))table.SelectedItems.Add(seats[index]);
             preview.SetSelection(state.Selected.Select(i=>(long)i+1));
@@ -66,26 +66,40 @@ internal sealed class HallEditorWindow : EditorWindow
         var name=Field(metadata,"Название зала",copy is null?"":copy.Name+" (копия)");
         var address=Field(metadata,"Адрес",copy?.Address??"");
         var sector=Field(form,"Сектор","Партер");
-        var rows=Field(form,"Количество рядов","10"); var places=Field(form,"Мест в каждом ряду","20");
+        var rows=Field(form,"Количество рядов (1–200)","1"); var places=Field(form,"Мест в каждом ряду (1–300)","1");
         var sizing=new UniformGrid{Columns=2};
         var rowsLabel=form.Children[form.Children.Count-4];var rowsBox=form.Children[form.Children.Count-3];
         var placesLabel=form.Children[form.Children.Count-2];var placesBox=form.Children[form.Children.Count-1];
         form.Children.Remove(rowsLabel);form.Children.Remove(rowsBox);form.Children.Remove(placesLabel);form.Children.Remove(placesBox);
         var rowSizing=new StackPanel{Margin=new Thickness(0,0,8,0)};var seatSizing=new StackPanel();
         rowSizing.Children.Add(rowsLabel);rowSizing.Children.Add(rowsBox);seatSizing.Children.Add(placesLabel);seatSizing.Children.Add(placesBox);
-        sizing.Children.Add(rowSizing);sizing.Children.Add(seatSizing);form.Children.Add(sizing);
-        var firstRow=Field(form,"Ряды: начало или А, 1","1"); var firstSeat=Field(form,"Места: начало или А, 1","1");
-        countInput=rows;firstLabelInput=firstRow;
+        sizing.Children.Add(rowSizing);sizing.Children.Add(seatSizing);rowHeader.Children.Add(sizing);
+        var advanced=new StackPanel{Margin=new Thickness(8,0,8,8)};
+        var commonSettings=new Expander{Header="Нумерация и общие настройки",IsExpanded=false,Content=advanced,Margin=new Thickness(0,8,0,0)};rowHeader.Children.Add(commonSettings);
+        var firstRow=Field(advanced,"Ряды: начало или А, 1","1"); var firstSeat=Field(advanced,"Места: начало или А, 1","1");
+        countInput=rows;firstLabelInput=firstRow;placesInput=places;
         HallState? countEdit=null,labelEdit=null;
         rows.GotKeyboardFocus+=(_,_)=>{countEdit=Capture();};
         rows.LostKeyboardFocus+=(_,_)=>{if(countEdit is not null&&countEdit.CountText!=rows.Text)Remember(countEdit);countEdit=null;};
         firstRow.GotKeyboardFocus+=(_,_)=>{labelEdit=Capture();};
         firstRow.LostKeyboardFocus+=(_,_)=>{if(labelEdit is not null&&labelEdit.FirstLabel!=firstRow.Text)Remember(labelEdit);labelEdit=null;};
-        var reverse=new CheckBox{Content="Нумерация справа налево",Margin=new Thickness(0,10,0,0)}; form.Children.Add(reverse);
-        var aisle=Field(form,"Проход после места по порядку (0 — нет)","0");
-        rowHeader.Children.Add(new TextBlock{Text="Задайте подпись, число мест и проход для каждого ряда. В колонке «Начало мест» можно указать А, 1 — сначала А, затем 1, 2… Пустая ячейка использует общую настройку слева.",TextWrapping=TextWrapping.Wrap});
-        foreach(var (header,path,width) in new[]{("Ряд","Label",85),("Мест","SeatCount",85),("Проход","AisleAfter",95),("Начало мест","FirstSeat",155)})
+        var reverse=new CheckBox{Content="Нумерация справа налево",Margin=new Thickness(0,10,0,0)}; advanced.Children.Add(reverse);
+        var aisle=Field(advanced,"Общий проход после места по порядку (0 — нет)","0");
+        advanced.Children.Add(new TextBlock{Text="Задайте подпись, число мест и проход для каждого ряда. В колонке «Начало мест» можно указать А, 1 — сначала А, затем 1, 2… В колонке «Проход» выберите пару существующих подписей мест. Пустое начало мест использует общую настройку выше.",TextWrapping=TextWrapping.Wrap});
+        foreach(var (header,path,width) in new[]{("Ряд","Label",85),("Мест","SeatCount",85),("Начало мест","FirstSeat",155)})
             rowTable.Columns.Add(new DataGridTextColumn{Header=header,Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.LostFocus},Width=width});
+        var aisleChoice=new FrameworkElementFactory(typeof(ComboBox));
+        aisleChoice.SetValue(ComboBox.DisplayMemberPathProperty,"Caption");aisleChoice.SetValue(ComboBox.SelectedValuePathProperty,"After");
+        var choicesBinding=new MultiBinding{Converter=new RowAisleChoicesConverter()};
+        choicesBinding.Bindings.Add(new Binding("SeatCount"));choicesBinding.Bindings.Add(new Binding("FirstSeat"));
+        choicesBinding.Bindings.Add(new Binding("AisleAfter"));choicesBinding.Bindings.Add(new Binding("Text"){Source=firstSeat});choicesBinding.Bindings.Add(new Binding("IsChecked"){Source=reverse});
+        aisleChoice.SetBinding(ItemsControl.ItemsSourceProperty,choicesBinding);
+        aisleChoice.SetBinding(ComboBox.SelectedValueProperty,new Binding("AisleAfter"){Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.PropertyChanged});
+        aisleChoice.AddHandler(System.Windows.Controls.Primitives.Selector.SelectionChangedEvent,new SelectionChangedEventHandler((sender,e)=>{
+            if(restoring||sender is not ComboBox box||box.DataContext is not HallRowLayout row||e.RemovedItems.Count!=1||e.RemovedItems[0] is not HallLayout.AisleChoice previous||e.AddedItems.Count!=1||e.AddedItems[0] is not HallLayout.AisleChoice next||previous.After==next.After)return;
+            var state=Capture();var index=rowLayouts.IndexOf(row);if(index>=0){state.Rows[index].AisleAfter=previous.After;Remember(state);}
+        }));
+        rowTable.Columns.Insert(2,new DataGridTemplateColumn{Header="Проход",CellTemplate=new DataTemplate{VisualTree=aisleChoice},Width=210});
         rowTable.ItemsSource=rowLayouts;rowPanel.Children.Add(rowTable);
         void SyncRows(bool relabel=false)
         {
@@ -95,17 +109,36 @@ internal sealed class HallEditorWindow : EditorWindow
             {
                 var labels=Enumerable.Range(0,count).Select(i=>HallLayout.Label(firstRow.Text,i)).ToArray();
                 while(rowLayouts.Count>count){var index=rowLayouts.Count-1;spareRows[index]=CloneRow(rowLayouts[index]);rowLayouts.RemoveAt(index);}
-                while(rowLayouts.Count<count)rowLayouts.Add(spareRows.TryGetValue(rowLayouts.Count,out var cached)?CloneRow(cached):new HallRowLayout{Label=labels[rowLayouts.Count],SeatCount=int.TryParse(places.Text,out var n)&&n is >=1 and <=300?n:20,AisleAfter=int.TryParse(aisle.Text,out var g)&&g>=0?g:0});
+                while(rowLayouts.Count<count)rowLayouts.Add(spareRows.TryGetValue(rowLayouts.Count,out var cached)?CloneRow(cached):new HallRowLayout{Label=labels[rowLayouts.Count],SeatCount=int.TryParse(places.Text,out var n)&&n is >=1 and <=300?n:1,AisleAfter=int.TryParse(aisle.Text,out var g)&&g>=0?g:0});
                 if(relabel){for(var i=0;i<count;i++)rowLayouts[i].Label=labels[i];foreach(var pair in spareRows)pair.Value.Label=HallLayout.Label(firstRow.Text,pair.Key);}
                 rowTable.Items.Refresh();
             }
             catch(TicketException) { /* An incomplete first label is validated when adding the sector. */ }
         }
         rows.TextChanged+=(_,_)=>{if(!restoring)SyncRows();};firstRow.TextChanged+=(_,_)=>{if(!restoring)SyncRows(true);};
-        Button(rowHeader,"Применить ко всем рядам",()=>Try(()=>{
+        var previousPlaces=1;
+        places.TextChanged+=(_,_)=>{
+            if(!int.TryParse(places.Text,out var count)||count is <1 or >300)return;
+            var previous=previousPlaces;previousPlaces=count;
+            if(restoring||previous==count||!CommitEdits())return;
+            var inheritedRows=rowLayouts.Concat(spareRows.Values).Where(row=>row.SeatCount==previous).ToArray();
+            if(inheritedRows.Length==0)return;
+            Remember(Capture() with{PlacesText=previous.ToString()});
+            foreach(var row in inheritedRows)row.SeatCount=count;
+            rowTable.Items.Refresh();
+        };
+        var applyPlaces=Button(rowHeader,"Применить места ко всем рядам",()=>Try(()=>{
             if(!CommitEdits())return;
-            var count=Number(places,1,300);var gap=Number(aisle,0,count);
-            Remember();foreach(var row in rowLayouts){row.SeatCount=count;row.AisleAfter=gap;}
+            var count=Number(places,1,300);
+            Remember();foreach(var row in rowLayouts.Concat(spareRows.Values))row.SeatCount=count;
+            rowTable.Items.Refresh();
+        }));
+        rowHeader.Children.Remove(applyPlaces);rowHeader.Children.Insert(1,applyPlaces);
+        Button(advanced,"Применить общий проход ко всем рядам",()=>Try(()=>{
+            if(!CommitEdits())return;
+            var gap=Number(aisle,0,300);
+            if(rowLayouts.Any(row=>gap>row.SeatCount))throw new TicketException("Проход не может быть дальше последнего места ряда.");
+            Remember();foreach(var row in rowLayouts)row.AisleAfter=gap;
             rowTable.Items.Refresh();
         }));
         SyncRows();
@@ -152,10 +185,12 @@ internal sealed class HallEditorWindow : EditorWindow
             editable.CellEditEnding+=(_,e)=>{
                 if(!restoring&&e.EditAction==DataGridEditAction.Commit&&pendingTableEdit is not null)Remember(pendingTableEdit);
                 pendingTableEdit=null;
+                if(ReferenceEquals(editable,rowTable)&&!restoring)Dispatcher.BeginInvoke(new Action(()=>rowTable.Items.Refresh()),System.Windows.Threading.DispatcherPriority.Background);
             };
         }
         table.ItemsSource=seats;
         tabs.Items.Add(new TabItem{Header="Схема",Content=preview}); tabs.Items.Add(new TabItem{Header="Ряды",Content=rowPanel}); tabs.Items.Add(new TabItem{Header="Места — редактирование",Content=table}); area.Children.Add(tabs);
+        tabs.SelectedIndex=seats.Count==0?1:0;
         OnShown(()=>Refresh());
     }
     private List<DraftSeat> Selection()=>tabs.SelectedIndex==2?table.SelectedItems.Cast<DraftSeat>().ToList():
@@ -185,3 +220,14 @@ internal sealed class HallEditorWindow : EditorWindow
     }
 }
 
+
+internal sealed class RowAisleChoicesConverter : IMultiValueConverter
+{
+    public object Convert(object[] values,Type targetType,object parameter,System.Globalization.CultureInfo culture)
+    {
+        if(values.Length<5||values[0] is not int count||values[2] is not int aisle)return Array.Empty<HallLayout.AisleChoice>();
+        try{return HallLayout.AisleChoices(new HallRowLayout{SeatCount=count,FirstSeat=values[1] as string??"",AisleAfter=aisle},values[3] as string??"1",values[4] is true);}
+        catch(TicketException){return Array.Empty<HallLayout.AisleChoice>();}
+    }
+    public object[] ConvertBack(object value,Type[] targetTypes,object parameter,System.Globalization.CultureInfo culture)=>throw new NotSupportedException();
+}

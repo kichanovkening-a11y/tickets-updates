@@ -63,6 +63,7 @@ internal sealed class PriceEditorWindow : EditorWindow
     private List<SeatInfo> seats=[];
     private readonly Dictionary<long,PriceValue> prices=[];
     private readonly HashSet<long> withdrawn=[];
+    private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,10),FontSize=15};
     private sealed record PriceState(Dictionary<long,PriceValue> Prices,long[] Withdrawn,long[] Selected,string Name);
     private sealed record PlanChoice(PlanInfo Plan,string Name);
     public long CreatedId{get;private set;}
@@ -90,7 +91,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             if(plans.SelectedItem is not PlanChoice choice)throw new TicketException("Выберите расценовку.");
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
             var values=store.CopyPlanPrices(choice.Plan.Id,v.Id);var blocks=store.CopyPlanBlockedSeats(choice.Plan.Id,v.Id);
-            Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;withdrawn.Clear();withdrawn.UnionWith(blocks);name.Text=choice.Plan.Name+" (копия)";
+            Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;withdrawn.Clear();withdrawn.UnionWith(blocks);name.Text=store.PricePlanDisplayName(choice.Plan)+" (копия)";
             copied.Text=$"Загружено цен: {values.Count}; снято с продажи: {blocks.Count}. Сохраните под новым названием.";Refresh();refreshCategory();
         }
         Button(form,"Загрузить выбранную расценовку",()=>Try(LoadSelectedPlan));form.Children.Add(copied);
@@ -130,12 +131,20 @@ internal sealed class PriceEditorWindow : EditorWindow
             foreach(var id in preview.Selected){prices.Remove(id);withdrawn.Add(id);}Refresh();preview.Clear();SelectionSummary();
         });
         Button(form,"Назначить выбранным местам",()=>Assign(false));Button(form,"Назначить всему залу",()=>Assign(true));Button(form,"Убрать из продажи",Withdraw);
+        long? lastContextSeat=null;
         preview.SeatContextRequested+=(id,point)=>{
+            if(lastContextSeat==id&&preview.Selected.Contains(id))
+            {
+                preview.SetSelection(preview.Selected.Where(selectedId=>selectedId!=id).ToArray());lastContextSeat=null;return;
+            }
             if(!preview.Selected.Contains(id))preview.SetSelection(new[]{id});
+            lastContextSeat=id;
             var menu=new ContextMenu{PlacementTarget=preview,Placement=System.Windows.Controls.Primitives.PlacementMode.RelativePoint,HorizontalOffset=point.X,VerticalOffset=point.Y};
             var change=new MenuItem{Header="Сменить цену"};change.Click+=(_,_)=>Assign(false);menu.Items.Add(change);
             var remove=new MenuItem{Header="Убрать из продажи"};remove.Click+=(_,_)=>Withdraw();menu.Items.Add(remove);menu.IsOpen=true;
         };
+        amount.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter){Assign(false);e.Handled=true;}};
+        palette.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter){palette.IsDropDownOpen=false;Assign(false);e.Handled=true;}};
         undo=Button(form,"Шаг назад",Undo);undo.IsEnabled=false;
         grid.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Z&&Keyboard.Modifiers==ModifierKeys.Control&&Keyboard.FocusedElement is not TextBox){Undo();e.Handled=true;}};
         void Save()
@@ -148,11 +157,11 @@ internal sealed class PriceEditorWindow : EditorWindow
         form.Children.Add(new TextBlock{Text="Назначьте цену каждому месту или уберите его из продажи. Цвет каждой цены общий для всех схем.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
         var heading=new TextBlock{Text="Расценовка",FontSize=24,FontWeight=FontWeights.SemiBold,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(heading,Dock.Top);area.Children.Add(heading);
-        var toolbar=new StackPanel{Orientation=Orientation.Horizontal};DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);Button(toolbar,"Весь зал",()=>preview.Fit());area.Children.Add(preview);
+        DockPanel.SetDock(hallTotals,Dock.Top);area.Children.Add(hallTotals);area.Children.Add(preview);
         void LoadPlans()
         {
             if(venue.SelectedItem is not VenueInfo v)return;var selectedId=(plans.SelectedItem as PlanChoice)?.Plan.Id;
-            plans.ItemsSource=store.Plans(v.Id).Select(p=>new PlanChoice(p,p.Name)).ToList();plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==selectedId)??plans.Items.Cast<PlanChoice>().FirstOrDefault();
+            plans.ItemsSource=store.Plans(v.Id).Select(p=>new PlanChoice(p,store.PricePlanCaption(p))).ToList();plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==selectedId)??plans.Items.Cast<PlanChoice>().FirstOrDefault();
         }
         void LoadVenue()
         {
@@ -162,6 +171,10 @@ internal sealed class PriceEditorWindow : EditorWindow
     }
     private void Refresh(bool fit=false)
     {
+        var sellable=seats.Where(s=>!withdrawn.Contains(s.Id)).ToList();
+        var categories=sellable.Where(s=>prices.ContainsKey(s.Id)).GroupBy(s=>prices[s.Id].Amount).OrderBy(g=>g.Key).Select(g=>$"{g.Key:N0} ₽ × {g.Count()} = {g.Sum(s=>(decimal)prices[s.Id].Amount):N0} ₽");
+        hallTotals.Text=$"Всего мест: {seats.Count} · В продаже: {sellable.Count} · Снято: {withdrawn.Count} · Без цены: {sellable.Count(s=>!prices.ContainsKey(s.Id))}\n"+
+            string.Join(" · ",categories)+$"\nОбщая сумма: {sellable.Where(s=>prices.ContainsKey(s.Id)).Sum(s=>(decimal)prices[s.Id].Amount):N0} ₽";
         var ids=preview.Selected.ToArray();
         preview.Load(seats.Select(s=>prices.TryGetValue(s.Id,out var p)?s with{Amount=p.Amount,Color=p.Color,IsBlocked=withdrawn.Contains(s.Id)}:s with{Amount=null,IsBlocked=withdrawn.Contains(s.Id)}).ToList(),
             seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(x=>x.X),g.Min(x=>x.Y)-26)).ToList(),fit);preview.SetSelection(ids);
@@ -199,7 +212,8 @@ internal sealed class EventEditorWindow : EditorWindow
             finally{filtering=false;}
         }));
         var venue=Combo(form,"Площадка / зал",store.Venues(),"Name");
-        var plan=Combo(form,"Расценовка",Array.Empty<PlanInfo>(),"Name");
+        var plan=Combo(form,"Расценовка",Array.Empty<PlanInfo>(),"");
+        var planText=new FrameworkElementFactory(typeof(TextBlock));planText.SetBinding(TextBlock.TextProperty,new Binding{Converter=new PlanCaptionConverter(store)});plan.ItemTemplate=new DataTemplate{VisualTree=planText};
         form.Children.Remove(plan);
         var planRow=new Grid();planRow.ColumnDefinitions.Add(new ColumnDefinition());planRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         plan.Margin=new Thickness(0,0,10,0);plan.VerticalAlignment=VerticalAlignment.Center;planRow.Children.Add(plan);
@@ -213,7 +227,7 @@ internal sealed class EventEditorWindow : EditorWindow
         venue.SelectionChanged+=(_,_)=>Try(LoadPlans);LoadPlans();
         form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});
         var dateRow=new Grid();dateRow.ColumnDefinitions.Add(new ColumnDefinition());dateRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});form.Children.Add(dateRow);
-        var date=new DatePicker{SelectedDate=DateTime.Today,CalendarStyle=(Style)Application.Current.FindResource(typeof(Calendar)),FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
+        var date=new DatePicker{SelectedDate=DateTime.Today,CalendarStyle=new Style(typeof(Calendar),(Style)Application.Current.FindResource(typeof(Calendar))){Setters={new Setter(FrameworkElement.LayoutTransformProperty,new ScaleTransform(1.3,1.3))}},FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
         date.Loaded+=(_,_)=>{date.ApplyTemplate();if(date.Template.FindName("PART_Button",date) is UIElement button)button.Visibility=Visibility.Collapsed;};dateRow.Children.Add(date);
         var calendarButton=new Button{Content="Календарь",Margin=new Thickness(0)};Grid.SetColumn(calendarButton,1);dateRow.Children.Add(calendarButton);calendarButton.Click+=(_,_)=>date.IsDropDownOpen=!date.IsDropDownOpen;
         form.Children.Add(new TextBlock{Text="Время",Margin=new Thickness(0,12,0,5)});
@@ -246,4 +260,10 @@ internal sealed class EventEditorWindow : EditorWindow
             CreatedId=store.CreateEvents(p.Id,v.Id,r.Id,showingDates)[0];Finish(true);
         }));
     }
+}
+
+internal sealed class PlanCaptionConverter(Store store) : IValueConverter
+{
+    public object Convert(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>value is PlanInfo plan?store.PricePlanCaption(plan):"";
+    public object ConvertBack(object value,Type targetType,object parameter,System.Globalization.CultureInfo culture)=>throw new NotSupportedException();
 }

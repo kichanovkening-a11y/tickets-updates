@@ -4,9 +4,10 @@ using Microsoft.Data.Sqlite;
 
 namespace Tickets.Core;
 
-public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="")
+public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="",string Okpo="",string Okved="",string Okato="")
 {
-    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Телефон",Phone)}.Where(x=>x.Length>0));
+    public bool HasRequisites=>new[]{Inn,Kpp,Ogrn,Address,Bank,Account,CorrespondentAccount,Bik,Signatory,Position,Phone,Okpo,Okved,Okato}.Any(value=>!string.IsNullOrWhiteSpace(value));
+    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Телефон",Phone)}.Where(x=>x.Length>0));
     private static string Line(string label,string value)=>string.IsNullOrWhiteSpace(value)?"":label+": "+value;
 }
 
@@ -20,12 +21,23 @@ public sealed partial class Store
     {
         using var c=Open();EnsureOrganizationTable(c);using var tx=c.BeginTransaction(deferred:false);
         using var marker=Command(c,"SELECT value FROM document_setting WHERE name='organization-directory-seed-v1'");marker.Transaction=tx;
-        if(marker.ExecuteScalar() is not null){tx.Commit();return;}
+        var seeded=marker.ExecuteScalar() is not null;
+        using(var repair=Command(c,"SELECT value FROM document_setting WHERE name='sender-punctuation-repair-v2'"))
+        {
+            repair.Transaction=tx;
+            if(repair.ExecuteScalar() is null)
+            {
+                HideCatalogEntry(c,tx,"sender",SenderChoiceKey("ИП Баринов АС"));
+                HideCatalogEntry(c,tx,"sender",SenderChoiceKey("ИП Баринов А С"));
+                using var done=Command(c,"INSERT INTO document_setting(name,value) VALUES('sender-punctuation-repair-v2','1')");done.Transaction=tx;done.ExecuteNonQuery();
+            }
+        }
+        if(seeded){tx.Commit();return;}
         const string restored="ИП Баринов А.С.";
         using(var unhide=Command(c,"DELETE FROM catalog_hidden WHERE kind='sender' AND (entity_key=$k OR entity_key='ИПБАРИНОВАС')","$k",SenderChoiceKey(restored))){unhide.Transaction=tx;unhide.ExecuteNonQuery();}
         HideCatalogEntry(c,tx,"sender",SenderChoiceKey("ИП Баринов А С"));
         RememberSender(c,tx,restored);
-        var alliance=new OrganizationDetails(DefaultSender,"7729768795","772301001","1147746365062","109548, г. Москва, Вн. Тер. Г. Муниципальный округ Печатники, ул. Шоссейная, д. 20, кв. 75","ПАО «ПРОМСВЯЗЬБАНК» г. Москва","40702810500000272771","30101810400000000555","044525555","Заборский Л.Н.","Генеральный директор");
+        var alliance=new OrganizationDetails(DefaultSender,"7729768795","772301001","1147746365062","109548, г. Москва, Вн. Тер. Г. Муниципальный округ Печатники, ул. Шоссейная, д. 20, кв. 75","ПАО «ПРОМСВЯЗЬБАНК» г. Москва","40702810500000272771","30101810400000000555","044525555","Заборский Л.Н.","Генеральный директор",Okved:"90.01",Okato:"45286580000");
         using(var seed=Command(c,"INSERT OR IGNORE INTO organization_details(role,name_key,details) VALUES('sender',$k,$d)","$k",CatalogText.Key(DefaultSender),"$d",JsonSerializer.Serialize(alliance))){seed.Transaction=tx;seed.ExecuteNonQuery();}
         using(var done=Command(c,"INSERT INTO document_setting(name,value) VALUES('organization-directory-seed-v1','1')")){done.Transaction=tx;done.ExecuteNonQuery();}
         tx.Commit();
@@ -58,9 +70,22 @@ public sealed partial class Store
     public OrganizationDetails GetIssueOrganizationDetails(long issueId,bool sender)
     {
         using var c=Open();using var cmd=Command(c,"SELECT details FROM issue_organization_details WHERE issue_id=$i AND role=$r","$i",issueId,"$r",sender?"sender":"recipient");
-        if(cmd.ExecuteScalar() is string json)return JsonSerializer.Deserialize<OrganizationDetails>(json)??new();
+        var oldJson=cmd.ExecuteScalar() as string;
+        var snapshot=oldJson is not null?JsonSerializer.Deserialize<OrganizationDetails>(oldJson):null;
+        if(snapshot?.HasRequisites==true)return snapshot;
         using var original=Command(c,sender?"SELECT sender FROM issue_batch WHERE id=$i":"SELECT recipient FROM issue_batch WHERE id=$i","$i",issueId);
-        return new(Name:original.ExecuteScalar() as string??"");
+        var name=original.ExecuteScalar() as string??snapshot?.Name??"";
+        if(string.IsNullOrWhiteSpace(name))return snapshot??new();
+        var current=GetOrganizationDetails(name,sender);
+        if(!current.HasRequisites)return snapshot??new(Name:name);
+        // Legacy invoices captured only a name. Fill those once; a populated historical
+        // snapshot can only change through the explicit refresh command.
+        using var write=oldJson is null
+            ?Command(c,"INSERT INTO issue_organization_details(issue_id,role,details) VALUES($i,$r,$d) ON CONFLICT(issue_id,role) DO NOTHING","$i",issueId,"$r",sender?"sender":"recipient","$d",JsonSerializer.Serialize(current))
+            :Command(c,"UPDATE issue_organization_details SET details=$d WHERE issue_id=$i AND role=$r AND details=$old","$i",issueId,"$r",sender?"sender":"recipient","$d",JsonSerializer.Serialize(current),"$old",oldJson);
+        write.ExecuteNonQuery();
+        // Another editor may have refreshed this invoice after our read. Respect its value.
+        return cmd.ExecuteScalar() is string saved?JsonSerializer.Deserialize<OrganizationDetails>(saved)??current:current;
     }
     public void RefreshInvoiceOrganizations(long eventId,long issueId)
     {
@@ -75,7 +100,7 @@ public sealed partial class Store
         ArgumentNullException.ThrowIfNull(details);
         // Validate before creating the directory entry so a rejected edit has no side effects.
         string Clean(string value){value=value.Trim();if(value.Length>2000||value.Any(char.IsControl))throw new TicketException("Реквизиты должны занимать одну строку (до 2000 символов).");return value;}
-        details=new(Name:name,Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone));
+        details=new(Name:name,Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone),Okpo:Clean(details.Okpo),Okved:Clean(details.Okved),Okato:Clean(details.Okato));
         name=sender?SaveSender(name):SaveRecipient(name);details=details with{Name=name};
         using var c=Open();EnsureOrganizationTable(c);
         using var cmd=Command(c,"INSERT INTO organization_details(role,name_key,details) VALUES($r,$k,$d) ON CONFLICT(role,name_key) DO UPDATE SET details=excluded.details","$r",sender?"sender":"recipient","$k",CatalogText.Key(name),"$d",JsonSerializer.Serialize(details));cmd.ExecuteNonQuery();

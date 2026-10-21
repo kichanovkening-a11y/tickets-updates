@@ -8,7 +8,7 @@ for item in ['Data/tickets.db', 'Data/session.lock']:
     (root/item).unlink(missing_ok=True)
 for path in (root/'Data').glob('*.before-v*.db'):
     path.unlink()
-for directory in ['Backups', '.updates']:
+for directory in ['Backups', '.updates', 'Data/PrintBlanks', 'Data/Documents']:
     if (root/directory).exists():
         shutil.rmtree(root/directory)
 shutil.copyfile(Path(__file__).resolve().parents[1]/'README.txt', root/'README.txt')

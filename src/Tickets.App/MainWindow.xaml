@@ -125,7 +125,7 @@
               </UniformGrid>
               <TextBlock x:Name="SelectionHint" Visibility="Collapsed" Foreground="#64748B" FontSize="12" TextWrapping="Wrap" MaxHeight="32" Margin="0,3,0,0"/>
             </StackPanel>
-            <StackPanel x:Name="PriceEditorPanel" DockPanel.Dock="Top" Visibility="Collapsed" Margin="0,0,0,6">
+            <StackPanel x:Name="PriceEditorPanel" DockPanel.Dock="Bottom" Visibility="Collapsed" Margin="0,0,0,6">
               <TextBlock Text="Цена выбранных мест, ₽"/>
               <TextBox x:Name="PriceBox" TextChanged="PriceAmountChanged" KeyDown="PriceKeyDown"/>
               <ComboBox x:Name="PriceColorBox" MinHeight="32" Margin="0,4" ToolTip="Общий цвет цены"/>

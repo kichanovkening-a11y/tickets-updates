@@ -38,7 +38,7 @@ internal sealed class TicketBlankWindow:EditorWindow
         Button(actions,"Новый А4 · 4 билета",()=>Load(TicketBlankEditing.CreateA4()));
         Button(actions,"Создать редактируемую копию",()=>Try(()=>{if(Editable)Read();Load(TicketBlankEditing.Clone(blank));}));
         var menu=new ContextMenu();var delete=new MenuItem{Header="Удалить"};menu.Items.Add(delete);templates.ContextMenu=menu;
-        var style=new Style(typeof(ComboBoxItem));style.Setters.Add(new Setter(FrameworkElement.ContextMenuProperty,menu));
+        var style=new Style(typeof(ComboBoxItem));style.Setters.Add(new Setter(FrameworkElement.MaxWidthProperty,300d));style.Setters.Add(new Setter(FrameworkElement.ToolTipProperty,new Binding("Name")));style.Setters.Add(new Setter(FrameworkElement.ContextMenuProperty,menu));
         style.Setters.Add(new EventSetter(UIElement.PreviewMouseRightButtonDownEvent,new MouseButtonEventHandler((sender,_)=>{if(sender is ComboBoxItem item)templates.SelectedItem=item.Content;})));templates.ItemContainerStyle=style;
         menu.Opened+=(_,_)=>delete.IsEnabled=templates.SelectedItem is TicketBlank;
         delete.Click+=(_,_)=>Try(()=>{if(templates.SelectedItem is not TicketBlank b)return;if(MessageBox.Show(DialogOwner,"Удалить бланк «"+b.Name+"»?","Удаление бланка",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;Store.DeleteTicketBlank(b.Id);Refresh();Load(TicketBlankEditing.CreateA4());});

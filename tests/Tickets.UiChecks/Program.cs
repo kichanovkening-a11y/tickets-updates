@@ -170,7 +170,9 @@ internal static class Program
             Check(hall.Selected.Count==4,"another left drag accumulates another group");
             Gesture(hall,new Point(38,38),new Point(38,38));
             Check(hall.Selected.Count==3&&!hall.Selected.Contains(seatIds[3]),"repeat click deselects one place only");
-            Click(main,"Изменить цену");Check(((StackPanel)main.FindName("PriceEditorPanel")).IsVisible,"price editor opens above selection summary");
+            Click(main,"Изменить цену");Pump();var activePricePanel=(StackPanel)main.FindName("PriceEditorPanel");Check(activePricePanel.IsVisible,"price editor opens within the selection sidebar");
+            var activeSidebar=(Border)main.FindName("SelectionSidebar");var activeList=(ListBox)main.FindName("SelectedList");
+            Check(activeList.TransformToAncestor(activeSidebar).TransformBounds(new Rect(activeList.RenderSize)).Bottom<=activePricePanel.TransformToAncestor(activeSidebar).TransformBounds(new Rect(activePricePanel.RenderSize)).Top+1,"price editing actions stay below the place list without separating recipient and places");
             ((TextBox)main.FindName("PriceBox")).Text="123";Click(main,"Применить цену");
             Check(hall.Selected.Count==0,"applying price clears selection");
             Check(new Store(db).Seats(eventId).Where(s=>seatIds.Take(3).Contains(s.Id)).All(s=>s.Amount==123&&s.Color==store.PriceColors().Single(c=>c.Amount==123).Color),"price and category color persist and update scheme data");

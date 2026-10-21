@@ -7,8 +7,8 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: tickets-release
-  cancel-in-progress: true
+  group: tickets-release-serial
+  cancel-in-progress: false
 jobs:
   build:
     runs-on: windows-2022
@@ -63,6 +63,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          $head = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha'
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify release revision' }
+          if ($head -ne $env:GITHUB_SHA) { Write-Host 'Newer revision is queued; skip stale release'; exit 0 }
           $v = (Get-Content version.json | ConvertFrom-Json).version
           $tag = "v$v"
           gh release view $tag --repo $env:GITHUB_REPOSITORY *> $null

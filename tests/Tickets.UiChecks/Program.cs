@@ -512,10 +512,12 @@ internal static class Program
     }
     private static void CheckSelectionSidebar(Tickets.App.MainWindow main)
     {
+        main.WindowState=WindowState.Normal;main.Left=0;main.Top=0;main.Width=1420;main.Height=880;Pump();
         var sidebar=(Border)main.FindName("SelectionSidebar");var list=(ListBox)main.FindName("SelectedList");
         var actions=(System.Windows.Controls.Primitives.UniformGrid)main.FindName("SelectionActions");
         var options=(Expander)main.FindName("SelectionOptions");options.IsExpanded=false;Pump();
         Check(actions.Columns==3&&actions.Children.OfType<Button>().All(button=>button.ActualWidth==80&&button.ActualHeight==80),"sidebar actions use compact square buttons in three columns");
+        Console.WriteLine($"Sidebar normal viewport: window {main.ActualWidth}x{main.ActualHeight}; sidebar {sidebar.ActualHeight}; list {list.ActualHeight}; explicit height {list.Height}");
         Check(double.IsNaN(list.Height)&&list.ActualHeight>=220,"selected places fill available height at 1420 by 880");
         var workspace=(Grid)main.FindName("Workspace");var sidebarBounds=sidebar.TransformToAncestor(workspace).TransformBounds(new Rect(sidebar.RenderSize));
         Check(sidebarBounds.Top<=1&&sidebarBounds.Bottom>=workspace.ActualHeight-1,"sidebar spans the show header toolbar and tabs");
@@ -525,6 +527,7 @@ internal static class Program
             Check(bounds.Top>=0&&bounds.Bottom<=sidebar.ActualHeight+1,"sidebar action is visible: "+button.Content);
         }
         main.Width=1000;main.Height=700;Pump();
+        Console.WriteLine($"Sidebar small viewport: window {main.ActualWidth}x{main.ActualHeight}; sidebar {sidebar.ActualHeight}; list {list.ActualHeight}");
         Check(list.ActualHeight>=120,"small viewport retains a usable selected-place list");
         var listBounds=list.TransformToAncestor(sidebar).TransformBounds(new Rect(list.RenderSize));
         var actionBounds=actions.TransformToAncestor(sidebar).TransformBounds(new Rect(actions.RenderSize));

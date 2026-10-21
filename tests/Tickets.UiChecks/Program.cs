@@ -727,11 +727,13 @@ internal static class Program
         var first=store.Issue(eventId,new[]{seats[0]},"UI merge recipient","UIM",1);
         var second=store.Issue(eventId,new[]{seats[1]}," ui merge recipient ","UIM",2);
         var other=store.Issue(eventId,new[]{seats[2]},"UI other merge recipient","UIM",3);
-        typeof(Tickets.App.MainWindow).GetMethod("RefreshCatalogNavigation",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
+        typeof(Tickets.App.MainWindow).GetMethod("RefreshCatalogNavigation",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);((TextBox)main.FindName("SearchBox")).Clear();main.SelectEvent(eventId);Pump();
         var history=(DataGrid)main.FindName("HistoryGrid");var tabs=Logical(main).OfType<TabControl>().Single(tab=>Logical(tab).Contains(history));
         var previousTab=tabs.SelectedIndex;tabs.SelectedIndex=1;Pump();main.Activate();
         var merge=(Button)main.FindName("MergeInvoicesButton");
         Check(merge.Visibility==Visibility.Collapsed&&!Logical(tabs).OfType<Button>().Any(button=>Equals(button.Content,"Открыть накладную")),"journal initially hides merge and uses row opening without duplicate action");
+        Check(history.IsVisible&&history.Items.Count==3,"merge journal displays the selected event after clearing the earlier search filter");
+        Check(history.Columns[0] is DataGridTemplateColumn selector&&selector.DisplayIndex==0&&selector.Visibility==Visibility.Visible,"inline merge selection stays in the leftmost visible column");
         var journalBoxes=Visual(history).OfType<CheckBox>().Where(box=>box.Tag is long).ToArray();
         Check(journalBoxes.Length==3,"journal exposes one inline merge checkbox per invoice");
         var firstBox=journalBoxes.Single(box=>Equals(box.Tag,first));NativeClick(firstBox);Pump();

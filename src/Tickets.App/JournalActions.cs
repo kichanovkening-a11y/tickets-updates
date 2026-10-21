@@ -22,6 +22,8 @@ public partial class MainWindow
                 }
         }
         catch(System.IO.IOException){}catch(JsonException){}catch(ArgumentException){}
+        var selector=HistoryGrid.Columns.OfType<DataGridTemplateColumn>().FirstOrDefault();
+        if(selector is not null){selector.DisplayIndex=0;selector.Visibility=Visibility.Visible;selector.Width=new DataGridLength(38);selector.MinWidth=38;selector.CanUserReorder=false;}
         Closing+=(_,_)=>{
             try
             {

@@ -201,7 +201,7 @@ internal static class Program
                     Check(!text.Contains("UI-REQUISITES-MUST-NOT-APPEAR")&&!text.Contains("Банковские реквизиты")&&!text.Contains("ИНН")&&!text.Contains("Состояние"),"invoice preview omits party requisites and ticket state");
                     Check(text.Contains("UI invoice signatory"),"invoice retains the actual recipient signatory");
                     Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Открыть")),"invoice offers opening the saved Word document");
-                    CheckDocumentTableLayout(document,"invoice");
+                    CheckDocumentTableLayout(Logical(window).OfType<FlowDocumentScrollViewer>().Single(),"invoice");
                     Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить как…")),"invoice has no duplicate Save As action");
                     var squareSave=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить"));var squarePrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Распечатать"));
                     Check(squareSave.Width==squareSave.Height&&squarePrint.Width==squarePrint.Height&&squareSave.Width==112,"save and print are prominent square buttons");
@@ -223,12 +223,12 @@ internal static class Program
                             Check(contractText.Contains("UI recipient"),"contract preview substitutes actual recipient");
                             Check(!contractText.Contains("Билеты и места"),"contract omits the ticket item table");
                             Check(Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Открыть")),"contract offers opening the saved Word document");
-                            CheckDocumentTableLayout(rendered,"contract");
+                            CheckDocumentTableLayout(Logical(form).OfType<FlowDocumentScrollViewer>().Single(),"contract");
                             Logical(form).OfType<TabControl>().Single().SelectedIndex=1;Logical(form).OfType<TextBox>().Single().Text="Договор для {recipient}. Отправитель: {sender}.";Click(form,"Сохранить шаблон");
                             Check(store.DocumentTemplate(IssueDocumentKinds.Contract).Contains("{recipient}"),"document template saves for later issuances");
                         }catch(Exception ex){documentError=ex;}finally{form.Close();}
                     }));Click(window,"Договор");if(documentError is not null)throw documentError;
-                    var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
+                    var paginator=((IDocumentPaginatorSource)CloneFlowDocument(document)).DocumentPaginator;paginator.ComputePageCount();
                     Check(paginator.PageCount>=1&&paginator.GetPage(0).Visual is not null,"invoice paginates for printing");
                     Check(text.Contains(Store.DefaultSender)&&text.Contains("триста шестьдесят девять рублей")&&!text.Contains("ТЕСТ 000001"),"invoice has sender and words without ticket serials");
                     Check(Directory.GetFiles(Path.Combine(store.DocumentsDirectory,"Накладные"),"*.docx").Length==1,"invoice automatically saves Word inside program data");
@@ -566,14 +566,13 @@ internal static class Program
         finally{preview.Close();}
         Check(store.History(eventId).SequenceEqual(history)&&store.Invoice(eventId,originalInvoice.Id).Tickets.SequenceEqual(originalTickets),"closing original report previews preserves history ticket identity and print state");
     }
-    private static void CheckDocumentTableLayout(FlowDocument document,string caption)
+    private static FlowDocument CloneFlowDocument(FlowDocument document)
+        =>(FlowDocument)System.Windows.Markup.XamlReader.Parse(System.Windows.Markup.XamlWriter.Save(document));
+    private static void CheckDocumentTableLayout(FlowDocumentScrollViewer viewer,string caption)
     {
-        Pump();
-        foreach(var window in Application.Current.Windows.Cast<Window>().Where(window=>window.IsVisible))
-            foreach(var viewer in Logical(window).OfType<FlowDocumentScrollViewer>())
-                Console.WriteLine($"Document viewer identity: {caption}; window={window.Title}; sameDocument={ReferenceEquals(viewer.Document,document)}; viewerWidth={viewer.ActualWidth}; passedPageWidth={document.PageWidth}; currentPageWidth={viewer.Document?.PageWidth}; passedPointerLayoutValid={document.ContentStart.HasValidLayout}; currentPointerLayoutValid={viewer.Document?.ContentStart.HasValidLayout}");
-        var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
-        Check(paginator.PageCount>0&&paginator.GetPage(0).Visual is not null,caption+" document paginates");
+        // A FlowDocument switches formatter when its paginator is used. Measure the
+        // live scroll viewer first and paginate an independent copy afterwards.
+        Pump();viewer.UpdateLayout();Pump();var document=viewer.Document;
         var tables=document.Blocks.OfType<Table>().ToArray();Check(tables.Length>0,caption+" contains its formatted table");
         foreach(var table in tables)
         {
@@ -581,14 +580,19 @@ internal static class Program
             var rows=table.RowGroups.Cast<TableRowGroup>().SelectMany(group=>group.Rows.Cast<TableRow>()).ToArray();
             foreach(var row in rows)
             {
+                row.Cells[0].BringIntoView();Pump();viewer.UpdateLayout();
+                Check(ReferenceEquals(viewer.Document,document),caption+" geometry uses the current viewer document");
                 var first=row.Cells[0].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
                 var second=row.Cells[1].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
                 var last=row.Cells[0].ContentEnd.GetNextInsertionPosition(LogicalDirection.Backward)!.GetCharacterRect(LogicalDirection.Backward);
-                Console.WriteLine($"Document geometry: {caption}; row={Array.IndexOf(rows,row)}; text={new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim()}; first={first}; second={second}; last={last}; deltaX={second.Left-first.Left}; pageWidth={document.PageWidth}; pages={paginator.PageCount}; pageCountValid={paginator.IsPageCountValid}; pointerLayoutValid={row.Cells[0].ContentStart.HasValidLayout}; widths={string.Join(",",table.Columns.Cast<TableColumn>().Select(column=>column.Width.Value))}");
+                Console.WriteLine($"Document geometry: {caption}; row={Array.IndexOf(rows,row)}; text={new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim()}; first={first}; second={second}; last={last}; deltaX={second.Left-first.Left}; pageWidth={document.PageWidth}; pointerLayoutValid={row.Cells[0].ContentStart.HasValidLayout}; widths={string.Join(",",table.Columns.Cast<TableColumn>().Select(column=>column.Width.Value))}");
                 Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
                 if(new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim().Length<=20)Check(!last.IsEmpty&&last.Bottom-first.Top<160,caption+" rendered short row does not expand into a giant empty cell");
             }
         }
+        var printDocument=CloneFlowDocument(document);var paginator=((IDocumentPaginatorSource)printDocument).DocumentPaginator;paginator.ComputePageCount();
+        Check(paginator.PageCount>0&&paginator.GetPage(0).Visual is not null,caption+" document paginates");
+        Check(ReferenceEquals(viewer.Document,document)&&document.ContentStart.HasValidLayout,caption+" pagination preserves the live preview layout");
     }
     private static void CheckInvoiceMergeSelection(Store store)
     {

@@ -90,7 +90,7 @@
               <TextBlock x:Name="SelectedSummary" Text="Ничего не выбрано" FontSize="16.8" FontWeight="Bold" Foreground="#C1121F" Margin="0,0,0,7" TextWrapping="Wrap"/>
               <TextBlock Text="Получатель / организация" Margin="0,0,0,4"/>
               <ComboBox x:Name="RecipientBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" MinHeight="34" Padding="4" DropDownOpened="RecipientOpened"/>
-              <TextBlock x:Name="IssuedRecipients" Foreground="#9A3412" FontWeight="Bold" TextWrapping="Wrap" MaxHeight="44" Margin="0,4,0,3"/>
+              <TextBlock x:Name="IssuedRecipients" Visibility="Collapsed" Foreground="#9A3412" FontWeight="Bold" TextWrapping="Wrap" MaxHeight="44" Margin="0,4,0,3"/>
             </StackPanel>
         </Border>
         <Border x:Name="SelectionSidebar" Grid.Column="1" Grid.Row="2" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="8,0,0,0" ToolTip="{Binding Text, ElementName=SelectionHint}">

@@ -2,8 +2,8 @@
         Title="Билеты · 0.11.0" Width="1420" Height="880" MinWidth="800" MinHeight="500" WindowStartupLocation="CenterScreen" WindowState="Maximized" ResizeMode="CanResize" WindowStyle="SingleBorderWindow" ShowInTaskbar="True">
   <Window.Resources>
     <Style x:Key="SeatActionStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-      <Setter Property="Width" Value="80"/><Setter Property="Height" Value="80"/><Setter Property="FontSize" Value="14"/><Setter Property="Margin" Value="3"/>
-      <Setter Property="ContentTemplate"><Setter.Value><DataTemplate><Viewbox Stretch="Uniform" StretchDirection="DownOnly"><TextBlock Text="{Binding}" MaxWidth="66" TextWrapping="Wrap" TextAlignment="Center"/></Viewbox></DataTemplate></Setter.Value></Setter>
+      <Setter Property="Width" Value="72"/><Setter Property="Height" Value="72"/><Setter Property="FontSize" Value="14"/><Setter Property="Margin" Value="3"/>
+      <Setter Property="ContentTemplate"><Setter.Value><DataTemplate><Viewbox Stretch="Uniform" StretchDirection="DownOnly"><TextBlock Text="{Binding}" MaxWidth="58" TextWrapping="Wrap" TextAlignment="Center"/></Viewbox></DataTemplate></Setter.Value></Setter>
     </Style>
   </Window.Resources>
   <Grid>
@@ -83,7 +83,7 @@
             </DockPanel>
           </TabItem>
         </TabControl>
-        <Border x:Name="SelectionSidebar" Grid.Column="1" Grid.RowSpan="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="8,0,0,0">
+        <Border x:Name="SelectionSidebar" Grid.Column="1" Grid.RowSpan="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="8,0,0,0" ToolTip="{Binding Text, ElementName=SelectionHint}">
           <DockPanel LastChildFill="True">
             <StackPanel DockPanel.Dock="Top">
               <TextBlock x:Name="SelectedSummary" Text="Ничего не выбрано" FontSize="16.8" FontWeight="Bold" Foreground="#C1121F" Margin="0,0,0,7" TextWrapping="Wrap"/>
@@ -116,7 +116,7 @@
                 <Button Style="{StaticResource SeatActionStyle}" x:Name="SaleStateButton" Content="Удалить из продажи" Click="SaleStateClick" IsEnabled="False"/>
                 <Button Style="{StaticResource SeatActionStyle}" x:Name="ReturnButton" Content="Вернуть выбранные" Click="ReturnClick" IsEnabled="False"/>
               </UniformGrid>
-              <TextBlock x:Name="SelectionHint" Foreground="#64748B" FontSize="12" TextWrapping="Wrap" MaxHeight="32" Margin="0,3,0,0"/>
+              <TextBlock x:Name="SelectionHint" Visibility="Collapsed" Foreground="#64748B" FontSize="12" TextWrapping="Wrap" MaxHeight="32" Margin="0,3,0,0"/>
             </StackPanel>
             <StackPanel x:Name="PriceEditorPanel" DockPanel.Dock="Top" Visibility="Collapsed" Margin="0,0,0,6">
               <TextBlock Text="Цена выбранных мест, ₽"/>

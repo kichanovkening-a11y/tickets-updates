@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     {
         this.store=store;
         InitializeComponent();ReadWindowSettings();InitializeJournalLayout();
+        Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
         var appVersion=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
@@ -145,6 +146,7 @@ public partial class MainWindow : Window
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;EventDate.Text=current.Date;
         EventSubtitle.Text=$"{current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
+        EventTitle.ToolTip=EventSubtitle.Text;UpdateCompactLayout();
         PriceBox.Clear();
         if(fit){Hall.FocusPrice=null;recipientUpdating=true;try{RecipientBox.SelectedItem=null;RecipientBox.Text="";}finally{recipientUpdating=false;}}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);

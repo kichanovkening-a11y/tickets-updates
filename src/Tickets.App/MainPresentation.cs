@@ -6,6 +6,10 @@ using Tickets.Core;
 namespace Tickets.App;
 public partial class MainWindow
 {
+    private void UpdateCompactLayout()
+    {
+        EventSubtitle.Visibility=Workspace.ActualHeight>0&&Workspace.ActualHeight<550?Visibility.Collapsed:Visibility.Visible;
+    }
     private static TreeViewItem? NearestTreeItem(DependencyObject? source)
     {
         while(source is not null)

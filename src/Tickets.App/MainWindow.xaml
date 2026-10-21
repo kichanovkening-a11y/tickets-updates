@@ -41,7 +41,7 @@
         </DockPanel>
       </Border>
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <StackPanel Margin="8,0,0,10"><DockPanel><TextBlock x:Name="EventDate" DockPanel.Dock="Right" FontSize="18" Margin="12,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></DockPanel>
+        <StackPanel Margin="8,0,0,4"><DockPanel><TextBlock x:Name="EventDate" DockPanel.Dock="Right" FontSize="18" Margin="12,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></DockPanel>
           <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" MaxHeight="60" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
         <ScrollViewer Grid.Row="1" Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,5">
           <Grid x:Name="UpperActions" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -59,7 +59,7 @@
             <Grid>
               <DockPanel>
                 <ScrollViewer DockPanel.Dock="Top" Margin="10,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
-                  <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Click="FitClick"/><Button Content="−" Width="44" Click="ZoomOutClick"/><Button Content="+" Width="44" Click="ZoomInClick"/></StackPanel>
+                  <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Height="32" Click="FitClick"/><Button Content="−" Height="32" Width="44" Click="ZoomOutClick"/><Button Content="+" Height="32" Width="44" Click="ZoomInClick"/></StackPanel>
                 </ScrollViewer>
                 <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="80" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
                   <StackPanel><TextBlock x:Name="HallTotals" Margin="10,4" FontWeight="Bold" TextWrapping="Wrap"/><Grid x:Name="LegendPanel" Margin="10,4" HorizontalAlignment="Left"/><WrapPanel x:Name="StatusLegendPanel" Margin="10,4"/></StackPanel>

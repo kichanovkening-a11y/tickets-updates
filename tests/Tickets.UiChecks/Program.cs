@@ -568,7 +568,11 @@ internal static class Program
     }
     private static void CheckDocumentTableLayout(FlowDocument document,string caption)
     {
-        Pump();var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
+        Pump();
+        foreach(var window in Application.Current.Windows.Cast<Window>().Where(window=>window.IsVisible))
+            foreach(var viewer in Logical(window).OfType<FlowDocumentScrollViewer>())
+                Console.WriteLine($"Document viewer identity: {caption}; window={window.Title}; sameDocument={ReferenceEquals(viewer.Document,document)}; viewerWidth={viewer.ActualWidth}; passedPageWidth={document.PageWidth}; currentPageWidth={viewer.Document?.PageWidth}; passedPointerLayoutValid={document.ContentStart.HasValidLayout}; currentPointerLayoutValid={viewer.Document?.ContentStart.HasValidLayout}");
+        var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
         Check(paginator.PageCount>0&&paginator.GetPage(0).Visual is not null,caption+" document paginates");
         var tables=document.Blocks.OfType<Table>().ToArray();Check(tables.Length>0,caption+" contains its formatted table");
         foreach(var table in tables)
@@ -580,6 +584,7 @@ internal static class Program
                 var first=row.Cells[0].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
                 var second=row.Cells[1].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
                 var last=row.Cells[0].ContentEnd.GetNextInsertionPosition(LogicalDirection.Backward)!.GetCharacterRect(LogicalDirection.Backward);
+                Console.WriteLine($"Document geometry: {caption}; row={Array.IndexOf(rows,row)}; text={new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim()}; first={first}; second={second}; last={last}; deltaX={second.Left-first.Left}; pageWidth={document.PageWidth}; pages={paginator.PageCount}; pageCountValid={paginator.IsPageCountValid}; pointerLayoutValid={row.Cells[0].ContentStart.HasValidLayout}; widths={string.Join(",",table.Columns.Cast<TableColumn>().Select(column=>column.Width.Value))}");
                 Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
                 if(new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim().Length<=20)Check(!last.IsEmpty&&last.Bottom-first.Top<160,caption+" rendered short row does not expand into a giant empty cell");
             }

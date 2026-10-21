@@ -54,7 +54,7 @@
           <TabItem Header="  Схема зала  ">
             <Grid>
               <DockPanel>
-                <ScrollViewer DockPanel.Dock="Top" Margin="10" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
+                <ScrollViewer DockPanel.Dock="Top" Margin="10,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
                   <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Click="FitClick"/><Button Content="−" Width="44" Click="ZoomOutClick"/><Button Content="+" Width="44" Click="ZoomInClick"/></StackPanel>
                 </ScrollViewer>
                 <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="80" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">

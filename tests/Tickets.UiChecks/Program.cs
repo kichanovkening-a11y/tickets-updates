@@ -922,7 +922,7 @@ internal static class Program
     }
     private static void SaveDocumentThroughDialog(Window owner,string path)
     {
-        Exception? error=null;var submitted=false;var started=DateTime.UtcNow;
+        Exception? error=null;var submitted=false;var entered=false;var started=DateTime.UtcNow;
         var timer=new DispatcherTimer(DispatcherPriority.Send){Interval=TimeSpan.FromMilliseconds(100)};
         timer.Tick+=(_,_)=>EnumWindows((window,_)=>{
             GetWindowThreadProcessId(window,out var process);if(process!=(uint)Environment.ProcessId)return true;
@@ -930,11 +930,29 @@ internal static class Program
             if(title.ToString()!="Сохранить документ")return true;
             try
             {
-                IntPtr fileName=IntPtr.Zero;
-                EnumChildWindows(window,(child,_)=>{var name=new System.Text.StringBuilder(64);GetClassName(child,name,name.Capacity);if(name.ToString()=="Edit"&&GetDlgCtrlID(child)==1001)fileName=child;return true;},IntPtr.Zero);
+                IntPtr fileName=IntPtr.Zero,fallback=IntPtr.Zero,saveButton=IntPtr.Zero;
+                EnumChildWindows(window,(child,_)=>{
+                    var name=new System.Text.StringBuilder(64);GetClassName(child,name,name.Capacity);
+                    if(name.ToString()=="Edit"){
+                        var value=new System.Text.StringBuilder(2048);GetWindowText(child,value,value.Capacity);
+                        if(GetDlgCtrlID(child)==1001)fallback=child;
+                        if(value.ToString().EndsWith(".docx",StringComparison.OrdinalIgnoreCase))fileName=child;
+                    }
+                    if(name.ToString()=="Button"&&GetDlgCtrlID(child)==1)saveButton=child;
+                    return true;
+                },IntPtr.Zero);
+                if(fileName==IntPtr.Zero)fileName=fallback;
                 if(fileName==IntPtr.Zero){if(DateTime.UtcNow-started>TimeSpan.FromSeconds(10))throw new Exception("Save dialog filename edit was not found");return true;}
-                Check(SetWindowText(fileName,path),"native save dialog accepts chosen full document path");
-                submitted=true;timer.Stop();PostMessage(window,0x111,new IntPtr(1),IntPtr.Zero);
+                if(!entered){
+                    var before=new System.Text.StringBuilder(2048);GetWindowText(fileName,before,before.Capacity);Console.WriteLine("Save dialog filename before typing: "+before);
+                    SetFocus(fileName);SendMessage(fileName,0xB1,IntPtr.Zero,new IntPtr(-1));
+                    SendMessageText(fileName,0xC2,new IntPtr(1),path);entered=true;return true;
+                }
+                var after=new System.Text.StringBuilder(2048);GetWindowText(fileName,after,after.Capacity);
+                Check(after.ToString()==path,"native save dialog accepts chosen full document path");
+                submitted=true;timer.Stop();
+                if(saveButton!=IntPtr.Zero)PostMessage(saveButton,0xF5,IntPtr.Zero,IntPtr.Zero);
+                else{SetFocus(fileName);keybd_event(0x0D,0,0,UIntPtr.Zero);keybd_event(0x0D,0,2,UIntPtr.Zero);}
             }
             catch(Exception ex){error=ex;timer.Stop();PostMessage(window,0x111,new IntPtr(2),IntPtr.Zero);}
             return true;
@@ -943,6 +961,10 @@ internal static class Program
         try{Click(owner,"Сохранить");if(error is not null)throw error;Check(submitted,"manual Save opens the application's document save dialog");}
         finally{timer.Stop();expectedSaveDialog=false;}
     }
+    [DllImport("user32.dll")]private static extern IntPtr SetFocus(IntPtr window);
+    [DllImport("user32.dll")]private static extern IntPtr SendMessage(IntPtr window,uint message,IntPtr wParam,IntPtr lParam);
+    [DllImport("user32.dll",CharSet=CharSet.Unicode,EntryPoint="SendMessageW")]private static extern IntPtr SendMessageText(IntPtr window,uint message,IntPtr wParam,string text);
+    [DllImport("user32.dll")]private static extern void keybd_event(byte key,byte scan,uint flags,UIntPtr extra);
     [DllImport("user32.dll")]private static extern int GetDlgCtrlID(IntPtr window);
     [DllImport("user32.dll",CharSet=CharSet.Unicode)]private static extern bool SetWindowText(IntPtr window,string text);
     [DllImport("user32.dll")]private static extern bool PostMessage(IntPtr window,uint message,IntPtr wParam,IntPtr lParam);

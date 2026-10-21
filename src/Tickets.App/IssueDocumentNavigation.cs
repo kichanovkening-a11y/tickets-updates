@@ -33,13 +33,19 @@ internal static class IssueDocumentNavigation
         return panel;
     }
 
+    internal static void OpenWord(string path,Func<string> create)
+    {
+        if(!System.IO.File.Exists(path))path=create();
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path){UseShellExecute=true});
+    }
+
     internal static void Open(Store store,long eventId,long issueId,string selected)
     {
         while(selected!=Invoice)
         {
             string next=Invoice;
             EditorWindow editor=selected==Specification
-                ?new SpecificationWindow(store,store.Invoice(eventId,issueId).Recipient,true)
+                ?new SpecificationWindow(store,eventId,issueId)
                 :new IssueDocumentWindow(store,eventId,issueId,selected);
             if(selected==Specification)editor.Title=$"Спецификация · выдача № {issueId}";
             var body=editor.Content as UIElement??throw new InvalidOperationException("Нет содержимого документа.");

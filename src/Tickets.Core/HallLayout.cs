@@ -7,6 +7,8 @@ public sealed class HallRowLayout
     public string Label {get;set;}="1";
     public int SeatCount {get;set;}=20;
     public int AisleAfter {get;set;}
+    /// <summary>Extra vertical space after this row, persisted in generated seat coordinates.</summary>
+    public double RowGapAfter {get;set;}
     public string FirstSeat {get;set;}="";
 }
 
@@ -61,8 +63,8 @@ public static class HallLayout
         if(sector.Length==0)throw new TicketException("Введите название сектора.");
         if(rows.Count is <1 or >200)throw new TicketException("Количество рядов: от 1 до 200.");
         if(!double.IsFinite(y))throw new TicketException("Некорректная координата ряда.");
-        if(rows.Any(r=>string.IsNullOrWhiteSpace(r.Label)||r.SeatCount is <1 or >300||r.AisleAfter<0||r.AisleAfter>r.SeatCount))
-            throw new TicketException("Укажите подпись каждого ряда, от 1 до 300 мест и проход от 0 до количества мест.");
+        if(rows.Any(r=>string.IsNullOrWhiteSpace(r.Label)||r.SeatCount is <1 or >300||r.AisleAfter<0||r.AisleAfter>r.SeatCount||!double.IsFinite(r.RowGapAfter)||r.RowGapAfter<0||r.RowGapAfter>1000))
+            throw new TicketException("Укажите подпись каждого ряда, от 1 до 300 мест и проход от 0 до количества мест; промежуток после ряда — от 0 до 1000.");
         if(rows.Select(r=>r.Label.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=rows.Count)
             throw new TicketException("Подписи рядов в секторе должны различаться.");
         if(rows.Sum(r=>r.SeatCount)>50000)throw new TicketException("Максимум 50 000 мест в одном зале.");
@@ -74,7 +76,8 @@ public static class HallLayout
             var labels=Enumerable.Range(0,row.SeatCount).Select(i=>Label(start,i)).ToArray();
             if(labels.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=labels.Length)throw new TicketException($"В ряду {row.Label} повторяются подписи мест.");
             for(var c=0;c<row.SeatCount;c++)result.Add(new DraftSeat{Sector=sector,Row=row.Label.Trim(),
-                Number=labels[reverse?row.SeatCount-1-c:c],X=c*20+(row.AisleAfter>0&&c>=row.AisleAfter?36:0),Y=y+r*22});
+                Number=labels[reverse?row.SeatCount-1-c:c],X=c*20+(row.AisleAfter>0&&c>=row.AisleAfter?36:0),Y=y});
+            y+=22+row.RowGapAfter;
         }
         return result;
     }

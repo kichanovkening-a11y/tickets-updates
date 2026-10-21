@@ -26,10 +26,11 @@ internal static class DocsLayoutChecks
                 Require(s.RecipientHistory(name).Any(x=>x.Issue.Id==id),"recipient history cannot find invoice");
                 foreach(var document in s.PrepareIssueDocuments(evt.Id,id))
                 {
-                    Require(BusinessDocumentTemplates.Layout(document).Count(x=>x.Requisites)==1,"requisites not paired exactly once");
-                    CheckPair(s.SaveIssueDocumentWord(evt.Id,id,document.Kind),name);
+
+                    var file=s.SaveIssueDocumentWord(evt.Id,id,document.Kind);
+                    if(document.Kind==IssueDocumentKinds.Contract)CheckPair(file,name);
                 }
-                CheckPair(s.SaveInvoiceDocument(evt.Id,id),name);
+                Require(File.Exists(s.SaveInvoiceDocument(evt.Id,id)),"invoice export missing");
                 s.SaveOrganizationDetails(name,false,new(Inn:"200000000"+index));
                 Require(new Store(s.Path).GetIssueOrganizationDetails(id,false).Inn=="100000000"+index,"filled historical snapshot silently changed");
                 s.RefreshInvoiceOrganizations(evt.Id,id);

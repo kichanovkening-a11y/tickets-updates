@@ -47,6 +47,7 @@ internal static class PackageDocumentsChecks
                 using var zip=ZipFile.OpenRead(path);using var stream=zip.GetEntry("word/document.xml")!.Open();var xml=XDocument.Load(stream);XNamespace w="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
                 var paragraphs=xml.Descendants(w+"p").ToArray();string Text(XElement p)=>string.Concat(p.Descendants(w+"t").Select(x=>x.Value));
                 Require(paragraphs.Any(p=>Text(p).Contains("PRIVATE & <recipient>")),"recipient escaping failed");
+                if(path.Contains("Договор-",StringComparison.Ordinal)){Require(paragraphs.Any(p=>Text(p).Contains(DocumentTotals.Amount(invoice.Total))),"contract amount missing");continue;}
                 var summary=paragraphs.Single(p=>Text(p)==DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total));Require(!summary.Descendants(w+"b").Any(),"summary must be normal");
                 var total=paragraphs.Single(p=>Text(p)==DocumentTotals.Total(invoice.Tickets.Count,invoice.Total));Require(total.Descendants(w+"b").Any(),"total must be bold");
             }

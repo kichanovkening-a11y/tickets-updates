@@ -12,6 +12,9 @@ namespace Tickets.App;
 internal sealed class TicketBlankWindow:EditorWindow
 {
     private TicketBlank blank=new();
+    private readonly List<UIElement> calibrationControls=[];
+    private readonly TextBlock legacyNotice=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,8)};
+    private UIElement? copyAction;
     private readonly ComboBox templates=new(){DisplayMemberPath="Name",MinWidth=180};
     private readonly TextBox name=new(),width=new(),height=new();
     private readonly CheckBox printScan=new(){Content="Печатать скан вместе с текстом",Margin=new Thickness(0,8,0,8)};
@@ -27,7 +30,19 @@ internal sealed class TicketBlankWindow:EditorWindow
         templates.SelectionChanged+=(_,_)=>{if(templates.SelectedItem is TicketBlank selected)Load(selected);};
         var actions=new WrapPanel();form.Children.Add(actions);
         Button(actions,"Новый",()=>Load(new TicketBlank()));Button(actions,"Копия",()=>Try(()=>{Read();blank.Id=Guid.NewGuid().ToString("N");blank.Name+=" — копия";Load(blank);}));
-        Button(actions,"Удалить",()=>Try(()=>{if(templates.SelectedItem is TicketBlank selected&&MessageBox.Show(DialogOwner,"Удалить бланк «"+selected.Name+"»?","Бланки",MessageBoxButton.YesNo)==MessageBoxResult.Yes){Store.DeleteTicketBlank(selected.Id);Refresh();Load(new());}}));
+        var templateMenu=new ContextMenu();var deleteTemplate=new MenuItem{Header="Удалить"};templateMenu.Items.Add(deleteTemplate);templates.ContextMenu=templateMenu;
+        var templateItemStyle=new Style(typeof(ComboBoxItem));
+        templateItemStyle.Setters.Add(new Setter(FrameworkElement.ContextMenuProperty,templateMenu));
+        templateItemStyle.Setters.Add(new EventSetter(UIElement.PreviewMouseRightButtonDownEvent,new System.Windows.Input.MouseButtonEventHandler((sender,_)=>{if(sender is ComboBoxItem item)templates.SelectedItem=item.Content;})));
+        templates.ItemContainerStyle=templateItemStyle;
+        templateMenu.Opened+=(_,_)=>deleteTemplate.IsEnabled=templates.SelectedItem is TicketBlank;
+        deleteTemplate.Click+=(_,_)=>Try(()=>
+        {
+            if(templates.SelectedItem is not TicketBlank selected)return;
+            if(MessageBox.Show(DialogOwner,"Удалить бланк «"+selected.Name+"»?","Удаление бланка",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+            Store.DeleteTicketBlank(selected.Id);Refresh();Load(new());
+        });
+        copyAction=actions.Children[1];form.Children.Add(legacyNotice);var settingsStart=form.Children.Count;
         form.Children.Add(new TextBlock{Text="Название"});form.Children.Add(name);
         var dimensions=new WrapPanel();form.Children.Add(dimensions);
         dimensions.Children.Add(new TextBlock{Text="Лист, мм: ширина ",VerticalAlignment=VerticalAlignment.Center});width.Width=75;dimensions.Children.Add(width);dimensions.Children.Add(new TextBlock{Text=" высота ",VerticalAlignment=VerticalAlignment.Center});height.Width=75;dimensions.Children.Add(height);
@@ -43,6 +58,7 @@ internal sealed class TicketBlankWindow:EditorWindow
         foreach(var pair in new[]{("X","X"),("Y","Y"),("Шир.","Width"),("Выс.","Height"),("Шрифт","FontSize")})Column(fields,pair.Item1,pair.Item2);form.Children.Add(fields);
         form.Children.Add(new TextBlock{Text="Координаты полей отсчитываются от края каждого билета. Текст, не помещающийся в поле, уменьшается.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,0)});
         Button(form,"Обновить предпросмотр",()=>Try(()=>{Read();Render();}));Button(form,"Сохранить бланк",()=>Try(()=>{Read();Store.SaveTicketBlank(blank);Refresh(blank.Id);MessageBox.Show(DialogOwner,"Бланк сохранён и доступен при печати.","Бланки печати");}));
+        calibrationControls.AddRange(form.Children.Cast<UIElement>().Skip(settingsStart));
         var preview=new StackPanel();Grid.SetColumn(preview,1);root.Children.Add(new ScrollViewer{Content=preview,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto});preview.Children.Add(new TextBlock{Text="Пример размещения. Скан виден для настройки даже без печати фона.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});preview.Children.Add(paper);
         Refresh();Load(templates.SelectedItem as TicketBlank??new());
     }
@@ -50,17 +66,27 @@ internal sealed class TicketBlankWindow:EditorWindow
     private void Commit(){fields.CommitEdit(DataGridEditingUnit.Cell,true);fields.CommitEdit(DataGridEditingUnit.Row,true);positions.CommitEdit(DataGridEditingUnit.Cell,true);positions.CommitEdit(DataGridEditingUnit.Row,true);}
     private void Read()
     {
+        if(blank.Legacy is not null)throw new TicketException("Исходный макет доступен для просмотра и печати. Новый редактор макетов пока не включён.");
         Commit();if(HasErrors(fields)||HasErrors(positions))throw new TicketException("Исправьте числовые значения в таблице.");
         static double Parse(string value){if(!double.TryParse(value.Replace(',','.'),NumberStyles.Float,CultureInfo.InvariantCulture,out var result))throw new TicketException("Размер листа должен быть числом в мм.");return result;}
         blank.Name=name.Text.Trim();blank.PageWidth=Parse(width.Text);blank.PageHeight=Parse(height.Text);blank.PrintBackground=printScan.IsChecked==true;blank.Validate();
     }
     private static bool HasErrors(DependencyObject item){if(Validation.GetHasError(item))return true;for(var i=0;i<VisualTreeHelper.GetChildrenCount(item);i++)if(HasErrors(VisualTreeHelper.GetChild(item,i)))return true;return false;}
     private void Refresh(string? id=null){templates.ItemsSource=Store.TicketBlanks();templates.SelectedItem=templates.Items.Cast<TicketBlank>().FirstOrDefault(b=>b.Id==id);}
-    private void Load(TicketBlank selected){blank=selected;name.Text=blank.Name;width.Text=blank.PageWidth.ToString(CultureInfo.InvariantCulture);height.Text=blank.PageHeight.ToString(CultureInfo.InvariantCulture);printScan.IsChecked=blank.PrintBackground;scan.Text=blank.ScanPath.Length==0?"Скан не выбран":"Скан загружен. Растягивается на весь лист.";positions.ItemsSource=blank.Positions;fields.ItemsSource=blank.Fields;Render();}
+    private void Load(TicketBlank selected){blank=selected;foreach(var control in calibrationControls)control.IsEnabled=blank.Legacy is null;if(copyAction is not null)copyAction.IsEnabled=blank.Legacy is null;legacyNotice.Text=blank.Legacy is {} legacy?$"Исходный макет: {legacy.SourceFile}. Координаты, шрифты, повороты и секции восстановлены из старой программы. Доступны просмотр, печать и удаление; изменение макета будет в новом редакторе. При печати используется выбранная бумага без масштабирования.":"";name.Text=blank.Name;width.Text=blank.PageWidth.ToString(CultureInfo.InvariantCulture);height.Text=blank.PageHeight.ToString(CultureInfo.InvariantCulture);printScan.IsChecked=blank.PrintBackground;scan.Text=blank.ScanPath.Length==0?"Скан не выбран":"Скан загружен. Растягивается на весь лист.";positions.ItemsSource=blank.Positions;fields.ItemsSource=blank.Fields;Render();}
     private void Render()
     {
-        paper.Children.Clear();const double scale=2;paper.Width=Math.Clamp(blank.PageWidth,20,1200)*scale;paper.Height=Math.Clamp(blank.PageHeight,20,1200)*scale;
+        paper.Children.Clear();const double scale=2;paper.Width=Math.Clamp(blank.PageWidth,20,2000)*scale;paper.Height=Math.Clamp(blank.PageHeight,20,2000)*scale;
         if(blank.ScanPath.Length>0){var bitmap=new BitmapImage(new Uri(Store.TicketBlankScanPath(blank.ScanPath)));paper.Children.Add(new Image{Source=bitmap,Width=paper.Width,Height=paper.Height,Stretch=Stretch.Fill,Opacity=.6});}
+        if(blank.Legacy is {} legacy)
+        {
+            foreach(var placement in LegacyTicketTemplates.Paginate(legacy,1)[0].Elements)
+            {
+                var field=placement.Element;var text=field.Binding.Length==0?field.Text:TicketPrintWindow.LegacySample(field.Binding);
+                var visual=TicketPrintWindow.LegacyElementVisual(field,text,scale);Canvas.SetLeft(visual,placement.X*scale);Canvas.SetTop(visual,placement.Y*scale);paper.Children.Add(visual);
+            }
+            return;
+        }
         foreach(var p in blank.Positions)
         {
             var box=new Border{Width=p.Width*scale,Height=p.Height*scale,BorderBrush=Brushes.SteelBlue,BorderThickness=new Thickness(1),IsHitTestVisible=false};Canvas.SetLeft(box,p.X*scale);Canvas.SetTop(box,p.Y*scale);paper.Children.Add(box);

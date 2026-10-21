@@ -66,7 +66,7 @@ public sealed partial class Store
     {
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         foreach(var kind in IssueDocumentKinds.All)
-        foreach(var previous in new[]{BusinessDocumentTemplates.LegacyDefault(kind),BusinessDocumentTemplates.PreviousDefault(kind)})
+        foreach(var previous in new[]{BusinessDocumentTemplates.LegacyDefault(kind),BusinessDocumentTemplates.PreviousDefault(kind),BusinessDocumentTemplates.Version011Default(kind)})
         foreach(var table in new[]{"document_template","issue_document"})
         {using var cmd=Command(c,$"UPDATE {table} SET template=$new WHERE kind=$k AND replace(replace(template,char(13)||char(10),char(10)),char(13),char(10))=$old","$new",IssueDocumentKinds.DefaultTemplate(kind),"$k",kind,"$old",previous.Replace("\r\n","\n").Replace('\r','\n'));cmd.Transaction=tx;cmd.ExecuteNonQuery();}
         tx.Commit();
@@ -86,9 +86,10 @@ public sealed partial class Store
             ["recipientDetails"]=BusinessDocumentTemplates.Requisites(invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)),
             ["senderPosition"]=BusinessDocumentTemplates.Missing(invoice.SenderDetails?.Position??""),["senderSignatory"]=BusinessDocumentTemplates.Missing(invoice.SenderDetails?.Signatory??""),
             ["recipientPosition"]=BusinessDocumentTemplates.Missing(invoice.RecipientDetails?.Position??""),["recipientSignatory"]=BusinessDocumentTemplates.Missing(invoice.RecipientDetails?.Signatory??"")};
+        foreach(var value in SourceBusinessForms.Values(invoice))values[value.Key]=value.Value;
         var body=System.Text.RegularExpressions.Regex.Replace(template,@"\{\{?(\w+)\}\}?",match=>values.TryGetValue(match.Groups[1].Value,out var value)?value:match.Value);
-        if(!template.Contains("{summary}",StringComparison.OrdinalIgnoreCase)&&!template.Contains("{{summary}}",StringComparison.OrdinalIgnoreCase))body+="\n\n"+DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total);
-        if(!template.Contains("{total}",StringComparison.OrdinalIgnoreCase)&&!template.Contains("{{total}}",StringComparison.OrdinalIgnoreCase))body+="\n"+DocumentTotals.Total(invoice.Tickets.Count,invoice.Total);
+        if(!SourceBusinessForms.CanUseSource(kind,template)&&!template.Contains("{summary}",StringComparison.OrdinalIgnoreCase)&&!template.Contains("{{summary}}",StringComparison.OrdinalIgnoreCase))body+="\n\n"+DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total);
+        if(!SourceBusinessForms.CanUseSource(kind,template)&&!template.Contains("{total}",StringComparison.OrdinalIgnoreCase)&&!template.Contains("{{total}}",StringComparison.OrdinalIgnoreCase))body+="\n"+DocumentTotals.Total(invoice.Tickets.Count,invoice.Total);
         return new(kind,invoice,template,body);
     }
     public IReadOnlyList<IssueDocumentInfo> PrepareIssueDocuments(long eventId,long issueId)
@@ -113,11 +114,20 @@ public sealed partial class Store
         var info=GetIssueDocument(eventId,issueId,kind);var directory=System.IO.Path.Combine(DocumentsDirectory,IssueDocumentKinds.Name(kind));Directory.CreateDirectory(directory);
         var file=System.IO.Path.Combine(directory,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx");InvoiceDocuments.SaveIssueDocumentWord(info,file);return file;
     }
+    public string SaveIssueSpecificationDocument(long eventId,long issueId)
+    {
+        var directory=System.IO.Path.Combine(DocumentsDirectory,"Спецификации");Directory.CreateDirectory(directory);
+        var file=System.IO.Path.Combine(directory,$"Спецификация-выдача-{issueId}.docx");InvoiceDocuments.SaveIssueSpecificationWord(Invoice(eventId,issueId),file);return file;
+    }
+    public string InvoiceDocumentPath(long issueId)=>System.IO.Path.Combine(DocumentsDirectory,"Накладные",$"Накладная-{issueId}.docx");
+    public string IssueDocumentPath(long issueId,string kind)=>System.IO.Path.Combine(DocumentsDirectory,IssueDocumentKinds.Name(kind),$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx");
+    public string IssueSpecificationDocumentPath(long issueId)=>System.IO.Path.Combine(DocumentsDirectory,"Спецификации",$"Спецификация-выдача-{issueId}.docx");
     public IReadOnlyList<string> SaveAllDocuments(long eventId,long issueId)
     {
         PrepareIssueDocuments(eventId,issueId);var paths=new List<string>();var failures=new List<Exception>();
         try{paths.Add(SaveInvoiceDocument(eventId,issueId));}catch(Exception ex){failures.Add(ex);}
         foreach(var kind in IssueDocumentKinds.All)try{paths.Add(SaveIssueDocumentWord(eventId,issueId,kind));}catch(Exception ex){failures.Add(ex);}
+        try{paths.Add(SaveIssueSpecificationDocument(eventId,issueId));}catch(Exception ex){failures.Add(ex);}
         if(failures.Count>0)throw new TicketException("Выдача сохранена. Не удалось сохранить часть файлов Word: "+string.Join("; ",failures.Select(ex=>ex.Message)));return paths;
     }
 }

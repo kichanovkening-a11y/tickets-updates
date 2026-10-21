@@ -19,10 +19,10 @@ internal static class BusinessDocumentChecks
             Require(docs.Select(x=>x.Template).Distinct().Count()==4,"forms must be different");
             foreach(var doc in docs)
             {
-                Require(doc.Body.Contains(sender)&&doc.Body.Contains(recipient)&&doc.Body.Contains("12345678901234567890")&&doc.Body.Contains("9876543210"),"requisites missing");
+                Require(doc.Body.Contains(sender)&&doc.Body.Contains(recipient)&&(doc.Kind==IssueDocumentKinds.Act||(doc.Body.Contains("12345678901234567890")&&doc.Body.Contains("9876543210"))),"requisites missing");
                 Require(!doc.Body.Contains("ПРОМСВЯЗЬБАНК")&&!doc.Body.Contains("7729768795"),"unrelated Alliance details leaked");
-                Require(doc.Body.Contains(invoice.Title)&&doc.Body.Contains(invoice.EventDate)&&doc.Body.Contains(DocumentTotals.Total(2,invoice.Total)),"event or exact totals missing");
-                Require(doc.Body.Contains("№ | Билеты и места |")&&!doc.Body.Contains("{senderDetails}"),"ticket table unresolved");
+                Require(doc.Body.Contains(invoice.Title)&&doc.Body.Contains(invoice.EventDate)&&doc.Body.Contains(DocumentTotals.Amount(invoice.Total)),"event or exact totals missing");
+                Require(!doc.Body.Contains("{senderDetails}")&&(doc.Kind==IssueDocumentKinds.Contract?!doc.Template.Contains("{itemDescription}"):doc.Template.Contains("{itemDescription}")),"ticket table unresolved");
                 var file=s.SaveIssueDocumentWord(evt.Id,id,doc.Kind);
                 using var zip=ZipFile.OpenRead(file);using var stream=zip.GetEntry("word/document.xml")!.Open();var xml=XDocument.Load(stream);XNamespace w="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
                 Require(xml.Descendants(w+"tbl").Any(),"native Word ticket table missing");

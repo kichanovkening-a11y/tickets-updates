@@ -131,7 +131,7 @@ internal sealed class TicketPrintWindow:EditorWindow
             mediaWidth=capabilities.OrientedPageMediaWidth??mediaWidth;
             mediaHeight=capabilities.OrientedPageMediaHeight??mediaHeight;
         }
-        if(!double.IsFinite(printableWidth)||!double.IsFinite(printableHeight)||!double.IsFinite(mediaWidth)||!double.IsFinite(mediaHeight)||width>mediaWidth+0.5||height>mediaHeight+0.5)
+        if(!double.IsFinite(printableWidth)||!double.IsFinite(printableHeight)||!double.IsFinite(mediaWidth)||!double.IsFinite(mediaHeight)||(blank.Legacy is null&&(width>mediaWidth+0.5||height>mediaHeight+0.5)))
             throw new TicketException($"Бланк «{blank.Name}» ({blank.PageWidth} × {blank.PageHeight} мм) не помещается на бумагу принтера ({mediaWidth/DipsPerMm:0.#} × {mediaHeight/DipsPerMm:0.#} мм). Выберите подходящую бумагу и ориентацию в настройках принтера.");
         if(printer is not null)
             foreach(var position in blank.Positions)foreach(var field in blank.Fields.Where(f=>f.Enabled))
@@ -140,6 +140,7 @@ internal sealed class TicketPrintWindow:EditorWindow
                 if(x<originX-0.5||y<originY-0.5||x+Mm(field.Width)>originX+printableWidth+0.5||y+Mm(field.Height)>originY+printableHeight+0.5)
                     throw new TicketException($"Поле «{field.DisplayName}» выходит за печатную область принтера. Переместите поле или позицию билета внутрь листа в разделе «Бланки печати». Непечатаемые поля слева и сверху: {originX/DipsPerMm:0.#} и {originY/DipsPerMm:0.#} мм.");
             }
+        if(blank.Legacy is not null)return BuildLegacyDocument(invoice,blank,headers,printer is null?width:mediaWidth,printer is null?height:mediaHeight,printer is null?null:new Rect(originX,originY,printableWidth,printableHeight));
         BitmapImage? background=null;
         if(blank.PrintBackground){var path=Store.TicketBlankScanPath(blank.ScanPath);if(!System.IO.File.Exists(path))throw new TicketException("Скан бланка не найден. Загрузите его заново в разделе «Бланки печати». ");background=new BitmapImage(new Uri(path));}
         var document=new FixedDocument();
@@ -159,6 +160,52 @@ internal sealed class TicketPrintWindow:EditorWindow
                     var fit=new Viewbox{Child=label,Width=Mm(field.Width),Height=Mm(field.Height),Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left};
                     FixedPage.SetLeft(fit,Mm(position.X+field.X));FixedPage.SetTop(fit,Mm(position.Y+field.Y));page.Children.Add(fit);
                 }
+            }
+            document.Pages.Add(new PageContent{Child=page});
+        }
+        return document;
+    }
+    internal static string LegacySample(string binding)
+    {
+        var ticket=new TicketInfo(1,1,"Партер","5","12","Получатель","АБ",1,1500,"2026-10-21T12:00:00Z",null);
+        var invoice=new InvoiceInfo(1,1,"Название мероприятия","Название площадки","21.10.2026 19:00","Получатель","2026-10-21T12:00:00Z",[ticket]);
+        return LegacyTicketTemplates.Value(binding,invoice,ticket,"Адрес площадки",new DateTime(2026,10,21),1);
+    }
+    internal static FrameworkElement LegacyElementVisual(LegacyTicketElement field,string text,double scale)
+    {
+        var rotated=field.Rotation is 90 or 270;
+        var label=new TextBlock
+        {
+            Text=text,Width=(rotated?field.Height:field.Width)*scale,Height=(rotated?field.Width:field.Height)*scale,
+            FontFamily=new FontFamily(field.FontFamily),FontSize=field.FontSize*96/72*scale/DipsPerMm,
+            FontWeight=field.Bold?FontWeights.Bold:FontWeights.Normal,FontStyle=field.Italic?FontStyles.Italic:FontStyles.Normal,
+            Foreground=new SolidColorBrush(Color.FromArgb((byte)(field.Argb>>24),(byte)(field.Argb>>16),(byte)(field.Argb>>8),(byte)field.Argb)),
+            TextWrapping=TextWrapping.Wrap,TextAlignment=field.Alignment switch {"CenterAlign"=>TextAlignment.Center,"RightAlign"=>TextAlignment.Right,"JustifiedAlign"=>TextAlignment.Justify,_=>TextAlignment.Left},
+            HorizontalAlignment=HorizontalAlignment.Left,VerticalAlignment=VerticalAlignment.Top
+        };
+                label.TextDecorations=new TextDecorationCollection();
+        if(field.Underline)foreach(var decoration in TextDecorations.Underline)label.TextDecorations.Add(decoration);
+        if(field.Strikeout)foreach(var decoration in TextDecorations.Strikethrough)label.TextDecorations.Add(decoration);
+        if(field.Rotation!=0)label.LayoutTransform=new RotateTransform(-field.Rotation);
+        return new Border{Width=field.Width*scale,Height=field.Height*scale,ClipToBounds=true,Child=label};
+    }
+    private FixedDocument BuildLegacyDocument(InvoiceInfo invoice,TicketBlank blank,IReadOnlyDictionary<long,InvoiceInfo> headers,double mediaWidth,double mediaHeight,Rect? printableArea)
+    {
+        var document=new FixedDocument();var address=Store.TicketVenueAddress(eventId);var printed=DateTime.Now;
+        var originalLayout=blank.Legacy!;
+        var layout=originalLayout with{ContentWidth=mediaWidth/DipsPerMm-originalLayout.LeftMargin-originalLayout.RightMargin,ContentHeight=mediaHeight/DipsPerMm-originalLayout.TopMargin-originalLayout.BottomMargin};
+        foreach(var layoutPage in LegacyTicketTemplates.Paginate(layout,invoice.Tickets.Count))
+        {
+            var page=new FixedPage{Width=mediaWidth,Height=mediaHeight,Background=Brushes.White};
+            foreach(var placement in layoutPage.Elements)
+            {
+                var field=placement.Element;var ticket=invoice.Tickets[placement.TicketIndex];var source=headers.TryGetValue(ticket.Id,out var original)?original:invoice;
+                var text=field.Binding.Length==0?field.Text:LegacyTicketTemplates.Value(field.Binding,source,ticket,address,printed,placement.PageNumber);
+                if(text.Length==0)continue;
+                var box=new Rect(Mm(placement.X),Mm(placement.Y),Mm(field.Width),Mm(field.Height));
+                if(printableArea is {} area&&(box.Left<area.Left-.5||box.Top<area.Top-.5||box.Right>area.Right+.5||box.Bottom>area.Bottom+.5))
+                    throw new TicketException($"Поле «{field.Name}» исходного бланка выходит за печатную область принтера. Выберите бумагу и принтер с подходящими полями. Исходные координаты не сдвигаются.");
+                var visual=LegacyElementVisual(field,text,DipsPerMm);FixedPage.SetLeft(visual,box.Left);FixedPage.SetTop(visual,box.Top);page.Children.Add(visual);
             }
             document.Pages.Add(new PageContent{Child=page});
         }

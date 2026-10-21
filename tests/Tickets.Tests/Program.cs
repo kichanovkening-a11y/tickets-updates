@@ -36,6 +36,10 @@ void Reject(Action action)
     throw new Exception("seed has no event with 3 priced seats");
 }
 SeatSelectionChecks.Register(Test);
+Hall012Checks.Register(Test);
+Pricing012Checks.Register(Test);
+OrgMerge012Checks.Register(Test);
+Legacy012Checks.Register(Test);
 RecipientCreationChecks.Register(Test);
 ArchivePricingChecks.Register(Test);
 SaleStateChecks.Register(Test);
@@ -243,7 +247,7 @@ Test("Word invoice contains exact issuance tickets totals and escaped text",s=>{
     Check(invoice.Tickets.All(t=>!text.Contains(t.Code)&&text.Contains(t.Sector)&&text.Contains(t.Row)&&text.Contains(t.Seat)));
     File.Copy(file,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-sample.docx"),true);
     var many=invoice with{Tickets=Enumerable.Range(1,85).Select(n=>invoice.Tickets[0] with{Number=n,Row=n.ToString(),Seat="1"}).ToList()};
-    InvoiceDocuments.SaveWord(many,System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-invoice-many.docx"));
+    InvoiceDocuments.SaveWord(many,System.IO.Path.Combine(System.IO.Path.GetDirectoryName(s.Path)!,"tickets-invoice-many.docx"));
 });
 Test("same venue and instant cannot be booked twice",s=>{
     var venue=s.CreateHall("Schedule venue","",new[]{new DraftSeat{Row="1",Number="1"}});var seat=s.VenueSeats(venue)[0];
@@ -289,7 +293,7 @@ Test("one persistent specification per normalized organization",s=>{
 Test("group invoice places by row price and return state without serial",s=>{
     var tickets=Enumerable.Range(1,5).Select(n=>new TicketInfo(n,n,"Партер","9",n.ToString(),"Получатель","SECRET",n,n==5?200:100,"2030-01-01T12:00:00Z",n==4?"2030-01-02T12:00:00Z":null)).ToList();
     var invoice=new InvoiceInfo(1,1,"Спектакль","Зал","01.01.2030","Получатель","2030-01-01T12:00:00Z",tickets);
-    var lines=InvoiceDocuments.Lines(invoice);Check(lines.Count==3);Check(lines.Any(l=>l.Seats=="1, 2, 3"&&l.Count==3&&l.Total==300));
+    var lines=InvoiceDocuments.Lines(invoice);Check(lines.Count==2);Check(lines.Any(l=>l.Seats=="1, 2, 3, 4"&&l.Count==4&&l.Total==400));
     Check(invoice.Total==600);Check(RussianWords.Quantity(21)=="двадцать один билет");Check(RussianWords.Quantity(11)=="одиннадцать билетов");
     Check(RussianWords.Money(2001)=="две тысячи один рубль ноль копеек");Check(RussianWords.Number(0)=="ноль");
     Check(RussianWords.Money((decimal)long.MaxValue*50000).Length>10);
@@ -313,11 +317,12 @@ Test("plan copying matches labeled places across halls without changing source",
 Test("41-ticket complete document package uses recipient and exact totals",s=>{
     var e=s.Events().First(e=>s.Seats(e.Id).Count(x=>x.Available)>=41);var ids=s.Seats(e.Id).Where(x=>x.Available).Take(41).Select(x=>x.Id).ToArray();
     var issue=s.Issue(e.Id,ids,"ООО \"Пупкин\"","DOC41",1,ids.ToDictionary(id=>id,id=>1000L));
-    var docs=s.PrepareIssueDocuments(e.Id,issue);Check(docs.Count==4&&docs.All(d=>d.Body.Contains("ООО \"Пупкин\"")&&d.Body.Contains(DocumentTotals.Total(41,41000))));
+    var docs=s.PrepareIssueDocuments(e.Id,issue);Check(docs.Count==4&&docs.All(d=>d.Body.Contains("ООО \"Пупкин\"")&&d.Body.Contains(DocumentTotals.Amount(41000))&&d.Body.Contains(RussianWords.Money(41000))));
     var directory=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-docqa");Directory.CreateDirectory(directory);
     foreach(var file in s.SaveAllDocuments(e.Id,issue))File.Copy(file,System.IO.Path.Combine(directory,System.IO.Path.GetFileName(file)),true);
 });
 DocsLayoutChecks.Register(Test);
+Docs012Checks.Register(Test);
 TicketBlankChecks.Register(Test);
 Test("hall and pricing presentation refinements",s=>HallEditorRefinementChecks.Run());
 BusinessDocumentChecks.Register(Test);

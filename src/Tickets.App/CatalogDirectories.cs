@@ -41,7 +41,15 @@ internal sealed class PerformanceWindow : EditorWindow
                 var shows=events.Where(e=>CatalogText.Key(e.Title)==CatalogText.Key(performance.Title)).OrderBy(e=>e.SortDate).ToList();
                 void Add(ItemsControl parent,IEnumerable<Tickets.Core.EventInfo> items)
                 {
-                    foreach(var showing in items)parent.Items.Add(new TreeViewItem{Header=$"{showing.Date} · {showing.Venue}",Tag=showing});
+                    foreach(var showing in items)
+                    {
+                        var leaf=new TreeViewItem{Header=$"{showing.Date} · {showing.Venue}",Tag=showing};
+                        leaf.PreviewMouseLeftButtonDown+=(_,e)=>{
+                            if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),leaf))
+                            {e.Handled=true;SelectedEventId=showing.Id;Finish(true);}
+                        };
+                        parent.Items.Add(leaf);
+                    }
                 }
                 Add(node,shows.Where(e=>DateTime.Parse(e.SortDate)>=now));
                 var past=shows.Where(e=>DateTime.Parse(e.SortDate)<now).Reverse().ToList();

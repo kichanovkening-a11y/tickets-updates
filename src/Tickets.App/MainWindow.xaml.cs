@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();ReadWindowSettings();
+        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();
         PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
         var appVersion=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
@@ -142,8 +142,8 @@ public partial class MainWindow : Window
         if(current is null) return;
         currentArchived=store.IsEventArchived(current.Id);
         var seats=store.Seats(current.Id);
-        EventTitle.Text=current.Title;
-        EventSubtitle.Text=$"{current.Date} · {current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
+        EventTitle.Text=current.Title;EventDate.Text=current.Date;
+        EventSubtitle.Text=$"{current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
         PriceBox.Clear();
         if(fit){recipientUpdating=true;try{RecipientBox.SelectedItem=null;RecipientBox.Text="";}finally{recipientUpdating=false;}}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
@@ -253,7 +253,8 @@ public partial class MainWindow : Window
             if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Укажите первый номер билета.");
             PersistSelectedSender();window=new TicketPrintWindow(store,current.Id,ids,RecipientBox.Text,SeriesBox.Text,first);
         }
-        window.ShowDialog();LoadEvent(false);
+        window.ShowDialog();
+        if(window.Printed||window.IssueId>0){LoadEvent(false);if(!window.Printed)Hall.SetSelection(ids);}
         if(window.IssueId>0){try{store.SaveAllDocuments(current.Id,window.IssueId);}catch(Exception ex){StatusText.Text="Выдача сохранена. Не удалось обновить документы: "+ex.Message;}}
     });
     private void ReadEventCatalog()
@@ -292,7 +293,8 @@ public partial class MainWindow : Window
     private void OpenInvoice(long issueId,bool print=false)
     {
         if(current is null)return;
-        new InvoiceWindow(store,current.Id,issueId,print){Owner=this}.ShowDialog();LoadEvent(false);
+        issueId=store.ResolveInvoiceId(issueId);
+        var selectedIds=Hall.Selected.ToArray();new InvoiceWindow(store,current.Id,issueId,print){Owner=this}.ShowDialog();LoadEvent(false);Hall.SetSelection(selectedIds);
     }
     private void ReturnTickets(long[] ids)
     {

@@ -4,10 +4,12 @@ using Microsoft.Data.Sqlite;
 
 namespace Tickets.Core;
 
-public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="",string Okpo="",string Okved="",string Okato="")
+public sealed record OrganizationExtraField(string Label,string Value);
+
+public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="",string Okpo="",string Okved="",string Okato="",IReadOnlyList<OrganizationExtraField>? ExtraFields=null)
 {
-    public bool HasRequisites=>new[]{Inn,Kpp,Ogrn,Address,Bank,Account,CorrespondentAccount,Bik,Signatory,Position,Phone,Okpo,Okved,Okato}.Any(value=>!string.IsNullOrWhiteSpace(value));
-    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Телефон",Phone)}.Where(x=>x.Length>0));
+    public bool HasRequisites=>new[]{Inn,Kpp,Ogrn,Address,Bank,Account,CorrespondentAccount,Bik,Signatory,Position,Phone,Okpo,Okved,Okato}.Any(value=>!string.IsNullOrWhiteSpace(value))||(ExtraFields?.Any(field=>!string.IsNullOrWhiteSpace(field.Label)&&!string.IsNullOrWhiteSpace(field.Value))??false);
+    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Телефон",Phone)}.Concat((ExtraFields??[]).Where(field=>!string.IsNullOrWhiteSpace(field.Label)).Select(field=>Line(field.Label,field.Value))).Where(x=>x.Length>0));
     private static string Line(string label,string value)=>string.IsNullOrWhiteSpace(value)?"":label+": "+value;
 }
 
@@ -99,8 +101,20 @@ public sealed partial class Store
     {
         ArgumentNullException.ThrowIfNull(details);
         // Validate before creating the directory entry so a rejected edit has no side effects.
-        string Clean(string value){value=value.Trim();if(value.Length>2000||value.Any(char.IsControl))throw new TicketException("Реквизиты должны занимать одну строку (до 2000 символов).");return value;}
-        details=new(Name:name,Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone),Okpo:Clean(details.Okpo),Okved:Clean(details.Okved),Okato:Clean(details.Okato));
+        string Clean(string value){value=(value??"").Trim();if(value.Length>2000||value.Any(char.IsControl))throw new TicketException("Реквизиты должны занимать одну строку (до 2000 символов).");return value;}
+        var extras=new List<OrganizationExtraField>();var labels=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach(var field in details.ExtraFields??[])
+        {
+            if(field is null)throw new TicketException("Дополнительный реквизит не заполнен.");
+            var label=Clean(field.Label);var value=Clean(field.Value);
+            if(label.Length==0&&value.Length==0)continue;
+            if(label.Length==0)throw new TicketException("Укажите название дополнительного реквизита.");
+            if(label.Length>120)throw new TicketException("Название дополнительного реквизита — до 120 символов.");
+            if(!labels.Add(CatalogText.Key(label)))throw new TicketException("Названия дополнительных реквизитов не должны повторяться.");
+            extras.Add(new(label,value));
+        }
+        if(extras.Count>100)throw new TicketException("Добавьте не более 100 дополнительных реквизитов.");
+        details=new(Name:name,Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone),Okpo:Clean(details.Okpo),Okved:Clean(details.Okved),Okato:Clean(details.Okato),ExtraFields:extras);
         name=sender?SaveSender(name):SaveRecipient(name);details=details with{Name=name};
         using var c=Open();EnsureOrganizationTable(c);
         using var cmd=Command(c,"INSERT INTO organization_details(role,name_key,details) VALUES($r,$k,$d) ON CONFLICT(role,name_key) DO UPDATE SET details=excluded.details","$r",sender?"sender":"recipient","$k",CatalogText.Key(name),"$d",JsonSerializer.Serialize(details));cmd.ExecuteNonQuery();

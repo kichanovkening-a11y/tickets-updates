@@ -50,7 +50,8 @@ public static class BusinessDocumentTemplates
     }
     private static bool IsPartyHeading(string line)=>line is "Продавец" or "Покупатель" or "Реквизиты исполнителя" or "Реквизиты заказчика" or "Поставщик и получатель платежа" or "Покупатель и плательщик" or "Грузоотправитель и поставщик" or "Грузополучатель и плательщик";
     public static string LegacyDefault(string kind)=>IssueDocumentKinds.Name(kind)+" № {issueId}\nДата: {date}\nОтправитель: {sender}\nПолучатель: {recipient}\nМероприятие: {event}\nДата мероприятия: {eventDate}\nПлощадка: {venue}\n\nПередача билетов по указанной выдаче.\n\n{summary}\n{total}\n\nПередал: ____________________    Получил: ____________________";
-    public static string Default(string kind)
+    public static string Default(string kind)=>SourceBusinessForms.DefaultText(kind);
+    public static string Version011Default(string kind)
     {
         var template=PreviousDefault(kind);
         return kind switch
@@ -197,10 +198,15 @@ public static class BusinessDocumentTemplates
         return string.Join("\n",rows);
     }
     private static string Cell(string value)=>value.Replace('|','/').Replace('\r',' ').Replace('\n',' ');
-    public static string Requisites(OrganizationDetails details)=>string.Join("\n",new[]{details.Name,
-        "ИНН: "+Missing(details.Inn)+"; КПП: "+Missing(details.Kpp)+"; ОГРН / ОГРНИП: "+Missing(details.Ogrn),
-        "Адрес: "+Missing(details.Address),"ОКПО: "+Missing(details.Okpo)+"; ОКВЭД: "+Missing(details.Okved)+"; ОКАТО: "+Missing(details.Okato),"Банк: "+Missing(details.Bank)+"; БИК: "+Missing(details.Bik),
-        "Расчётный счёт: "+Missing(details.Account),"Корр. счёт: "+Missing(details.CorrespondentAccount),
-        "Подписант: "+Missing(details.Signatory)+"; должность: "+Missing(details.Position),"Телефон: "+Missing(details.Phone)});
-    public static string Missing(string value)=>string.IsNullOrWhiteSpace(value)?"[не заполнено]":value;
+    public static string Requisites(OrganizationDetails details)
+    {
+        var lines=new List<string>();
+        void Add(string label,string value){if(!string.IsNullOrWhiteSpace(value))lines.Add(label+value.Trim());}
+        Add("",details.Name);Add("ОГРН / ОГРНИП: ",details.Ogrn);Add("ИНН: ",details.Inn);Add("КПП: ",details.Kpp);
+        Add("Адрес: ",details.Address);Add("ОКПО: ",details.Okpo);Add("ОКВЭД: ",details.Okved);Add("ОКАТО: ",details.Okato);
+        Add("Банк: ",details.Bank);Add("БИК: ",details.Bik);Add("Расчётный счёт: ",details.Account);Add("Корр. счёт: ",details.CorrespondentAccount);Add("Телефон: ",details.Phone);
+        foreach(var field in details.ExtraFields??[])if(!string.IsNullOrWhiteSpace(field.Label))Add(field.Label.Trim()+": ",field.Value);
+        return string.Join("\n",lines);
+    }
+    public static string Missing(string value)=>string.IsNullOrWhiteSpace(value)?"":value;
 }

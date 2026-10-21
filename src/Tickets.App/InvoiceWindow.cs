@@ -36,6 +36,7 @@ internal sealed class InvoiceWindow : EditorWindow
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRow(actionsScroll,1);root.Children.Add(actionsScroll);
         Square(actions,"Сохранить",()=>Try(()=>{PersistSender();Refresh();}),Brushes.SteelBlue);
         Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
+        Square(actions,"Открыть",()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.InvoiceDocumentPath(issueId),()=>Store.SaveInvoiceDocument(eventId,issueId))),Brushes.SlateGray);
         printTickets=Button(actions,"Печать билетов",()=>Try(()=>{
             PersistSender();var seats=Store.Invoice(eventId,issueId).Tickets.Where(t=>t.ReturnedAt is null).Select(t=>t.SeatId).ToArray();
             if(seats.Length==0)throw new TicketException("В накладной нет выданных билетов для печати.");
@@ -44,7 +45,7 @@ internal sealed class InvoiceWindow : EditorWindow
         extendInvoice=Button(actions,"Дополнить накладную",()=>Try(()=>{
             PersistSender();new InvoiceExtensionWindow(Store,eventId,issueId).ShowDialog();Refresh();
         }));extendInvoice.Width=112;extendInvoice.Height=112;
-        Grid.SetRow(reader,1);root.Children.Add(reader);Refresh();
+        Grid.SetRow(reader,1);root.Children.Add(reader);reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Document(Store.Invoice(eventId,issueId),reader.ActualWidth-20);};Refresh();
         Closing+=(_,e)=>{
             try{PersistSender();Refresh();}
             catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Отправитель",MessageBoxButton.OK,MessageBoxImage.Warning);}
@@ -57,7 +58,7 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private void Refresh()
     {
-        var invoice=Store.Invoice(eventId,issueId);reader.Document=Document(invoice);
+        var invoice=Store.Invoice(eventId,issueId);reader.Document=Document(invoice,reader.ActualWidth>100?reader.ActualWidth-20:794);
         printTickets.IsEnabled=invoice.Tickets.Any(t=>t.ReturnedAt is null);
         extendInvoice.IsEnabled=!Store.IsEventArchived(eventId)&&invoice.Tickets.Any(t=>t.ReturnedAt is null)&&!invoice.Tickets.Any(t=>t.ReturnedAt is null&&t.IsReserved);
         try{Store.SaveAllDocuments(eventId,issueId);savedStatus.Text="Документы сохранены: "+Store.DocumentsDirectory;}
@@ -74,19 +75,19 @@ internal sealed class InvoiceWindow : EditorWindow
     private void Print()
     {
         PersistSender();Refresh();var dialog=new PrintDialog();if(dialog.ShowDialog()!=true)return;
-        var document=Document(Store.Invoice(eventId,issueId));document.PageWidth=dialog.PrintableAreaWidth;document.PageHeight=dialog.PrintableAreaHeight;
+        var document=Document(Store.Invoice(eventId,issueId),dialog.PrintableAreaWidth);document.PageWidth=dialog.PrintableAreaWidth;document.PageHeight=dialog.PrintableAreaHeight;
         document.PagePadding=new Thickness(32);document.ColumnWidth=dialog.PrintableAreaWidth;
         dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator,$"Накладная № {issueId}");
     }
-    internal static FlowDocument Document(InvoiceInfo invoice)
+    internal static FlowDocument Document(InvoiceInfo invoice,double pageWidth=794)
     {
-        var doc=new FlowDocument{FontFamily=new FontFamily("Arial"),FontSize=13,PageWidth=794,PagePadding=new Thickness(25),ColumnWidth=744};
+        var doc=new FlowDocument{FontFamily=new FontFamily("Arial"),FontSize=13,PageWidth=pageWidth,PagePadding=new Thickness(25),ColumnWidth=Math.Max(100,pageWidth-50)};
         void Text(string text,bool bold=false,double size=13)=>doc.Blocks.Add(new Paragraph(new Run(text)){FontWeight=bold?FontWeights.Bold:FontWeights.Normal,FontSize=size,Margin=new Thickness(0,0,0,7)});
         Text($"НАКЛАДНАЯ № {invoice.Id}",true,22);Text("на передачу билетов");Text("Дата выдачи: "+invoice.Date);
         Text("Мероприятие: "+invoice.Title,true);Text("Дата и время: "+invoice.EventDate);Text("Площадка: "+invoice.Venue);Text("От кого: "+invoice.Sender);Text("Получатель: "+invoice.Recipient);
-        doc.Blocks.Add(IssueDocumentWindow.RequisitesTable(invoice,"Отправитель","Получатель"));
+
         var table=new Table{CellSpacing=0,BorderThickness=new Thickness(0.5),BorderBrush=Brushes.SlateGray};
-        foreach(var width in new[]{1.5,.6,2.5,.8,1.0,1.1,1.3})table.Columns.Add(new TableColumn{Width=new GridLength(width,GridUnitType.Star)});
+        foreach(var width in new[]{1.5,.6,2.5,.8,1.0,1.1})table.Columns.Add(new TableColumn{Width=new GridLength((pageWidth-50)*width/7.5)});
         var rows=new TableRowGroup();table.RowGroups.Add(rows);
         void Row(string[] cells,bool header)
         {
@@ -96,6 +97,6 @@ internal sealed class InvoiceWindow : EditorWindow
         Row(InvoiceDocuments.Headers,true);foreach(var row in InvoiceDocuments.Rows(invoice))Row(row,false);doc.Blocks.Add(table);
         Text(DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total));Text(DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),true);
         if(invoice.ActiveCount!=invoice.Tickets.Count)Text($"Возвращено: {invoice.Tickets.Count-invoice.ActiveCount}. Осталось на руках: {invoice.ActiveCount}, на сумму {InvoiceDocuments.Money(invoice.ActiveTotal)}.");
-        Text("\nПередал: ____________________    Получил: ____________________");return doc;
+        doc.Blocks.Add(IssueDocumentWindow.SignaturesTable(invoice,"Передал","Получил",pageWidth-50));return doc;
     }
 }

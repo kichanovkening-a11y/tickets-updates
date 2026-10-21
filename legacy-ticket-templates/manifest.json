@@ -1,0 +1,97 @@
+{
+  "schemaVersion": 1,
+  "source": "Прога билеты/прога1.zip — прога1/Template",
+  "originalEngineAssemblyVersion": "10.5.3700.0",
+  "originalEngineFileVersion": "10.5.0.1943",
+  "templates": [
+    {
+      "file": "0308.rpt",
+      "bytes": 8192,
+      "sha256": "9793609258685cfadb6ab59955a884b8db24aecc2427d9cc83ce3213b8365fb5",
+      "status": "portable-layout-adapted",
+      "layoutResource": "0308.layout.json",
+      "layoutSha256": "0e0ccc5282bfea3f9c5310d36d6eaccad5c27f332333477b21164c46f64ac338"
+    },
+    {
+      "file": "030879.rpt",
+      "bytes": 9728,
+      "sha256": "89db4628e62a77f7d309d05bb0f04ee23c0e7d8c2d3e7f8c2c749408ae501ecc",
+      "status": "portable-layout-adapted",
+      "layoutResource": "030879.layout.json",
+      "layoutSha256": "688e62635a2af6e93642f13702917b87d5787785b4deb1b3d5c2f057aaabef8b"
+    },
+    {
+      "file": "250416.rpt",
+      "bytes": 46080,
+      "sha256": "58fa3ffabacf73aef4f8ce7dab3e16fa5cf35d7d79adc3ca45ddb036a83ba1ab",
+      "status": "portable-layout-adapted",
+      "layoutResource": "250416.layout.json",
+      "layoutSha256": "6815b92e108baa411b15d5579bc096c85c37a3aba155fe24d9ebc0494f029f36"
+    },
+    {
+      "file": "CrystalReport1.rpt",
+      "bytes": 16384,
+      "sha256": "f4787a571b5c0c4e04449523569cf7f6d8818e4e005a182d6a53f98e0a45b1e6",
+      "status": "portable-layout-adapted",
+      "layoutResource": "CrystalReport1.layout.json",
+      "layoutSha256": "5afbe6456ee94d1a8d1492f85c91d01643213d73c58fcc6857a6177929f11115"
+    },
+    {
+      "file": "CrystalReport2.rpt",
+      "bytes": 16384,
+      "sha256": "1d1439fc6954447d4cc68499954e5c778439bca7daf0f21a6fdefd4c9ea84fbb",
+      "status": "portable-layout-adapted",
+      "layoutResource": "CrystalReport2.layout.json",
+      "layoutSha256": "9c7a9400743e5bad99d7cf10ce999489ea151ac51db6c7c26da86a56fc604c9d"
+    },
+    {
+      "file": "Gift.rpt",
+      "bytes": 9216,
+      "sha256": "77ab080ed8ab8ed15555f83d42767183adc590d8f4d65f0cf0695aaf6500aab9",
+      "status": "portable-layout-adapted",
+      "layoutResource": "Gift.layout.json",
+      "layoutSha256": "ea7868f0febda972fbcd6f59abff8ba21436d0c376a5e90cb6e33a7d37afd22b"
+    },
+    {
+      "file": "Gift2.rpt",
+      "bytes": 9216,
+      "sha256": "779113a834531c886159f528ae9b1a8be40854387efe86b5ebbf51951c3466be",
+      "status": "portable-layout-adapted",
+      "layoutResource": "Gift2.layout.json",
+      "layoutSha256": "7152c2260a7715bf9d20e761186a41881e94287df8fdaf8848e33a2e156795bc"
+    },
+    {
+      "file": "podarok2.rpt",
+      "bytes": 8704,
+      "sha256": "bf3e599891e970e6dccc9d954eb419d077cbb481ac3b846d11a92ec77adb1a96",
+      "status": "portable-layout-adapted",
+      "layoutResource": "podarok2.layout.json",
+      "layoutSha256": "1084d69aadf6982bef1d2c154b2c23989ab12f801759adfb7d7e941d8f92adfc"
+    },
+    {
+      "file": "Новый стандартный.rpt",
+      "bytes": 16384,
+      "sha256": "51bc98b8e6c59c552caa866a9bf426e4b8ce4a01c5dec74b1fd63f3466002032",
+      "status": "portable-layout-adapted",
+      "layoutResource": "Новый стандартный.layout.json",
+      "layoutSha256": "feedea029a22d2bf0e1221c61f2e6a2613feaa5850690c9e09173d23b0761b1f"
+    },
+    {
+      "file": "Стандарт1 - копия.rpt",
+      "bytes": 8192,
+      "sha256": "ada6c2487055e0391946bc44ecde0ac3a2c2dcc65d4748b229e4ba48dad0ff9f",
+      "status": "portable-layout-adapted",
+      "layoutResource": "Стандарт1 - копия.layout.json",
+      "layoutSha256": "79a7b9de8f9467845f26ac16d7e69c3b60a862d594f9d857a979f6e8f41db8f4"
+    },
+    {
+      "file": "Стандарт1.rpt",
+      "bytes": 8192,
+      "sha256": "bf8376f1f4272ad799804b27c65c2d0f16814136b97545b7f71a27b070abcd23",
+      "status": "portable-layout-adapted",
+      "layoutResource": "Стандарт1.layout.json",
+      "layoutSha256": "728dde4cbe533aa7fb63b4dc8c07f4f3358754ba78506057c3b8e64c3a604979"
+    }
+  ],
+  "extractionEngine": "SAP Crystal Reports 13 SP33 x64"
+}

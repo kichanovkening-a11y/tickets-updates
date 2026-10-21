@@ -62,13 +62,16 @@ public sealed partial class Store
         if(seatIds.Count==0||seatIds.Distinct().Count()!=seatIds.Count)throw new TicketException("Выберите места без повторов.");
         try
         {
-            using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+            using var c=Open();EnsureInvoiceMergeTable(c);using var tx=c.BeginTransaction(deferred:false);
             RequireActiveEvent(c,tx,eventId);
+            issueId=ResolveInvoiceId(issueId,InvoiceMergeLinks(c,tx));
             string recipient,series,timestamp;
             using(var batch=Command(c,"""
+                WITH RECURSIVE members(id) AS (
+                    SELECT $i UNION SELECT m.source_issue_id FROM invoice_merge m JOIN members b ON m.target_issue_id=b.id)
                 SELECT b.recipient,b.series,b.issued_at FROM issue_batch b WHERE b.id=$i AND b.event_id=$e
-                AND EXISTS(SELECT 1 FROM ticket t WHERE t.issue_id=b.id AND t.returned_at IS NULL)
-                AND NOT EXISTS(SELECT 1 FROM ticket t JOIN ticket_state ts ON ts.ticket_id=t.id WHERE t.issue_id=b.id AND t.returned_at IS NULL AND ts.state='reserved')
+                AND EXISTS(SELECT 1 FROM ticket t JOIN members m ON m.id=t.issue_id WHERE t.event_id=$e AND t.returned_at IS NULL)
+                AND NOT EXISTS(SELECT 1 FROM ticket t JOIN members m ON m.id=t.issue_id JOIN ticket_state ts ON ts.ticket_id=t.id WHERE t.event_id=$e AND t.returned_at IS NULL AND ts.state='reserved')
                 ""","$i",issueId,"$e",eventId))
             {
                 batch.Transaction=tx;using var r=batch.ExecuteReader();

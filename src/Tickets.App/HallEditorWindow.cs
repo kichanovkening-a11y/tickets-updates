@@ -21,7 +21,7 @@ internal sealed class HallEditorWindow : EditorWindow
     private readonly Dictionary<int,HallRowLayout> spareRows=[];
     private TextBox? countInput,firstLabelInput,placesInput;
     private sealed record HallState(List<DraftSeat> Seats,List<HallRowLayout> Rows,int[] Selected,Dictionary<int,HallRowLayout> Spare,string CountText,string FirstLabel,string PlacesText);
-    private static HallRowLayout CloneRow(HallRowLayout row)=>new(){Label=row.Label,SeatCount=row.SeatCount,AisleAfter=row.AisleAfter,FirstSeat=row.FirstSeat};
+    private static HallRowLayout CloneRow(HallRowLayout row)=>new(){Label=row.Label,SeatCount=row.SeatCount,AisleAfter=row.AisleAfter,RowGapAfter=row.RowGapAfter,FirstSeat=row.FirstSeat};
     private readonly Stack<HallState> history=[];
     private Button? undo;
     private HallState? pendingTableEdit;
@@ -85,8 +85,15 @@ internal sealed class HallEditorWindow : EditorWindow
         firstRow.LostKeyboardFocus+=(_,_)=>{if(labelEdit is not null&&labelEdit.FirstLabel!=firstRow.Text)Remember(labelEdit);labelEdit=null;};
         var reverse=new CheckBox{Content="Нумерация справа налево",Margin=new Thickness(0,10,0,0)}; advanced.Children.Add(reverse);
         var aisle=Field(advanced,"Общий проход после места по порядку (0 — нет)","0");
-        advanced.Children.Add(new TextBlock{Text="Задайте подпись, число мест и проход для каждого ряда. В колонке «Начало мест» можно указать А, 1 — сначала А, затем 1, 2… В колонке «Проход» выберите пару существующих подписей мест. Пустое начало мест использует общую настройку выше.",TextWrapping=TextWrapping.Wrap});
-        foreach(var (header,path,width) in new[]{("Ряд","Label",85),("Мест","SeatCount",85),("Начало мест","FirstSeat",155)})
+        var rowGap=Field(rowHeader,"Проход после каждого ряда: дополнительный промежуток (0–1000)","0");
+        Button(rowHeader,"Применить промежуток ко всем рядам",()=>Try(()=>{
+            if(!CommitEdits())return;
+            if(!double.TryParse(rowGap.Text,out var gap)||!double.IsFinite(gap)||gap<0||gap>1000)throw new TicketException("Промежуток после ряда: от 0 до 1000.");
+            Remember();foreach(var row in rowLayouts.Concat(spareRows.Values))row.RowGapAfter=gap;
+            rowTable.Items.Refresh();
+        }));
+        advanced.Children.Add(new TextBlock{Text="Задайте подпись, число мест и проход для каждого ряда. В колонке «Начало мест» можно указать А, 1 — сначала А, затем 1, 2… В колонке «Проход» выберите пару существующих подписей мест. «Промежуток после ряда» добавляет проход между этим и следующим рядом (0 — нет). Пустое начало мест использует общую настройку выше.",TextWrapping=TextWrapping.Wrap});
+        foreach(var (header,path,width) in new[]{("Ряд","Label",85),("Мест","SeatCount",85),("Начало мест","FirstSeat",155),("Промежуток после ряда","RowGapAfter",170)})
             rowTable.Columns.Add(new DataGridTextColumn{Header=header,Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.LostFocus},Width=width});
         var aisleChoice=new FrameworkElementFactory(typeof(ComboBox));
         aisleChoice.SetValue(ComboBox.DisplayMemberPathProperty,"Caption");aisleChoice.SetValue(ComboBox.SelectedValuePathProperty,"After");
@@ -109,7 +116,7 @@ internal sealed class HallEditorWindow : EditorWindow
             {
                 var labels=Enumerable.Range(0,count).Select(i=>HallLayout.Label(firstRow.Text,i)).ToArray();
                 while(rowLayouts.Count>count){var index=rowLayouts.Count-1;spareRows[index]=CloneRow(rowLayouts[index]);rowLayouts.RemoveAt(index);}
-                while(rowLayouts.Count<count)rowLayouts.Add(spareRows.TryGetValue(rowLayouts.Count,out var cached)?CloneRow(cached):new HallRowLayout{Label=labels[rowLayouts.Count],SeatCount=int.TryParse(places.Text,out var n)&&n is >=1 and <=300?n:1,AisleAfter=int.TryParse(aisle.Text,out var g)&&g>=0?g:0});
+                while(rowLayouts.Count<count)rowLayouts.Add(spareRows.TryGetValue(rowLayouts.Count,out var cached)?CloneRow(cached):new HallRowLayout{Label=labels[rowLayouts.Count],SeatCount=int.TryParse(places.Text,out var n)&&n is >=1 and <=300?n:1,AisleAfter=int.TryParse(aisle.Text,out var g)&&g>=0?g:0,RowGapAfter=double.TryParse(rowGap.Text,out var rowSpace)&&double.IsFinite(rowSpace)&&rowSpace is >=0 and <=1000?rowSpace:0});
                 if(relabel){for(var i=0;i<count;i++)rowLayouts[i].Label=labels[i];foreach(var pair in spareRows)pair.Value.Label=HallLayout.Label(firstRow.Text,pair.Key);}
                 rowTable.Items.Refresh();
             }
@@ -216,7 +223,7 @@ internal sealed class HallEditorWindow : EditorWindow
     {
         if(table.CommitEdit(DataGridEditingUnit.Cell,true)&&table.CommitEdit(DataGridEditingUnit.Row,true)&&
             rowTable.CommitEdit(DataGridEditingUnit.Cell,true)&&rowTable.CommitEdit(DataGridEditingUnit.Row,true))return true;
-        MessageBox.Show(DialogOwner,"Исправьте ошибку в таблице: координаты X и Y, количество мест и проход должны быть числами.","Зал");return false;
+        MessageBox.Show(DialogOwner,"Исправьте ошибку в таблице: координаты X и Y, количество мест, проход и промежуток после ряда должны быть числами.","Зал");return false;
     }
 }
 

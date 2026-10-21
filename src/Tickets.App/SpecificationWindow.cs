@@ -69,6 +69,28 @@ internal sealed class SpecificationWindow : EditorWindow
         };
     }
 
+    internal SpecificationWindow(Store store,long eventId,long issueId):base(store,$"Спецификация · выдача № {issueId}",1000,850)
+    {
+        fixedRecipient=true;sender=new TextBox();title=new TextBox();body=new TextBox();
+        var root=new Grid{Margin=new Thickness(10)};root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(124)});Content=root;
+        var reader=new FlowDocumentScrollViewer{IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};root.Children.Add(reader);
+        FlowDocument Preview(double width=794)
+        {
+            var invoice=Store.Invoice(eventId,issueId);var document=InvoiceWindow.Document(invoice,width);
+            if(document.Blocks.FirstBlock is Paragraph heading){heading.Inlines.Clear();heading.Inlines.Add(new Run($"СПЕЦИФИКАЦИЯ № {issueId}"));}
+            return document;
+        }
+        reader.Document=Preview();reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};
+        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);root.Children.Add(actions);
+        InvoiceWindow.Square(actions,"Сохранить",()=>Try(()=>{status.Text="Сохранено: "+Store.SaveIssueSpecificationDocument(eventId,issueId);}),Brushes.SteelBlue);
+        InvoiceWindow.Square(actions,"Распечатать",()=>Try(()=>{
+            var dialog=new PrintDialog();if(dialog.ShowDialog()!=true)return;var document=Preview(dialog.PrintableAreaWidth);document.PageHeight=dialog.PrintableAreaHeight;
+            dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator,Title);
+        }),Brushes.SeaGreen);
+        InvoiceWindow.Square(actions,"Открыть",()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.IssueSpecificationDocumentPath(issueId),()=>Store.SaveIssueSpecificationDocument(eventId,issueId))),Brushes.SlateGray);
+        actions.Children.Add(status);
+    }
+
     private bool CanSwitch()=>!dirty||MessageBox.Show(DialogOwner,"Отбросить несохранённые изменения?","Спецификация",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes;
 
     private void Load(SpecificationInfo? value,string initialRecipient="")

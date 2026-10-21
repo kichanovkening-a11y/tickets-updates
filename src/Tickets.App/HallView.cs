@@ -54,7 +54,14 @@ public sealed class HallView : FrameworkElement
         var group=new DrawingGroup();
         using(var dc=group.Open())
         {
-            foreach(var sector in sectors) dc.DrawText(Text(sector.Name,15.6,Brushes.SlateGray),new Point(sector.X,sector.Y));
+            var sectorSeats=seats.ToLookup(s=>s.Sector);
+            foreach(var sector in sectors)
+            {
+                var label=Text(sector.Name,15.6,Brushes.SlateGray);
+                var places=sectorSeats[sector.Name];
+                var x=places.Any()?(places.Min(s=>s.X)+places.Max(s=>s.X)+16-label.Width)/2:sector.X;
+                dc.DrawText(label,new Point(x,sector.Y));
+            }
             foreach(var s in seats)
             {
                 var rect=new Rect(s.X,s.Y,16,16);

@@ -11,15 +11,15 @@ public static class InvoiceDocuments
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static readonly CultureInfo Ru=CultureInfo.GetCultureInfo("ru-RU");
     public static string Money(decimal amount)=>amount.ToString("N0",Ru)+" ₽";
-    public static string[] Headers=>["Сектор","Ряд","Места","Кол-во","Цена, ₽","Сумма, ₽","Состояние"];
+    public static string[] Headers=>["Сектор","Ряд","Места","Кол-во","Цена, ₽","Сумма, ₽"];
     public static IReadOnlyList<InvoiceLine> Lines(InvoiceInfo invoice)=>invoice.Tickets
-        .GroupBy(t=>new{t.Sector,t.Row,t.Amount,t.Status})
+        .GroupBy(t=>new{t.Sector,t.Row,t.Amount})
         .Select(group=>new InvoiceLine(group.Key.Sector,group.Key.Row,
             string.Join(", ",group.Select(t=>t.Seat).OrderBy(s=>s,NaturalComparer.Instance)),group.Count(),group.Key.Amount,
-            group.Sum(t=>(decimal)t.Amount),group.Key.Status))
+            group.Sum(t=>(decimal)t.Amount),string.Join(", ",group.Select(t=>t.Status).Distinct())))
         .OrderBy(line=>line.Sector,NaturalComparer.Instance).ThenBy(line=>line.Row,NaturalComparer.Instance)
         .ThenBy(line=>line.Price).ThenBy(line=>line.Status,StringComparer.Ordinal).ToArray();
-    public static string[] Row(InvoiceLine line)=>[line.Sector,line.Row,line.Seats,line.Count.ToString(Ru),line.Price.ToString("N0",Ru),line.Total.ToString("N0",Ru),line.Status];
+    public static string[] Row(InvoiceLine line)=>[line.Sector,line.Row,line.Seats,line.Count.ToString(Ru),line.Price.ToString("N0",Ru),line.Total.ToString("N0",Ru)];
     public static string[][] Rows(InvoiceInfo invoice)=>Lines(invoice).Select(Row).ToArray();
     public static void SaveWord(InvoiceInfo invoice,string destination)
     {
@@ -29,8 +29,8 @@ public static class InvoiceDocuments
             Paragraph("Мероприятие: "+invoice.Title,true),Paragraph("Дата и время: "+invoice.EventDate),
             Paragraph("Площадка: "+invoice.Venue),Paragraph("Отправитель: "+invoice.Sender),
             Paragraph("Получатель: "+invoice.Recipient),Paragraph(""));
-        body.Add(RequisitesTable(invoice,"Отправитель","Получатель"),Paragraph("",false,8));
-        var widths=new[]{1300,800,1900,900,1100,1200,1400};
+
+        var widths=new[]{1500,800,2700,1000,1300,1300};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",
             new XElement(W+"tblW",new XAttribute(W+"w",widths.Sum()),new XAttribute(W+"type","dxa")),
             new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),
@@ -45,11 +45,12 @@ public static class InvoiceDocuments
         if(invoice.ActiveCount!=invoice.Tickets.Count)
             body.Add(Paragraph($"Возвращено: {invoice.Tickets.Count-invoice.ActiveCount} ({RussianWords.Quantity(invoice.Tickets.Count-invoice.ActiveCount)})."),
                 Paragraph($"Осталось на руках: {invoice.ActiveCount} ({RussianWords.Quantity(invoice.ActiveCount)}), на сумму {Money(invoice.ActiveTotal)} ({RussianWords.Money(invoice.ActiveTotal)})."));
-        body.Add(Paragraph(""),Paragraph("Передал: ____________________    Получил: ____________________"));
+        body.Add(Paragraph(""),Paragraph(""),SignaturesTable(invoice,"Передал","Получил"));
         SaveDocument(body,destination);
     }
     public static void SaveIssueDocumentWord(IssueDocumentInfo document,string destination)
     {
+        if(SourceBusinessForms.TrySave(document,destination))return;
         var body=new XElement(W+"body");
         var total=DocumentTotals.Total(document.Invoice.Tickets.Count,document.Invoice.Total);
         var firstLine=true;
@@ -79,10 +80,20 @@ public static class InvoiceDocuments
             foreach(var size in body.Descendants(W+"sz"))
             {var value=(string?)size.Attribute(W+"val");size.SetAttributeValue(W+"val",value=="30"?26:size.Ancestors(W+"tbl").Any()?22:24);}
         }
-        SaveDocument(body,destination,document.Kind==IssueDocumentKinds.Waybill);
+        SaveDocument(body,destination,document.Kind==IssueDocumentKinds.Waybill,document.Kind==IssueDocumentKinds.Contract);
+    }
+    public static bool UsesSourceForm(IssueDocumentInfo document)=>SourceBusinessForms.CanUseSource(document.Kind,document.Template);
+    public static XDocument IssueDocumentXml(IssueDocumentInfo document)
+    {
+        var path=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"Tickets-preview-"+Guid.NewGuid().ToString("N")+".docx");
+        try
+        {
+            SaveIssueDocumentWord(document,path);using var archive=ZipFile.OpenRead(path);using var stream=archive.GetEntry("word/document.xml")!.Open();return XDocument.Load(stream);
+        }
+        finally{if(File.Exists(path))File.Delete(path);}
     }
     public static bool IsDocumentTitle(string line)=>line.StartsWith("ДОГОВОР №",StringComparison.Ordinal)||line.StartsWith("АКТ №",StringComparison.Ordinal)||line.StartsWith("ТОВАРНАЯ НАКЛАДНАЯ №",StringComparison.Ordinal)||line.StartsWith("СЧЁТ НА ОПЛАТУ №",StringComparison.Ordinal);
-    private static XElement RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,int width=9600)
+    internal static XElement RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,int width=9600)
     {
         var details=new[]{invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender),invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)};
         var labels=new[]{seller,buyer};
@@ -115,6 +126,43 @@ public static class InvoiceDocuments
                     new XElement(W+"vAlign",new XAttribute(W+"val","center")),r==0?new XElement(W+"shd",new XAttribute(W+"fill","E8EDF3")):null),Paragraph(value,r==0,kind==IssueDocumentKinds.Waybill?16:19)))));
         return table;
     }
+    public static void SaveIssueSpecificationWord(InvoiceInfo invoice,string destination)
+    {
+        // Reuse the same source of grouped places; specifications belong to an issuance.
+        var temporary=destination+".invoice.tmp";
+        try
+        {
+            SaveWord(invoice,temporary);
+            using(var archive=ZipFile.Open(temporary,ZipArchiveMode.Update))
+            {
+                var entry=archive.GetEntry("word/document.xml")!;XDocument xml;
+                using(var stream=entry.Open())xml=XDocument.Load(stream);
+                var text=xml.Descendants(W+"t").First();text.Value=$"СПЕЦИФИКАЦИЯ № {invoice.Id}";
+                entry.Delete();Add(archive,"word/document.xml",xml);SourceBusinessForms.Stamp(archive);
+            }
+            SourceBusinessForms.CheckExternalEdits(destination);File.Move(temporary,destination,true);
+        }
+        finally{if(File.Exists(temporary))File.Delete(temporary);}
+    }
+    internal static XElement SignaturesTable(InvoiceInfo invoice,string left,string right,int width=9600)
+    {
+        var details=new[]{invoice.SenderDetails,invoice.RecipientDetails};var labels=new[]{left,right};
+        return new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(e=>new XElement(W+e,new XAttribute(W+"w",0),new XAttribute(W+"type","dxa"))))),
+            new XElement(W+"tblGrid",Enumerable.Range(0,2).Select(_=>new XElement(W+"gridCol",new XAttribute(W+"w",width/2)))),
+            new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),Enumerable.Range(0,2).Select(i=>{
+                var p=Paragraph(labels[i]+": "+details[i]?.Position+"\n________________ / "+details[i]?.Signatory+" /",false,20);
+                p.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")));
+                return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),p);
+            })));
+    }
+    private static void AddPageNumberParts(ZipArchive archive)
+    {
+        XNamespace rel="http://schemas.openxmlformats.org/package/2006/relationships";
+        Add(archive,"word/_rels/document.xml.rels",new XDocument(new XElement(rel+"Relationships",new XElement(rel+"Relationship",new XAttribute("Id","footer1"),new XAttribute("Type","http://schemas.openxmlformats.org/officeDocument/2006/relationships/footer"),new XAttribute("Target","footer1.xml")))));
+        Add(archive,"word/footer1.xml",new XDocument(new XElement(W+"ftr",new XElement(W+"p",new XElement(W+"pPr",new XElement(W+"jc",new XAttribute(W+"val","left"))),new XElement(W+"fldSimple",new XAttribute(W+"instr","PAGE"))))));
+        var entry=archive.GetEntry("[Content_Types].xml")!;XDocument types;using(var stream=entry.Open())types=XDocument.Load(stream);entry.Delete();
+        types.Root!.Add(new XElement(types.Root.Name.Namespace+"Override",new XAttribute("PartName","/word/footer1.xml"),new XAttribute("ContentType","application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml")));Add(archive,"[Content_Types].xml",types);
+    }
     public static void SaveSpecificationWord(SpecificationInfo specification,string destination)
     {
         var body=new XElement(W+"body",Paragraph("СПЕЦИФИКАЦИЯ № "+specification.Id,true,32),
@@ -124,15 +172,16 @@ public static class InvoiceDocuments
         body.Add(Paragraph(""),Paragraph("Отправитель: ____________________    Получатель: ____________________"));
         SaveDocument(body,destination);
     }
-    private static void SaveDocument(XElement body,string destination,bool landscape=false)
+    internal static void SaveDocument(XElement body,string destination,bool landscape=false,bool pageNumbers=false)
     {
-        body.Add(new XElement(W+"sectPr",new XElement(W+"pgSz",new XAttribute(W+"w",landscape?16838:11906),new XAttribute(W+"h",landscape?11906:16838),landscape?new XAttribute(W+"orient","landscape"):null),
+        body.Add(new XElement(W+"sectPr",pageNumbers?new XElement(W+"footerReference",new XAttribute(W+"type","default"),new XAttribute(XNamespace.Get("http://schemas.openxmlformats.org/officeDocument/2006/relationships")+"id","footer1")):null,new XElement(W+"pgSz",new XAttribute(W+"w",landscape?16838:11906),new XAttribute(W+"h",landscape?11906:16838),landscape?new XAttribute(W+"orient","landscape"):null),
             new XElement(W+"pgMar",new XAttribute(W+"top",1134),new XAttribute(W+"bottom",1134),new XAttribute(W+"left",1134),new XAttribute(W+"right",1134))));
         var document=new XDocument(new XElement(W+"document",new XAttribute(XNamespace.Xmlns+"w",W),body));
+        SourceBusinessForms.CheckExternalEdits(destination);
         var temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
         try
         {
-            using(var archive=ZipFile.Open(temporary,ZipArchiveMode.Create))
+            using(var archive=ZipFile.Open(temporary,ZipArchiveMode.Update))
             {
                 Add(archive,"[Content_Types].xml",new XDocument(new XElement(XName.Get("Types","http://schemas.openxmlformats.org/package/2006/content-types"),
                     new XElement(XName.Get("Default","http://schemas.openxmlformats.org/package/2006/content-types"),new XAttribute("Extension","rels"),new XAttribute("ContentType","application/vnd.openxmlformats-package.relationships+xml")),
@@ -141,12 +190,14 @@ public static class InvoiceDocuments
                 Add(archive,"_rels/.rels",new XDocument(new XElement(XName.Get("Relationships","http://schemas.openxmlformats.org/package/2006/relationships"),
                     new XElement(XName.Get("Relationship","http://schemas.openxmlformats.org/package/2006/relationships"),new XAttribute("Id","rId1"),new XAttribute("Type","http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument"),new XAttribute("Target","word/document.xml")))));
                 Add(archive,"word/document.xml",document);
+                if(pageNumbers)AddPageNumberParts(archive);
+                SourceBusinessForms.Stamp(archive);
             }
             File.Move(temporary,destination,true);
         }
         finally{if(File.Exists(temporary))File.Delete(temporary);}
     }
-    private static XElement Paragraph(string text,bool bold=false,int size=22)=>new(W+"p",
+    internal static XElement Paragraph(string text,bool bold=false,int size=22)=>new(W+"p",
         new XElement(W+"pPr",new XElement(W+"spacing",new XAttribute(W+"after",80)),bold?new XElement(W+"keepNext"):null,text.Contains('\n')?new XElement(W+"keepLines"):null,new XElement(W+"widowControl")),
         new XElement(W+"r",new XElement(W+"rPr",new XElement(W+"rFonts",new XAttribute(W+"ascii","Arial"),new XAttribute(W+"hAnsi","Arial")),bold?new XElement(W+"b"):null,new XElement(W+"sz",new XAttribute(W+"val",size))),
             text.Replace("\r\n","\n").Replace('\r','\n').Split('\n').SelectMany((line,index)=>index==0

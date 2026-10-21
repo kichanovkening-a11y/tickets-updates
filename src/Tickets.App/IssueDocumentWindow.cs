@@ -24,6 +24,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
         header.Children.Add(new TextBlock{Text="Получатель: "+info.Invoice.Recipient,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap});header.Children.Add(status);
         var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);Grid.SetRow(actions,1);root.Children.Add(actions);
         InvoiceWindow.Square(actions,"Сохранить",()=>Try(Save),Brushes.SteelBlue);InvoiceWindow.Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
+        InvoiceWindow.Square(actions,"Открыть",()=>Try(()=>{SaveForNavigation();IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));}),Brushes.SlateGray);
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
         var editing=new DockPanel{Margin=new Thickness(8)};var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Bottom);editing.Children.Add(tools);
@@ -31,6 +32,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
         Button(tools,"Сохранить шаблон",()=>Try(()=>{Save();Store.SaveDocumentTemplate(kind,template.Text);status.Text="Шаблон сохранён для следующих выдач. Получатель подставляется автоматически.";}));
         editing.Children.Add(template);tabs.Items.Add(new TabItem{Header="Изменить текст / шаблон",Content=editing});
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0&&template.Text!=original)Try(Save);};
+        preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)preview.Document=Document(Store.GetIssueDocument(eventId,issueId,kind),preview.ActualWidth-20);};
         preview.Document=Document(info);status.Text="Документ подготовлен для текущей выдачи.";
         Closing+=(_,e)=>{
             if(template.Text==original)return;
@@ -50,18 +52,21 @@ internal sealed class IssueDocumentWindow:EditorWindow
     {
         Save();var dialog=new PrintDialog();if(kind==IssueDocumentKinds.Waybill)dialog.PrintTicket.PageOrientation=System.Printing.PageOrientation.Landscape;if(dialog.ShowDialog()!=true)return;
         var document=Document(Store.GetIssueDocument(eventId,issueId,kind));document.PageWidth=dialog.PrintableAreaWidth;document.PageHeight=dialog.PrintableAreaHeight;document.PagePadding=new Thickness(32);document.ColumnWidth=dialog.PrintableAreaWidth;
-        dialog.PrintDocument(((IDocumentPaginatorSource)document).DocumentPaginator,Title);
+        var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;
+        dialog.PrintDocument(kind==IssueDocumentKinds.Contract?new SourceFormPreview.NumberedPaginator(paginator):paginator,Title);
     }
-    internal static FlowDocument Document(IssueDocumentInfo info)
+    internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null)
     {
+        if(InvoiceDocuments.UsesSourceForm(info))return SourceFormPreview.Document(info,pageWidth);
         var wide=info.Kind==IssueDocumentKinds.Waybill;
         var contract=info.Kind==IssueDocumentKinds.Contract;
-        var document=new FlowDocument{FontFamily=new FontFamily(contract?"Times New Roman":"Arial"),FontSize=contract?16:13,PageWidth=wide?1123:794,PagePadding=new Thickness(25),ColumnWidth=wide?1073:744};
+        var available=pageWidth??(wide?1123:794);
+        var document=new FlowDocument{FontFamily=new FontFamily(contract?"Times New Roman":"Arial"),FontSize=contract?16:13,PageWidth=available,PagePadding=new Thickness(25),ColumnWidth=Math.Max(100,available-50)};
         var firstLine=true;
         var lines=BusinessDocumentTemplates.Layout(info);
         for(var index=0;index<lines.Count;index++)
         {
-            if(lines[index].Requisites){var labels=BusinessDocumentTemplates.PartyLabels(info.Kind);document.Blocks.Add(RequisitesTable(info.Invoice,labels.Seller,labels.Buyer,info.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act,contract));continue;}
+            if(lines[index].Requisites){var labels=BusinessDocumentTemplates.PartyLabels(info.Kind);document.Blocks.Add(RequisitesTable(info.Invoice,labels.Seller,labels.Buyer,info.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act,contract,available-50));continue;}
             var line=lines[index].Text;
             if(line.StartsWith("№ | Билеты и места |",StringComparison.Ordinal))
             {
@@ -69,7 +74,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
                 var columns=line.Split('|').Length;
                 var widths=BusinessDocumentTemplates.ItemWidths(info.Kind);
                 if(widths.Length!=columns)widths=BusinessDocumentTemplates.ItemWidths(IssueDocumentKinds.Contract);
-                foreach(var width in widths)table.Columns.Add(new TableColumn{Width=new GridLength(width,GridUnitType.Star)});
+                foreach(var width in widths)table.Columns.Add(new TableColumn{Width=new GridLength((available-50)*width/widths.Sum())});
                 var group=new TableRowGroup();table.RowGroups.Add(group);var header=true;
                 do
                 {
@@ -86,11 +91,20 @@ internal sealed class IssueDocumentWindow:EditorWindow
         }
         return document;
     }
-    internal static Table RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,bool contract=false)
+    internal static Table SignaturesTable(InvoiceInfo invoice,string left,string right,double width=744)
+    {
+        var table=new Table{CellSpacing=0,Margin=new Thickness(0,32,0,0)};
+        table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});
+        var group=new TableRowGroup();table.RowGroups.Add(group);var row=new TableRow();group.Rows.Add(row);
+        var details=new[]{invoice.SenderDetails,invoice.RecipientDetails};var labels=new[]{left,right};
+        for(var i=0;i<2;i++)row.Cells.Add(new TableCell(new Paragraph(new Run(labels[i]+": "+details[i]?.Position+"\n________________ / "+details[i]?.Signatory+" /")){TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right,Margin=new Thickness(0)}){Padding=new Thickness(0)});
+        return table;
+    }
+    internal static Table RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,bool contract=false,double width=744)
     {
         var table=new Table{CellSpacing=0,Margin=new Thickness(0,5,0,12)};
-        table.Columns.Add(new TableColumn{Width=new GridLength(1,GridUnitType.Star)});
-        table.Columns.Add(new TableColumn{Width=new GridLength(1,GridUnitType.Star)});
+        table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});
+        table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});
         var group=new TableRowGroup();table.RowGroups.Add(group);var row=new TableRow();group.Rows.Add(row);
         var details=new[]{invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender),invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)};
         var labels=new[]{seller,buyer};

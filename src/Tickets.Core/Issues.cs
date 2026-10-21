@@ -30,9 +30,7 @@ public sealed partial class Store
             PRAGMA user_version=3;
             """);cmd.Transaction=tx;cmd.ExecuteNonQuery();tx.Commit();
     }
-    public List<IssueInfo> Issues(long eventId)=>History(eventId).GroupBy(t=>t.IssueId)
-        .Select(g=>new IssueInfo(g.Key,eventId,g.First().Recipient,g.First().IssuedAt,g.Count(),g.Count(t=>t.ReturnedAt is not null),g.Sum(t=>(decimal)t.Amount),g.Count(t=>t.ReturnedAt is null&&t.IsReserved),g.Count(t=>t.ReturnedAt is null&&t.IsPrinted)))
-        .OrderByDescending(i=>i.Id).ToList();
+    public List<IssueInfo> Issues(long eventId)=>MergeIssueSummaries(eventId);
 
     public InvoiceInfo Invoice(long eventId,long issueId)
     {
@@ -40,6 +38,6 @@ public sealed partial class Store
         using var r=cmd.ExecuteReader();if(!r.Read())throw new TicketException("Выдача не найдена в этом мероприятии.");
         var values=Enumerable.Range(0,6).Select(r.GetString).ToArray();
         r.Close();
-        return new(issueId,eventId,values[0],values[1],values[2],values[3],values[4],History(eventId).Where(t=>t.IssueId==issueId).OrderBy(t=>t.Number).ToList(),values[5]){SenderDetails=GetIssueOrganizationDetails(issueId,true),RecipientDetails=GetIssueOrganizationDetails(issueId,false)};
+        return new(issueId,eventId,values[0],values[1],values[2],values[3],values[4],InvoiceTickets(eventId,issueId),values[5]){SenderDetails=GetIssueOrganizationDetails(issueId,true),RecipientDetails=GetIssueOrganizationDetails(issueId,false)};
     }
 }

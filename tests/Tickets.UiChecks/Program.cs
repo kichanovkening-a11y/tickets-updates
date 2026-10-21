@@ -87,6 +87,7 @@ internal static class Program
             Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Схема")).IsSelected=true;Pump();
             var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
             Check(!rowGrid.IsReadOnly,"per-row seats and aisles are editable");
+            Check(rowGrid.Columns.OfType<DataGridTextColumn>().Any(column=>Equals(column.Header,"Промежуток после ряда")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="RowGapAfter"),"per-row extra aisle spacing is editable in the hall row table");
             Check(rowGrid.Items.Count==20,"row count produces a configuration row for every hall row");
             ((HallRowLayout)rowGrid.Items[9]).SeatCount=17;rowCount.Text="2";rowCount.Text="20";
             Check(((HallRowLayout)rowGrid.Items[9]).SeatCount==17,"intermediate row-count typing preserves customized row settings");
@@ -126,7 +127,7 @@ internal static class Program
             Check(File.Exists(Path.Combine(store.DocumentsDirectory,"Спецификации","Спецификация-1.docx")),"specification automatically saves Word");specWindow.Close();
             var reopened=(Window)Activator.CreateInstance(specType,store,"UI organization")!;reopened.Show();Pump();
             Check(Logical(reopened).OfType<TextBox>().Any(t=>t.Text.Contains("Условия согласованы")),"saved organization specification reopens");reopened.Close();
-            var venueId=store.CreateHall("UI selection hall","",new[]{
+            var venueId=store.CreateHall("UI selection hall","UI selection venue address",new[]{
                 new DraftSeat{Row="1",Number="1",X=0,Y=0},new DraftSeat{Row="1",Number="2",X=30,Y=0},
                 new DraftSeat{Row="2",Number="1",X=0,Y=30},new DraftSeat{Row="2",Number="2",X=30,Y=30}});
             var seatIds=store.VenueSeats(venueId).Select(s=>s.Id).ToArray();
@@ -186,6 +187,7 @@ internal static class Program
             }catch(Exception ex){senderCreationError=ex;creation?.Close();}}));Click(main,"Создать / изменить отправителя");if(senderCreationError is not null)throw senderCreationError;
             Check(senderBox.Text=="UI sender created from main"&&store.Senders().Contains(senderBox.Text),"main sender creation persists and selects sender");senderBox.Text=Store.DefaultSender;
             ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
+            store.SaveOrganizationDetails("UI recipient",false,new OrganizationDetails(Name:"UI recipient",Inn:"UI-REQUISITES-MUST-NOT-APPEAR",Signatory:"UI invoice signatory",Position:"UI director"));
             var summaryLabel=(TextBlock)main.FindName("SelectedSummary");Check(Math.Abs(summaryLabel.FontSize-16.8)<.01&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum retain bold red styling at 70 percent size");
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
             Exception? invoiceError=null;
@@ -196,6 +198,10 @@ internal static class Program
                     var text=new TextRange(document.ContentStart,document.ContentEnd).Text;
                     Check(text.Contains("UI recipient")&&text.Contains("369"),"invoice opens immediately with actual prices and correct total");
                     Check(!Logical(window).OfType<ListBox>().Any(),"invoice has no return-ticket list");
+                    Check(!text.Contains("UI-REQUISITES-MUST-NOT-APPEAR")&&!text.Contains("Банковские реквизиты")&&!text.Contains("ИНН")&&!text.Contains("Состояние"),"invoice preview omits party requisites and ticket state");
+                    Check(text.Contains("UI invoice signatory"),"invoice retains the actual recipient signatory");
+                    Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Открыть")),"invoice offers opening the saved Word document");
+                    CheckDocumentTableLayout(document,"invoice");
                     Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить как…")),"invoice has no duplicate Save As action");
                     var squareSave=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить"));var squarePrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Распечатать"));
                     Check(squareSave.Width==squareSave.Height&&squarePrint.Width==squarePrint.Height&&squareSave.Width==112,"save and print are prominent square buttons");
@@ -213,7 +219,11 @@ internal static class Program
                         var form=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Договор · выдача №"));
                         try{
                             Check(Equals(Logical(form).OfType<Button>().Single(b=>Equals(b.Content,"Договор")).Background,Brushes.SteelBlue)&&Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Накладная")),"contract toolbar marks active document and offers invoice");
-                            var rendered=Logical(form).OfType<FlowDocumentScrollViewer>().Single().Document;Check(new TextRange(rendered.ContentStart,rendered.ContentEnd).Text.Contains("UI recipient"),"contract preview substitutes actual recipient");
+                            var rendered=Logical(form).OfType<FlowDocumentScrollViewer>().Single().Document;var contractText=new TextRange(rendered.ContentStart,rendered.ContentEnd).Text;
+                            Check(contractText.Contains("UI recipient"),"contract preview substitutes actual recipient");
+                            Check(!contractText.Contains("Билеты и места"),"contract omits the ticket item table");
+                            Check(Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Открыть")),"contract offers opening the saved Word document");
+                            CheckDocumentTableLayout(rendered,"contract");
                             Logical(form).OfType<TabControl>().Single().SelectedIndex=1;Logical(form).OfType<TextBox>().Single().Text="Договор для {recipient}. Отправитель: {sender}.";Click(form,"Сохранить шаблон");
                             Check(store.DocumentTemplate(IssueDocumentKinds.Contract).Contains("{recipient}"),"document template saves for later issuances");
                         }catch(Exception ex){documentError=ex;}finally{form.Close();}
@@ -236,6 +246,7 @@ internal static class Program
             var printButton=(Button)main.FindName("PrintTicketsButton");Check(printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"issued but unprinted places expose initial printing without changing ticket numbers");
             hall.SetSelection(new[]{seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI print preview only";Pump();
             Check(printButton.IsVisible&&printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"primary ticket printing action is visible and available");
+            var freePreviewSelection=hall.Selected.ToArray();var freePreviewSummary=((TextBlock)main.FindName("SelectedSummary")).Text;
             var ticketPrintType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.TicketPrintWindow")!;Exception? ticketPreviewError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
                 previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
@@ -243,6 +254,7 @@ internal static class Program
                 Check(store.History(eventId).Count==3,"opening print preview creates no issuance");
             }catch(Exception ex){ticketPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(ticketPreviewError is not null)throw ticketPreviewError;
             Check(store.History(eventId).Count==3&&!store.Recipients().Contains("UI print preview only"),"closing ticket print preview reserves neither seats nor recipient");
+            Check(hall.Selected.SetEquals(freePreviewSelection)&&((TextBlock)main.FindName("SelectedSummary")).Text==freePreviewSummary,"closing free-seat print preview retains selection and summary");
             var originalInvoice=store.Invoice(eventId,store.Issues(eventId).Single().Id);
             CheckTicketBlankPreview(store,eventId,originalInvoice);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
@@ -255,8 +267,17 @@ internal static class Program
                 var page=Logical(previewWindow).OfType<DocumentPageView>().First().DocumentPaginator.GetPage(0).Visual;
                 Check(Visual(page).OfType<Border>().Count()==2,"mixed preview renders both free and occupied ticket cards");
             }catch(Exception ex){mixedPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(mixedPreviewError is not null)throw mixedPreviewError;
+            Check(hall.Selected.SetEquals(new[]{seatIds[0],seatIds[3]}),"closing mixed print preview retains its complete selection");
             var invoiceAfterPreview=store.Invoice(eventId,originalInvoice.Id);
             Check(store.History(eventId).Count==3&&store.Issues(eventId).Count==1&&invoiceAfterPreview.Tickets.SequenceEqual(originalInvoice.Tickets)&&invoiceAfterPreview.Sender==originalInvoice.Sender&&!store.Recipients().Contains("UI mixed preview only")&&store.Seats(eventId).Single(s=>s.Id==seatIds[3]).Available,"closing mixed preview preserves original invoice and leaves free seat unissued");
+            // Exercise the main-window response to a successful print without submitting a physical print job.
+            hall.SetSelection(new[]{seatIds[0]});Exception? printedResultError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
+                previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
+                ticketPrintType.GetProperty("Printed")!.GetSetMethod(true)!.Invoke(previewWindow,new object[]{true});
+            }catch(Exception ex){printedResultError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(printedResultError is not null)throw printedResultError;
+            Check(hall.Selected.Count==0,"successful print result clears main selection");
+            CheckInvoiceMergeSelection(store);
             var extensionType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.InvoiceExtensionWindow")!;
             var extension=(Window)Activator.CreateInstance(extensionType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object[]{store,eventId,originalInvoice.Id},null)!;extension.Show();Pump();
             var extensionHall=Logical(extension).OfType<Tickets.App.HallView>().Single();var extendButton=Logical(extension).OfType<Button>().Single(b=>Equals(b.Content,"Дополнить накладную"));
@@ -331,7 +352,15 @@ internal static class Program
             categoryHall.SetSelection(seatIds.Take(2));Gesture(categoryHall,new Point(8,8),new Point(8,8),true);
             var pricingContext=OpenContextMenu();Check(categoryHall.Selected.SetEquals(seatIds.Take(2))&&pricingContext is not null,"pricing context preserves selected group");pricingContext!.IsOpen=false;
             Gesture(categoryHall,new Point(8,8),new Point(8,8),true);
-            Check(categoryHall.Selected.SetEquals(new[]{seatIds[1]})&&OpenContextMenu() is null,"repeated right click removes only its selected seat without reopening the menu");categoryEditor.Close();
+            Check(categoryHall.Selected.SetEquals(new[]{seatIds[1]})&&OpenContextMenu() is null,"repeated right click removes only its selected seat without reopening the menu");
+            for(var categoryIndex=0;categoryIndex<seatIds.Length;categoryIndex++)
+            {categoryHall.SetSelection(new[]{seatIds[categoryIndex]});categoryFields[1].Text=((categoryIndex+1)*1000).ToString();Click(categoryEditor,"Назначить выбранным местам");}
+            Pump();var priceSummary=(Grid)priceEditorType.GetField("priceSummary",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(categoryEditor)!;
+            var categoryCells=priceSummary.Children.OfType<Border>().ToArray();
+            Check(priceSummary.RowDefinitions.Count==3&&priceSummary.ColumnDefinitions.Count==2&&categoryCells.Length==4,"pricing categories fill three rows before adding the next summary column");
+            Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(2,0),(0,1)}),"pricing summary orders categories downward then into the next column");
+            Check(categoryCells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount:N0} ₽ × 1 = {amount:N0} ₽")),"colored pricing summary uses descending amounts with quantity and total");
+            Check(categoryCells.All(cell=>cell.Background is SolidColorBrush&&((TextBlock)cell.Child).Foreground is SolidColorBrush&&cell.ActualWidth>50&&cell.ActualHeight>20),"pricing summary renders colored readable cells above the hall");categoryEditor.Close();
             var performanceDirectoryType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.PerformanceWindow")!;
             var performanceDirectory=(Window)Activator.CreateInstance(performanceDirectoryType,store)!;performanceDirectory.Show();Pump();
             var performanceTree=Logical(performanceDirectory).OfType<TreeView>().Single();
@@ -340,6 +369,16 @@ internal static class Program
             NativeClick((FrameworkElement)activePerformance.Header);Check(!activePerformance.IsExpanded,"repeated performance title click collapses its showing list");
             NativeClick((FrameworkElement)activePerformance.Header);Check(activePerformance.IsExpanded,"another performance title click reopens its showing list");
             Check(activePerformance.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Удалить"))&&!Logical(performanceDirectory).OfType<Button>().Any(b=>Equals(b.Content,"Удалить спектакль")),"performance deletion uses context menu without extra button");performanceDirectory.Close();
+            Exception? leafSelectionError=null;
+            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? catalog=null;try{
+                catalog=app.Windows.Cast<Window>().Single(window=>window.GetType()==performanceDirectoryType&&window.IsVisible);
+                var tree=Logical(catalog).OfType<TreeView>().Single();
+                var group=tree.Items.OfType<TreeViewItem>().Single(item=>item.Tag is PerformanceInfo performance&&performance.Title=="UI event");group.BringIntoView();Pump();NativeClick((FrameworkElement)group.Header);Pump();
+                var leaf=Logical(group).OfType<TreeViewItem>().Single(item=>item.Tag is EventInfo showing&&showing.Id==eventId);leaf.BringIntoView();Pump();
+                var header=Visual(leaf).OfType<ContentPresenter>().First(presenter=>Equals(presenter.Content,leaf.Header));NativeClick(header);Pump();
+                Check(!catalog.IsVisible&&(long)performanceDirectoryType.GetProperty("SelectedEventId")!.GetValue(catalog)! == eventId,"one click on a performance date closes its directory with the selected event");
+            }catch(Exception ex){leafSelectionError=ex;catalog?.Close();}}));Click(main,"Спектакли");Pump();if(leafSelectionError is not null)throw leafSelectionError;
+            Check(((TextBlock)main.FindName("EventTitle")).Text=="UI event"&&((Grid)main.FindName("Workspace")).IsVisible,"performance date selection returns to that event in the main window");
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Прошедшие")==true),"past performances have a single expandable section");
             var recipients=(ComboBox)main.FindName("RecipientBox");recipients.Text="СТС";Pump();
             Check(recipients.Items.Cast<string>().Any(n=>n.Contains("СТС")),"recipient search includes imported organizations");recipients.IsDropDownOpen=false;
@@ -459,6 +498,8 @@ internal static class Program
             Check(fields.Columns.OfType<DataGridTextColumn>().Any(column=>Equals(column.Header,"Поле")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="DisplayName")&&fields.Items.Cast<TicketBlankField>().Any(field=>field.DisplayName=="Мероприятие"),"blank field names display Russian captions");
             var paper=(Canvas)blankType.GetField("paper",flags)!.GetValue(editor)!;
             Check(paper.Width>0&&paper.Height>0&&paper.ActualWidth>0&&paper.ActualHeight>0,"blank editor renders a paper preview with positive physical dimensions");
+            var templates=(ComboBox)blankType.GetField("templates",flags)!.GetValue(editor)!;
+            Check(templates.ContextMenu?.Items.OfType<MenuItem>().Any(item=>Equals(item.Header,"Удалить"))==true&&!Logical(editor).OfType<Button>().Any(button=>Equals(button.Content,"Удалить")),"saved blank deletion uses a context menu without an extra delete button");
         }
         finally{editor.Close();}
         var blank=new TicketBlank{Name="UI custom blank",PageWidth=210,PageHeight=297};store.SaveTicketBlank(blank);
@@ -481,8 +522,93 @@ internal static class Program
             Check(firstField.Child is TextBlock title&&title.Text==originalInvoice.Title,"custom ticket preview renders the original invoice event");
         }
         finally{preview.Close();}
+        CheckLegacyTicketPreview(store,eventId,originalInvoice);
         var unchanged=store.Invoice(eventId,originalInvoice.Id);
         Check(store.History(eventId).Count==historyCount&&store.Issues(eventId).Count==issueCount&&unchanged.Tickets.SequenceEqual(originalInvoice.Tickets)&&unchanged.Sender==originalInvoice.Sender,"closing custom blank preview preserves original tickets invoice and print state");
+    }
+    private static void CheckLegacyTicketPreview(Store store,long eventId,InvoiceInfo originalInvoice)
+    {
+        var printType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.TicketPrintWindow")!;
+        var flags=BindingFlags.Instance|BindingFlags.NonPublic;var ticket=originalInvoice.Tickets[0];
+        var history=store.History(eventId).ToArray();var originalTickets=originalInvoice.Tickets.ToArray();
+        var preview=(Window)Activator.CreateInstance(printType,new object[]{store,eventId,new[]{ticket.SeatId}})!;preview.Show();Pump();
+        try
+        {
+            var choice=(ComboBox)printType.GetField("blankChoice",flags)!.GetValue(preview)!;
+            Check(choice.Items.OfType<TicketBlank>().Count(blank=>blank.Legacy is not null)==11,"ticket preview offers all eleven adapted original report layouts");
+            FixedPage Select(string sourceFile)
+            {
+                choice.SelectedItem=choice.Items.OfType<TicketBlank>().Single(blank=>blank.Legacy?.SourceFile==sourceFile);Pump();
+                var views=Logical(preview).OfType<DocumentPageView>().ToArray();
+                Check(views.Length==1,"single occupied ticket uses one original "+sourceFile+" page");
+                var document=(FixedDocument)views[0].DocumentPaginator.Source;document.DocumentPaginator.ComputePageCount();
+                return document.Pages.Single().Child;
+            }
+            var gift=Select("Gift.rpt");var boxes=gift.Children.OfType<Border>().ToArray();
+            Check(boxes.Length==7&&!Visual(gift).OfType<Viewbox>().Any(),"original Gift preview renders its seven source text boxes without scaling glyphs");
+            var theatre=boxes.Single(box=>box.Child is TextBlock text&&text.Text==originalInvoice.Venue);
+            var theatreText=(TextBlock)theatre.Child;
+            Check(Math.Abs(theatreText.FontSize-16)<.001&&theatreText.FontWeight==FontWeights.Bold&&theatreText.LayoutTransform is RotateTransform theatreRotation&&theatreRotation.Angle==-270,"Gift theatre preserves 12-point bold type and source 270-degree rotation");
+            const double mm=96.0/25.4;
+            Check(Math.Abs(FixedPage.GetLeft(theatre)-123.7026388888889*mm)<.001&&Math.Abs(FixedPage.GetTop(theatre)-21.1666666666667*mm)<.001,"Gift theatre retains source 6900-twip left plus 113-twip margin and 1200-twip top");
+            var invitation=boxes.Select(box=>(TextBlock)box.Child).Single(text=>text.Text=="Приглашаем Вас ");
+            Check(Math.Abs(invitation.FontSize-20*96.0/72)<.001&&invitation.FontWeight==FontWeights.Bold,"Gift invitation retains its literal trailing space and 20-point bold type");
+            var standard=Select("Стандарт1.rpt");
+            Check(!Visual(standard).OfType<Viewbox>().Any(),"original standard preview keeps source glyph sizes without fit scaling");
+            var labels=standard.Children.OfType<Border>().Select(box=>(TextBlock)box.Child).ToArray();
+            var showDate=DateTime.Parse(originalInvoice.EventDate,System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+            var tearOff=ticket.Series+" № "+ticket.Number.ToString("D6",System.Globalization.CultureInfo.InvariantCulture)+" Цена: "+ticket.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)+"р. "+showDate.ToString("dd.MM.yyyy HH:mm",System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
+            var small=labels.Single(text=>text.Text==tearOff);
+            Check(Math.Abs(small.FontSize-7*96.0/72)<.001&&small.LayoutTransform is RotateTransform smallRotation&&smallRotation.Angle==-90,"standard tear-off uses recovered number price date binding at 7 points and 90-degree rotation");
+            var title=labels.Single(text=>text.Text==originalInvoice.Title.Trim().ToUpper(System.Globalization.CultureInfo.GetCultureInfo("ru-RU")));
+            Check(Math.Abs(title.FontSize-20)<.001&&title.FontWeight==FontWeights.Bold,"standard event title retains original 15-point bold type");
+        }
+        finally{preview.Close();}
+        Check(store.History(eventId).SequenceEqual(history)&&store.Invoice(eventId,originalInvoice.Id).Tickets.SequenceEqual(originalTickets),"closing original report previews preserves history ticket identity and print state");
+    }
+    private static void CheckDocumentTableLayout(FlowDocument document,string caption)
+    {
+        Pump();var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;paginator.ComputePageCount();
+        Check(paginator.PageCount>0&&paginator.GetPage(0).Visual is not null,caption+" document paginates");
+        var tables=document.Blocks.OfType<Table>().ToArray();Check(tables.Length>0,caption+" contains its formatted table");
+        foreach(var table in tables)
+        {
+            Check(table.Columns.Count>1&&table.Columns.Cast<TableColumn>().All(column=>column.Width.IsAbsolute&&column.Width.Value>=20)&&table.Columns.Cast<TableColumn>().Sum(column=>column.Width.Value)<=document.PageWidth-document.PagePadding.Left-document.PagePadding.Right+1,caption+" table columns use usable pixel widths within the page");
+            var rows=table.RowGroups.Cast<TableRowGroup>().SelectMany(group=>group.Rows.Cast<TableRow>()).ToArray();
+            foreach(var row in rows)
+            {
+                var first=row.Cells[0].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
+                var second=row.Cells[1].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
+                var last=row.Cells[0].ContentEnd.GetNextInsertionPosition(LogicalDirection.Backward)!.GetCharacterRect(LogicalDirection.Backward);
+                Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
+                if(new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim().Length<=20)Check(!last.IsEmpty&&last.Bottom-first.Top<160,caption+" rendered short row does not expand into a giant empty cell");
+            }
+        }
+    }
+    private static void CheckInvoiceMergeSelection(Store store)
+    {
+        var venue=store.CreateHall("UI merge hall","",Enumerable.Range(0,4).Select(index=>new DraftSeat{Row="1",Number=(index+1).ToString(),X=index*24}).ToArray());
+        var seats=store.VenueSeats(venue).Select(seat=>seat.Id).ToArray();var plan=store.SavePlan(venue,"UI merge plan",seats.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
+        var eventId=store.CreateEvent(store.SavePerformance("UI merge event"),venue,plan,DateTime.Today.AddDays(4));
+        var first=store.Issue(eventId,new[]{seats[0]},"UI merge recipient","UIM",1);
+        var second=store.Issue(eventId,new[]{seats[1]}," ui merge recipient ","UIM",2);
+        var other=store.Issue(eventId,new[]{seats[2]},"UI other merge recipient","UIM",3);
+        var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.InvoiceMergeWindow")!;
+        var window=(Window)Activator.CreateInstance(type,BindingFlags.Instance|BindingFlags.NonPublic,null,new object?[]{store,eventId,new long[]{first}},null)!;window.Show();Pump();
+        try
+        {
+            var boxes=Logical(window).OfType<CheckBox>().ToArray();var action=Logical(window).OfType<Button>().Single(button=>Equals(button.Content,"Объединить в одну накладную"));
+            Check(boxes.Length==3&&boxes.Count(box=>box.IsChecked==true)==1&&!action.IsEnabled,"merge requires two checked invoices and retains initial selection");
+            CheckBox Box(long id)=>boxes.Single(box=>box.Content?.ToString()?.StartsWith("№ "+id+" ·")==true);
+            Box(second).IsChecked=true;Pump();
+            var primary=Logical(window).OfType<ComboBox>().Single();
+            Check(action.IsEnabled&&primary.Items.Count==2&&primary.SelectedItem is not null,"merge accepts canonical matching parties and offers selected primary invoices");
+            Box(other).IsChecked=true;Pump();Check(!action.IsEnabled,"merge disables invoices with a different recipient");
+            Box(other).IsChecked=false;Box(first).IsChecked=false;Pump();
+            Check(!action.IsEnabled&&primary.Items.Count==1,"unchecking invoices updates primary choices and disables single-invoice merge");
+            Check(store.Issues(eventId).Count==3,"merge selection alone preserves all original issuances");
+        }
+        finally{window.Close();}
     }
     private static void CheckSelectionBorder(Tickets.App.HallView hall,SeatInfo seat)
     {
@@ -521,7 +647,19 @@ internal static class Program
         var sidebar=(Border)main.FindName("SelectionSidebar");var list=(ListBox)main.FindName("SelectedList");
         var actions=(System.Windows.Controls.Primitives.UniformGrid)main.FindName("SelectionActions");
         var options=(Expander)main.FindName("SelectionOptions");options.IsExpanded=false;Pump();
-        Check(actions.Columns==3&&actions.Children.OfType<Button>().All(button=>button.ActualWidth==72&&button.ActualHeight==72),"sidebar actions use compact square buttons in three columns");
+        Check(actions.Columns==3&&actions.Children.OfType<Button>().Count()==3&&actions.Children.OfType<Button>().All(button=>button.ActualWidth==72&&button.ActualHeight==72),"sidebar has three compact square actions in three columns");
+        Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
+        var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
+        Check(ReferenceEquals(print.Parent,extend.Parent)&&ReferenceEquals(issue.Parent,extend.Parent)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and invoice issuance share the upper extension toolbar");
+        foreach(var action in new[]{print,issue,extend})
+        {
+            var toolbar=(FrameworkElement)extend.Parent;var bounds=action.TransformToAncestor(toolbar).TransformBounds(new Rect(action.RenderSize));
+            Check(bounds.Left>=0&&bounds.Right<=toolbar.ActualWidth+1&&action.ActualWidth>0,"upper primary action fits without horizontal scrolling: "+action.Name);
+        }
+        var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
+        var dateBounds=date.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(date.RenderSize));
+        var titleBounds=title.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(title.RenderSize));
+        Check(title.FontSize==22&&date.FontSize==18&&!string.IsNullOrWhiteSpace(date.Text)&&dateBounds.Left>=titleBounds.Right&&Math.Abs(dateBounds.Top-titleBounds.Top)<10,"event date appears in 18-point text to the right of the 22-point title");
         Console.WriteLine($"Sidebar normal viewport: window {main.ActualWidth}x{main.ActualHeight}; sidebar {sidebar.ActualHeight}; list {list.ActualHeight}; explicit height {list.Height}");
         Check(double.IsNaN(list.Height)&&list.ActualHeight>=220,"selected places fill available height at 1420 by 880");
         var workspace=(Grid)main.FindName("Workspace");var sidebarBounds=sidebar.TransformToAncestor(workspace).TransformBounds(new Rect(sidebar.RenderSize));

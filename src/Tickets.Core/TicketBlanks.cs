@@ -28,6 +28,7 @@ public sealed record TicketBlank
     public double PageWidth { get; set; } = 210;
     public double PageHeight { get; set; } = 297;
     public string ScanPath { get; set; } = "";
+    public LegacyTicketLayout? Legacy { get; set; }
     public bool PrintBackground { get; set; }
     public List<TicketBlankPosition> Positions { get; set; } = [new()];
     public List<TicketBlankField> Fields { get; set; } = new[]{"event","venue","date","sector","row","seat","price","number"}
@@ -39,7 +40,9 @@ public sealed record TicketBlank
     {
         if(!Guid.TryParseExact(Id,"N",out _)||string.IsNullOrWhiteSpace(Name)||Name.Length>100)throw new TicketException("Укажите название бланка (до 100 символов).");
         static bool Range(double value,double min,double max)=>double.IsFinite(value)&&value>=min&&value<=max;
-        if(!Range(PageWidth,20,1200)||!Range(PageHeight,20,1200))throw new TicketException("Размер листа должен быть от 20 до 1200 мм.");
+        var maximum=Legacy is null?1200:2000;
+        if(!Range(PageWidth,20,maximum)||!Range(PageHeight,20,maximum))throw new TicketException($"Размер листа должен быть от 20 до {maximum} мм.");
+        if(Legacy is not null){Legacy.Validate();return;}
         if(Positions is null||Positions.Count is <1 or >100)throw new TicketException("Добавьте от 1 до 100 позиций билетов на листе.");
         foreach(var p in Positions)
             if(!Range(p.X,0,PageWidth)||!Range(p.Y,0,PageHeight)||!Range(p.Width,5,PageWidth)||!Range(p.Height,5,PageHeight)||p.X+p.Width>PageWidth+0.001||p.Y+p.Height>PageHeight+0.001)
@@ -63,7 +66,15 @@ public sealed partial class Store
 {
     private void EnsureTicketBlanks()
     {
-        using var c=Open();using var cmd=Command(c,"CREATE TABLE IF NOT EXISTS ticket_blank(id TEXT PRIMARY KEY,name TEXT NOT NULL,definition TEXT NOT NULL)");cmd.ExecuteNonQuery();
+        using var c=Open();using var cmd=Command(c,"CREATE TABLE IF NOT EXISTS ticket_blank(id TEXT PRIMARY KEY,name TEXT NOT NULL,definition TEXT NOT NULL); CREATE TABLE IF NOT EXISTS ticket_blank_legacy_seed(id TEXT PRIMARY KEY)");cmd.ExecuteNonQuery();
+        using var tx=c.BeginTransaction();
+        foreach(var original in LegacyTicketTemplates.All())
+        {
+            using var seed=Command(c,"INSERT OR IGNORE INTO ticket_blank_legacy_seed(id) VALUES($id)","$id",original.Id);seed.Transaction=tx;
+            if(seed.ExecuteNonQuery()==0)continue;
+            using var add=Command(c,"INSERT OR IGNORE INTO ticket_blank(id,name,definition) VALUES($id,$name,$definition)","$id",original.Id,"$name",original.Name,"$definition",JsonSerializer.Serialize(original));add.Transaction=tx;add.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
     public List<TicketBlank> TicketBlanks()
     {
@@ -74,6 +85,10 @@ public sealed partial class Store
     {
         blank.Validate();if(blank.ScanPath.Length>0&&!File.Exists(TicketBlankScanPath(blank.ScanPath)))throw new TicketException("Файл скана бланка не найден. Загрузите его заново.");
         EnsureTicketBlanks();using var c=Open();using var cmd=Command(c,"INSERT INTO ticket_blank(id,name,definition) VALUES($id,$name,$json) ON CONFLICT(id) DO UPDATE SET name=excluded.name,definition=excluded.definition","$id",blank.Id,"$name",blank.Name.Trim(),"$json",JsonSerializer.Serialize(blank));cmd.ExecuteNonQuery();
+    }
+    public string TicketVenueAddress(long eventId)
+    {
+        using var c=Open();using var cmd=Command(c,"SELECT v.address FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$id","$id",eventId);return cmd.ExecuteScalar() as string??"";
     }
     public void DeleteTicketBlank(string id)
     {EnsureTicketBlanks();using var c=Open();using var cmd=Command(c,"DELETE FROM ticket_blank WHERE id=$id","$id",id);cmd.ExecuteNonQuery();}

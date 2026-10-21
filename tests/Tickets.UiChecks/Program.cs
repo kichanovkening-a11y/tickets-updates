@@ -549,8 +549,7 @@ internal static class Program
             var theatre=boxes.Single(box=>box.Child is TextBlock text&&text.Text==originalInvoice.Venue);
             var theatreText=(TextBlock)theatre.Child;
             Check(Math.Abs(theatreText.FontSize-16)<.001&&theatreText.FontWeight==FontWeights.Bold&&theatreText.LayoutTransform is RotateTransform theatreRotation&&theatreRotation.Angle==-270,"Gift theatre preserves 12-point bold type and source 270-degree rotation");
-            const double mm=96.0/25.4;
-            Check(Math.Abs(FixedPage.GetLeft(theatre)-123.7026388888889*mm)<.001&&Math.Abs(FixedPage.GetTop(theatre)-21.1666666666667*mm)<.001,"Gift theatre retains source 6900-twip left plus 113-twip margin and 1200-twip top");
+            Check(Math.Abs(FixedPage.GetLeft(theatre)-(6900+113)*96.0/1440)<.001&&Math.Abs(FixedPage.GetTop(theatre)-1200*96.0/1440)<.001,"Gift theatre retains source 6900-twip left plus 113-twip margin and 1200-twip top");
             var invitation=boxes.Select(box=>(TextBlock)box.Child).Single(text=>text.Text=="Приглашаем Вас ");
             Check(Math.Abs(invitation.FontSize-20*96.0/72)<.001&&invitation.FontWeight==FontWeights.Bold,"Gift invitation retains its literal trailing space and 20-point bold type");
             var standard=Select("Стандарт1.rpt");

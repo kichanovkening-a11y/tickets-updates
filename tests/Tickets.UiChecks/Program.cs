@@ -586,7 +586,18 @@ internal static class Program
                 var second=row.Cells[1].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward)!.GetCharacterRect(LogicalDirection.Forward);
                 var last=row.Cells[0].ContentEnd.GetNextInsertionPosition(LogicalDirection.Backward)!.GetCharacterRect(LogicalDirection.Backward);
                 Console.WriteLine($"Document geometry: {caption}; row={Array.IndexOf(rows,row)}; text={new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim()}; first={first}; second={second}; last={last}; deltaX={second.Left-first.Left}; pageWidth={document.PageWidth}; pointerLayoutValid={row.Cells[0].ContentStart.HasValidLayout}; widths={string.Join(",",table.Columns.Cast<TableColumn>().Select(column=>column.Width.Value))}");
-                Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
+                var rightAligned=row.Cells[1].Blocks.OfType<Paragraph>().FirstOrDefault()?.TextAlignment==TextAlignment.Right;
+                if(rightAligned)
+                {
+                    Check(!first.IsEmpty&&!second.IsEmpty&&second.Left>=first.Left+table.Columns[0].Width.Value,caption+" right-aligned recipient starts inside the second column");
+                    var bounds=new List<Rect>();
+                    for(var pointer=row.Cells[1].ContentStart.GetNextInsertionPosition(LogicalDirection.Forward);pointer is not null&&pointer.CompareTo(row.Cells[1].ContentEnd)<0;pointer=pointer.GetNextInsertionPosition(LogicalDirection.Forward))
+                    {if(pointer.GetPointerContext(LogicalDirection.Forward)!=TextPointerContext.Text)continue;var rectangle=pointer.GetCharacterRect(LogicalDirection.Forward);if(!rectangle.IsEmpty)bounds.Add(rectangle);}
+                    var columnLeft=document.PagePadding.Left+table.Columns[0].Width.Value;var columnRight=columnLeft+table.Columns[1].Width.Value;
+                    Check(bounds.Count>0&&bounds.All(rectangle=>rectangle.Left>=columnLeft-1&&rectangle.Right<=columnRight+1),caption+" right-aligned recipient text stays inside its column and the page");
+                    if(caption=="invoice")Check(row.Cells.Count==2&&row.Cells[0].Blocks.OfType<Paragraph>().Single().TextAlignment==TextAlignment.Left&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal)&&new TextRange(row.Cells[1].ContentStart,row.Cells[1].ContentEnd).Text.StartsWith("Получил:",StringComparison.Ordinal),"invoice signatures explicitly align sender left and recipient right");
+                }
+                else Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
                 if(new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim().Length<=20)Check(!last.IsEmpty&&last.Bottom-first.Top<160,caption+" rendered short row does not expand into a giant empty cell");
             }
         }

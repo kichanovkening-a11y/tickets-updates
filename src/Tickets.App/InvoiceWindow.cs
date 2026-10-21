@@ -19,7 +19,7 @@ internal sealed class InvoiceWindow : EditorWindow
         var root=new Grid{Margin=new Thickness(10)};Content=root;
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(152)});
-        var header=new StackPanel();Grid.SetColumnSpan(header,2);root.Children.Add(header);
+        var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
             PersistSender();
             IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
@@ -33,7 +33,7 @@ internal sealed class InvoiceWindow : EditorWindow
         Button(header,"Обновить реквизиты документа",()=>Try(()=>{PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();savedStatus.Text="Реквизиты отправителя и получателя обновлены. "+savedStatus.Text;Refresh();}));
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
-        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRow(actionsScroll,1);root.Children.Add(actionsScroll);
+        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRowSpan(actionsScroll,2);root.Children.Add(actionsScroll);
         Square(actions,"Сохранить",()=>Try(()=>{PersistSender();SaveFiles();Refresh();}),Brushes.SteelBlue);
         Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
         Square(actions,"Открыть",()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.InvoiceDocumentPath(issueId),()=>Store.SaveInvoiceDocument(eventId,issueId))),Brushes.SlateGray);

@@ -643,6 +643,7 @@ internal static class Program
                 var actions=Logical(root).OfType<Button>().Where(button=>button.IsVisible&&new[]{"Сохранить","Распечатать","Открыть"}.Contains(button.Content?.ToString())).ToArray();
                 Check(actions.Length==3,"document exposes save print and open at "+scale+" layout scale");
                 var rectangles=actions.Select(button=>button.TransformToAncestor(root).TransformBounds(new Rect(button.RenderSize))).ToArray();
+                Console.WriteLine($"Document actions scale={scale}; root={root.ActualWidth}x{root.ActualHeight}; buttons={string.Join("; ",rectangles.Select(rect=>rect.ToString()))}");
                 Check(rectangles.All(rect=>rect.Width>0&&rect.Height>0&&rect.Left>=0&&rect.Right<=root.ActualWidth+1&&rect.Top>=0&&rect.Bottom<=root.ActualHeight+1),"document actions remain visible at "+scale+" layout scale");
                 for(var index=0;index<actions.Length;index++)
                 {

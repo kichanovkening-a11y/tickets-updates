@@ -1,0 +1,62 @@
+name: Extract original ticket layouts
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'legacy-ticket-templates/**'
+      - 'scripts/extract_legacy_ticket_layouts.ps1'
+      - '.github/workflows/extract-legacy.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  extract:
+    runs-on: windows-2022
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download and verify official SAP runtime on disposable build machine
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $ProgressPreference = 'SilentlyContinue'
+          $output = Join-Path $env:RUNNER_TEMP 'legacy-ticket-layouts'
+          New-Item -ItemType Directory -Force -Path $output | Out-Null
+          $installer = Join-Path $env:RUNNER_TEMP 'CR13SP33MSI64_0-80007712.MSI'
+          $url = 'https://origin-az.softwaredownloads.sap.com/public/file/0020000001649962022'
+          Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $installer
+          $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+          $signature = Get-AuthenticodeSignature -LiteralPath $installer
+          $publisher = if ($null -ne $signature.SignerCertificate) { $signature.SignerCertificate.Subject } else { '' }
+          @("URL: $url", "SHA256: $hash", "Signature: $($signature.Status)", "Publisher: $publisher") |
+            Tee-Object -FilePath (Join-Path $output 'runtime-provenance.txt')
+          if ($signature.Status -ne 'Valid' -or $publisher -notmatch '(?i)(^|,\s*)(CN|O)=SAP(?:\s|,|$)') {
+            throw 'Official runtime download does not have a valid SAP publisher signature. Refusing installation.'
+          }
+          $log = Join-Path $output 'runtime-install.log'
+          $arguments = @('/i', ('"' + $installer + '"'), '/qn', '/norestart', '/L*v', ('"' + $log + '"'))
+          $process = Start-Process -FilePath 'msiexec.exe' -ArgumentList $arguments -Wait -PassThru
+          if ($process.ExitCode -notin @(0,3010)) { throw "SAP runtime installation failed with exit $($process.ExitCode); see runtime-install.log." }
+      - name: Extract all eleven original reports without refreshing data
+        shell: powershell
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $output = Join-Path $env:RUNNER_TEMP 'legacy-ticket-layouts'
+          $gac = Join-Path $env:WINDIR 'Microsoft.NET\assembly\GAC_MSIL\CrystalDecisions.CrystalReports.Engine'
+          $engines = @(Get-ChildItem -LiteralPath $gac -Recurse -Filter 'CrystalDecisions.CrystalReports.Engine.dll' -File |
+            Where-Object { [Diagnostics.FileVersionInfo]::GetVersionInfo($_.FullName).FileMajorPart -eq 13 } |
+            Sort-Object FullName -Descending)
+          if ($engines.Count -eq 0) { throw 'Installed Crystal 13 engine not found in .NET Framework GAC. Portable app remains unchanged.' }
+          & ./scripts/extract_legacy_ticket_layouts.ps1 -EngineAssembly $engines[0].FullName -OutputDirectory $output
+          $layouts = @(Get-ChildItem -LiteralPath $output -Filter '*.layout.json' -File)
+          if ($layouts.Count -ne 11) { throw "Expected 11 extracted layouts, found $($layouts.Count)." }
+      - name: Retain extracted source geometry and diagnostic logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: legacy-ticket-layouts
+          path: ${{ runner.temp }}/legacy-ticket-layouts
+          if-no-files-found: warn
+          retention-days: 14

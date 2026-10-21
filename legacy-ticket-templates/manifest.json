@@ -1,0 +1,74 @@
+{
+  "schemaVersion": 1,
+  "source": "Прога билеты/прога1.zip — прога1/Template",
+  "originalEngineAssemblyVersion": "10.5.3700.0",
+  "originalEngineFileVersion": "10.5.0.1943",
+  "templates": [
+    {
+      "file": "0308.rpt",
+      "bytes": 8192,
+      "sha256": "9793609258685cfadb6ab59955a884b8db24aecc2427d9cc83ce3213b8365fb5",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "030879.rpt",
+      "bytes": 9728,
+      "sha256": "89db4628e62a77f7d309d05bb0f04ee23c0e7d8c2d3e7f8c2c749408ae501ecc",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "250416.rpt",
+      "bytes": 46080,
+      "sha256": "58fa3ffabacf73aef4f8ce7dab3e16fa5cf35d7d79adc3ca45ddb036a83ba1ab",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "CrystalReport1.rpt",
+      "bytes": 16384,
+      "sha256": "f4787a571b5c0c4e04449523569cf7f6d8818e4e005a182d6a53f98e0a45b1e6",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "CrystalReport2.rpt",
+      "bytes": 16384,
+      "sha256": "1d1439fc6954447d4cc68499954e5c778439bca7daf0f21a6fdefd4c9ea84fbb",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "Gift.rpt",
+      "bytes": 9216,
+      "sha256": "77ab080ed8ab8ed15555f83d42767183adc590d8f4d65f0cf0695aaf6500aab9",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "Gift2.rpt",
+      "bytes": 9216,
+      "sha256": "779113a834531c886159f528ae9b1a8be40854387efe86b5ebbf51951c3466be",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "podarok2.rpt",
+      "bytes": 8704,
+      "sha256": "bf3e599891e970e6dccc9d954eb419d077cbb481ac3b846d11a92ec77adb1a96",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "Новый стандартный.rpt",
+      "bytes": 16384,
+      "sha256": "51bc98b8e6c59c552caa866a9bf426e4b8ce4a01c5dec74b1fd63f3466002032",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "Стандарт1 - копия.rpt",
+      "bytes": 8192,
+      "sha256": "ada6c2487055e0391946bc44ecde0ac3a2c2dcc65d4748b229e4ba48dad0ff9f",
+      "status": "awaiting-crystal-layout-extraction"
+    },
+    {
+      "file": "Стандарт1.rpt",
+      "bytes": 8192,
+      "sha256": "bf8376f1f4272ad799804b27c65c2d0f16814136b97545b7f71a27b070abcd23",
+      "status": "awaiting-crystal-layout-extraction"
+    }
+  ]
+}

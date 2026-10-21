@@ -277,7 +277,6 @@ internal static class Program
                 ticketPrintType.GetProperty("Printed")!.GetSetMethod(true)!.Invoke(previewWindow,new object[]{true});
             }catch(Exception ex){printedResultError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(printedResultError is not null)throw printedResultError;
             Check(hall.Selected.Count==0,"successful print result clears main selection");
-            CheckInvoiceMergeSelection(store);
             var extensionType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.InvoiceExtensionWindow")!;
             var extension=(Window)Activator.CreateInstance(extensionType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object[]{store,eventId,originalInvoice.Id},null)!;extension.Show();Pump();
             var extensionHall=Logical(extension).OfType<Tickets.App.HallView>().Single();var extendButton=Logical(extension).OfType<Button>().Single(b=>Equals(b.Content,"Дополнить накладную"));
@@ -423,6 +422,7 @@ internal static class Program
             ((TextBox)main.FindName("SearchBox")).Text="no-such-performance-unique";Pump();
             Check(((Grid)main.FindName("Workspace")).Visibility==Visibility.Collapsed&&!((Button)main.FindName("IssueButton")).IsEnabled,"empty search clears previous show and issuance context");
             main.SeparateWindows=false;
+            CheckInvoiceMergeSelection(store);
             var hostType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EditorWindow")!;
             var guardEditor=(Window)Activator.CreateInstance(hostType,BindingFlags.Instance|BindingFlags.NonPublic,null,new object[]{store,"Проверка закрытия",650d,450d},null)!;guardEditor.Content=new StackPanel();
             var refuseClose=true;guardEditor.Closing+=(_,e)=>e.Cancel=refuseClose;

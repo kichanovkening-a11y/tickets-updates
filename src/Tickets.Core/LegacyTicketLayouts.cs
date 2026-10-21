@@ -60,7 +60,7 @@ public sealed record LegacyTicketLayout
             if(new[]{e.X,e.Y,e.Width,e.Height}.Any(x=>!Finite(x))||e.Width<=0||e.Height<=0||!double.IsFinite(e.FontSize)||e.FontSize is <1 or >200||e.Rotation is not (0 or 90 or 180 or 270)||(!string.IsNullOrEmpty(e.Binding)&&!LegacyTicketTemplates.Bindings.Contains(e.Binding)))throw new TicketException("Повреждено поле исходного макета.");
     }
 }
-public sealed record LegacyTicketPlacement(LegacyTicketElement Element,double X,double Y,int TicketIndex,int PageNumber);
+public sealed record LegacyTicketPlacement(LegacyTicketElement Element,double X,double Y,int TicketIndex,int PageNumber,LegacyTicketElement? SourceElement=null,double SourceScale=1,bool SourceQuarterTurn=false);
 public sealed record LegacyTicketPage(IReadOnlyList<LegacyTicketPlacement> Elements);
 
 public static class LegacyTicketTemplates

@@ -40,6 +40,7 @@ Hall012Checks.Register(Test);
 Pricing012Checks.Register(Test);
 OrgMerge012Checks.Register(Test);
 Legacy012Checks.Register(Test);
+FourUp015Checks.Register(Test);
 RecipientCreationChecks.Register(Test);
 ArchivePricingChecks.Register(Test);
 SaleStateChecks.Register(Test);

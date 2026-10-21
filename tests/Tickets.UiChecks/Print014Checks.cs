@@ -10,7 +10,8 @@ internal static class Print014Checks
     {
         var show=store.Events().First(e=>store.Seats(e.Id).Any(s=>s.Available));
         var seat=store.Seats(show.Id).First(s=>s.Available);
-        var blank=new TicketBlank{Name="UI014 exact positions",Positions=[new(){X=10,Y=10},new(){X=10,Y=110}]};
+        var blank=TicketBlankEditing.CreateA4();blank.Name="UI014 exact positions";
+        for(var index=0;index<4;index++)blank.Positions[index].Y=10+index*70;
         blank.Positions[1].Fields=blank.Fields.Select(f=>f with{}).ToList();
         blank.Positions[1].Fields![0].X=17;blank.Positions[1].Fields![0].FontFamily="Courier New";blank.Positions[1].Fields![0].Rotation=90;
         store.SaveTicketBlank(blank);
@@ -23,11 +24,11 @@ internal static class Print014Checks
         invoice=invoice with{Tickets=Enumerable.Repeat(invoice.Tickets[0],3).ToArray()};
         var build=type.GetMethod("BuildWithSources",BindingFlags.Instance|BindingFlags.NonPublic)!;
         var document=(FixedDocument)build.Invoke(window,new object?[]{invoice,794d,1123d,null,false})!;
-        Check(document.Pages.Count==2,"Chosen two-position blank paginates three tickets onto two actual pages");
+        Check(document.Pages.Count==1,"Chosen four-position blank places three real tickets on one actual page");
         var first=document.Pages[0].Child!;var visuals=first.Children.OfType<Viewbox>().ToArray();
-        Check(visuals.Length==16,"Preview contains both complete ticket placements");
+        Check(visuals.Length==24,"Preview contains exactly three complete ticket placements without a fabricated fourth ticket");
         Check(Math.Abs(FixedPage.GetLeft(visuals[0])-15*96/25.4)<.01,"First placement retains calibrated physical coordinates");
-        Check(Math.Abs(FixedPage.GetLeft(visuals[8])-27*96/25.4)<.01&&Math.Abs(FixedPage.GetTop(visuals[8])-113*96/25.4)<.01,"Independent second-position fields appear at selected coordinates");
+        Check(Math.Abs(FixedPage.GetLeft(visuals[8])-27*96/25.4)<.01&&Math.Abs(FixedPage.GetTop(visuals[8])-83*96/25.4)<.01,"Independent second-position fields appear at selected coordinates");
         var label=(TextBlock)visuals[8].Child;
         Check(label.FontFamily.Source=="Courier New"&&label.LayoutTransform is RotateTransform rotation&&rotation.Angle==-90,"Independent field typography and rotation reach preview");
         var standard=(FixedDocument)type.GetMethod("BuildDocument",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,new object[]{invoice,794d,1123d})!;

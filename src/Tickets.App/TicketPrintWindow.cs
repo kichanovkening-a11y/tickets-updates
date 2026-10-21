@@ -194,9 +194,9 @@ internal sealed class TicketPrintWindow:EditorWindow
         if(field.Rotation!=0)label.LayoutTransform=new RotateTransform(-field.Rotation);
         return new Viewbox{Child=label,Width=field.Width*scale,Height=field.Height*scale,Stretch=Stretch.Uniform,StretchDirection=StretchDirection.DownOnly,HorizontalAlignment=HorizontalAlignment.Left};
     }
-    internal static string LegacySample(string binding)
+    internal static string LegacySample(string binding,int ticketNumber=1)
     {
-        var ticket=new TicketInfo(1,1,"Партер","5","12","Получатель","АБ",1,1500,"2026-10-21T12:00:00Z",null);
+        var ticket=new TicketInfo(1,1,"Партер","5","12","Получатель","АБ",ticketNumber,1500,"2026-10-21T12:00:00Z",null);
         var invoice=new InvoiceInfo(1,1,"Название мероприятия","Название площадки","21.10.2026 19:00","Получатель","2026-10-21T12:00:00Z",[ticket]);
         return LegacyTicketTemplates.Value(binding,invoice,ticket,"Адрес площадки",new DateTime(2026,10,21),1);
     }
@@ -230,7 +230,7 @@ internal sealed class TicketPrintWindow:EditorWindow
         }
         var originalLayout=blank.Legacy!;
         var layout=originalLayout with{ContentWidth=mediaWidth/DipsPerMm-originalLayout.LeftMargin-originalLayout.RightMargin,ContentHeight=mediaHeight/DipsPerMm-originalLayout.TopMargin-originalLayout.BottomMargin};
-        foreach(var layoutPage in LegacyTicketTemplates.Paginate(layout,invoice.Tickets.Count))
+        foreach(var layoutPage in blank.FourUpA4?FourUpTicketLayouts.Paginate(blank,invoice.Tickets.Count):LegacyTicketTemplates.Paginate(layout,invoice.Tickets.Count))
         {
             var page=new FixedPage{Width=mediaWidth,Height=mediaHeight,Background=Brushes.White};
             if(background is not null)
@@ -259,8 +259,8 @@ internal sealed class TicketPrintWindow:EditorWindow
         if(!double.IsFinite(pageWidth)||!double.IsFinite(pageHeight)||pageWidth<160||pageHeight<180)
             throw new TicketException("Печатная область принтера слишком мала для билета.");
         const double margin=18,gap=12;
-        var columns=pageWidth>=600?2:1;
-        var rows=Math.Max(1,(int)((pageHeight-margin*2+gap)/240));
+        var columns=1;
+        var rows=4;
         var width=(pageWidth-margin*2-gap*(columns-1))/columns;
         var height=(pageHeight-margin*2-gap*(rows-1))/rows;
         var perPage=columns*rows;var document=new FixedDocument();

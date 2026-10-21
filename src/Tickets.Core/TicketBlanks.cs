@@ -33,6 +33,7 @@ public sealed record TicketBlank
     public string ScanPath { get; set; } = "";
     public LegacyTicketLayout? Legacy { get; set; }
     public bool PrintBackground { get; set; }
+    public bool FourUpA4 { get; set; }
     public bool IsEditableCopy { get; set; }
     public List<TicketBlankPosition> Positions { get; set; } = [new()];
     public List<TicketBlankField> Fields { get; set; } = new[]{"event","venue","date","sector","row","seat","price","number"}
@@ -47,7 +48,8 @@ public sealed record TicketBlank
         var maximum=Legacy is null?1200:2000;
         if(!Range(PageWidth,20,maximum)||!Range(PageHeight,20,maximum))throw new TicketException($"Размер листа должен быть от 20 до {maximum} мм.");
         if(PrintBackground&&string.IsNullOrEmpty(ScanPath))throw new TicketException("Для печати фона сначала загрузите скан.");
-        if(Legacy is not null){Legacy.Validate();return;}
+        if(FourUpA4&&(Math.Abs(PageWidth-210)>.001||Math.Abs(PageHeight-297)>.001||Positions is null||Positions.Count!=4))throw new TicketException("На листе А4 должно быть четыре билета.");
+        if(Legacy is not null&&!FourUpA4){Legacy.Validate();return;}
         if(Positions is null||Positions.Count is <1 or >100)throw new TicketException("Добавьте от 1 до 100 позиций билетов на листе.");
         foreach(var p in Positions)
             if(!Range(p.X,0,PageWidth)||!Range(p.Y,0,PageHeight)||!Range(p.Width,5,PageWidth)||!Range(p.Height,5,PageHeight)||p.X+p.Width>PageWidth+0.001||p.Y+p.Height>PageHeight+0.001)
@@ -58,6 +60,7 @@ public sealed record TicketBlank
             if(a.X<b.X+b.Width-0.001&&b.X<a.X+a.Width-0.001&&a.Y<b.Y+b.Height-0.001&&b.Y<a.Y+a.Height-0.001)
                 throw new TicketException("Позиции билетов на листе не должны перекрываться.");
         }
+        if(Legacy is not null){Legacy.Validate();return;}
         foreach(var activeFields in Positions.Select(p=>p.Fields??Fields))
         {
         if(activeFields is null||activeFields.Count!=FieldKeys.Length||FieldKeys.Any(k=>activeFields.Count(f=>f.Key==k)!=1))throw new TicketException("Бланк должен содержать все восемь полей билета без повторений.");
@@ -71,6 +74,7 @@ public sealed record TicketBlank
 
 public sealed partial class Store
 {
+    private bool fourUpBlanksChecked;
     private void EnsureTicketBlanks()
     {
         using var c=Open();using var cmd=Command(c,"CREATE TABLE IF NOT EXISTS ticket_blank(id TEXT PRIMARY KEY,name TEXT NOT NULL,definition TEXT NOT NULL); CREATE TABLE IF NOT EXISTS ticket_blank_legacy_seed(id TEXT PRIMARY KEY)");cmd.ExecuteNonQuery();
@@ -82,6 +86,15 @@ public sealed partial class Store
             using var add=Command(c,"INSERT OR IGNORE INTO ticket_blank(id,name,definition) VALUES($id,$name,$definition)","$id",original.Id,"$name",original.Name,"$definition",JsonSerializer.Serialize(original));add.Transaction=tx;add.ExecuteNonQuery();
         }
         tx.Commit();
+        if(!fourUpBlanksChecked)
+        {
+            var updates=new List<TicketBlank>();
+            using(var read=Command(c,"SELECT definition FROM ticket_blank"))using(var rows=read.ExecuteReader())
+                while(rows.Read()){var blank=JsonSerializer.Deserialize<TicketBlank>(rows.GetString(0))!;if(!blank.FourUpA4){TicketBlankEditing.EnsureFourUp(blank);blank.Validate();updates.Add(blank);}}
+            using var migration=c.BeginTransaction();
+            foreach(var blank in updates){using var update=Command(c,"UPDATE ticket_blank SET definition=$json WHERE id=$id","$json",JsonSerializer.Serialize(blank),"$id",blank.Id);update.Transaction=migration;update.ExecuteNonQuery();}
+            migration.Commit();fourUpBlanksChecked=true;
+        }
     }
     public List<TicketBlank> TicketBlanks()
     {
@@ -90,7 +103,7 @@ public sealed partial class Store
     }
     public void SaveTicketBlank(TicketBlank blank)
     {
-        blank.Validate();if(blank.ScanPath.Length>0&&!File.Exists(TicketBlankScanPath(blank.ScanPath)))throw new TicketException("Файл скана бланка не найден. Загрузите его заново.");
+        blank.Validate();TicketBlankEditing.EnsureFourUp(blank);blank.Validate();if(blank.ScanPath.Length>0&&!File.Exists(TicketBlankScanPath(blank.ScanPath)))throw new TicketException("Файл скана бланка не найден. Загрузите его заново.");
         EnsureTicketBlanks();using var c=Open();using var cmd=Command(c,"INSERT INTO ticket_blank(id,name,definition) VALUES($id,$name,$json) ON CONFLICT(id) DO UPDATE SET name=excluded.name,definition=excluded.definition","$id",blank.Id,"$name",blank.Name.Trim(),"$json",JsonSerializer.Serialize(blank));cmd.ExecuteNonQuery();
     }
     public string TicketVenueAddress(long eventId)

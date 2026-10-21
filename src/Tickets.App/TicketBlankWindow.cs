@@ -44,7 +44,7 @@ internal sealed class TicketBlankWindow:EditorWindow
         delete.Click+=(_,_)=>Try(()=>{if(templates.SelectedItem is not TicketBlank b)return;if(MessageBox.Show(DialogOwner,"Удалить бланк «"+b.Name+"»?","Удаление бланка",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;Store.DeleteTicketBlank(b.Id);Refresh();Load(TicketBlankEditing.CreateA4());});
         form.Children.Add(notice);form.Children.Add(settings);
         AddLabel(settings,"Название шаблона");settings.Children.Add(name);
-        var dimensions=new WrapPanel();settings.Children.Add(dimensions);AddLabel(dimensions,"Лист, мм: ширина");width.Width=65;dimensions.Children.Add(width);AddLabel(dimensions," высота");height.Width=65;dimensions.Children.Add(height);
+        var dimensions=new WrapPanel();settings.Children.Add(dimensions);AddLabel(dimensions,"Лист, мм: ширина");width.Width=65;width.IsReadOnly=true;dimensions.Children.Add(width);AddLabel(dimensions," высота");height.Width=65;height.IsReadOnly=true;dimensions.Children.Add(height);
         Button(settings,"Загрузить скан PNG / JPEG",()=>Try(()=>{var dialog=new OpenFileDialog{Filter="Скан бланка|*.png;*.jpg;*.jpeg"};if(dialog.ShowDialog(DialogOwner)==true){blank.ScanPath=Store.ImportTicketBlankScan(dialog.FileName);Render();}}));
         Button(settings,"Убрать скан",()=>{blank.ScanPath="";printScan.IsChecked=false;Render();});settings.Children.Add(printScan);
         AddLabel(settings,"Билет / секция на листе");settings.Children.Add(blocks);blocks.SelectionChanged+=(_,_)=>{if(!loading)SelectBlock();};
@@ -78,6 +78,7 @@ internal sealed class TicketBlankWindow:EditorWindow
     {
         loading=true;var model=(blocks.SelectedItem as Choice)?.Value;fieldChoice.ItemsSource=model switch
         {
+            TicketBlankPosition p when blank.Legacy is {} layout=>layout.Bands.Where(b=>!b.Suppressed).SelectMany(b=>b.Elements).Where(f=>!f.Suppressed).Select(f=>new Choice(f.Name+" · "+(f.Binding.Length>0?f.Binding:f.Text),f)).ToArray(),
             TicketBlankPosition p=>TicketBlankEditing.FieldsFor(blank,p).Select(f=>new Choice(f.DisplayName,f)).ToArray(),
             LegacyTicketBand b=>b.Elements.Select(f=>new Choice(f.Name+" · "+(f.Binding.Length>0?f.Binding:f.Text),f)).ToArray(),
             _=>Array.Empty<Choice>()
@@ -98,10 +99,11 @@ internal sealed class TicketBlankWindow:EditorWindow
     {
         // Work on detached data so unsaved gestures never alter a saved selector item.
         blank=System.Text.Json.JsonSerializer.Deserialize<TicketBlank>(System.Text.Json.JsonSerializer.Serialize(selected))!;
+        TicketBlankEditing.EnsureFourUp(blank);
         if(blank.Legacy is null)foreach(var p in blank.Positions)p.Fields??=blank.Fields.Select(f=>f with{}).ToList();
-        settings.IsEnabled=Editable;notice.Text=blank.Legacy is {} legacy?"Исходный RPT: "+legacy.SourceFile+". Координаты, шрифты, повороты и секции сохранены. "+(Editable?"Редактируемая копия.":"Для изменений создайте копию."):"А4: 210 × 297 мм. Четыре билета можно настраивать отдельно.";
+        settings.IsEnabled=Editable;notice.Text="А4 · 210 × 297 мм · 4 билета. "+(blank.Legacy is {} legacy?"Исходный RPT: "+legacy.SourceFile+". Координаты, шрифты, повороты и секции сохранены. "+(Editable?"Редактируемая копия.":"Для изменений создайте копию."):"А4: 210 × 297 мм. Четыре билета можно настраивать отдельно.");
         name.Text=blank.Name;width.Text=blank.PageWidth.ToString(CultureInfo.InvariantCulture);height.Text=blank.PageHeight.ToString(CultureInfo.InvariantCulture);printScan.IsChecked=blank.PrintBackground;
-        loading=true;blocks.ItemsSource=blank.Legacy is {} l?l.Bands.Select(b=>new Choice(b.Name+" ("+b.Kind+")",b)).ToArray():blank.Positions.Select((p,i)=>new Choice("Билет "+(i+1),p)).ToArray();blocks.SelectedIndex=0;loading=false;SelectBlock();
+        loading=true;blocks.ItemsSource=blank.Positions.Select((p,i)=>new Choice("Билет "+(i+1),p)).ToArray();blocks.SelectedIndex=0;loading=false;SelectBlock();
     }
     private void Select(object block,object field)
     {
@@ -126,16 +128,24 @@ internal sealed class TicketBlankWindow:EditorWindow
         if(blank.ScanPath.Length>0){var bitmap=new BitmapImage(new Uri(Store.TicketBlankScanPath(blank.ScanPath)));paper.Children.Add(new Image{Source=bitmap,Width=paper.Width,Height=paper.Height,Stretch=Stretch.Fill,Opacity=.6,IsHitTestVisible=false});}
         if(blank.Legacy is {} legacy)
         {
-            var physicalLayout=legacy with{ContentWidth=blank.PageWidth-legacy.LeftMargin-legacy.RightMargin,ContentHeight=blank.PageHeight-legacy.TopMargin-legacy.BottomMargin};
-            var placements=LegacyTicketTemplates.Paginate(physicalLayout,1)[0].Elements;
-            foreach(var band in legacy.Bands.Where(b=>!b.Suppressed))
+            var placements=FourUpTicketLayouts.Paginate(blank,4)[0].Elements;
+            for(var index=0;index<4;index++)
             {
-                var items=placements.Where(p=>band.Elements.Any(e=>ReferenceEquals(e,p.Element))).ToArray();if(items.Length==0)continue;
-                var x=items.Min(p=>p.X);var y=items.Min(p=>p.Y);var right=items.Max(p=>p.X+p.Element.Width);var bottom=items.Max(p=>p.Y+p.Element.Height);
-                Outline(band,x,y,right-x,bottom-y,(dx,dy)=>{dx=Math.Max(dx,-band.Elements.Min(e=>e.X));dy=Math.Max(dy,-band.Elements.Min(e=>e.Y));foreach(var e in band.Elements){e.X+=dx;e.Y+=dy;}});
-                foreach(var placement in items)
+                var position=blank.Positions[index];
+                Outline(position,position.X,position.Y,position.Width,position.Height,(dx,dy)=>TicketBlankEditing.MovePosition(blank,position,position.X+dx,position.Y+dy));
+                foreach(var placement in placements.Where(p=>p.TicketIndex==index))
                 {
-                    var f=placement.Element;var text=f.Binding.Length==0?f.Text:TicketPrintWindow.LegacySample(f.Binding);var visual=TicketPrintWindow.LegacyElementVisual(f,text,Scale);Canvas.SetLeft(visual,placement.X*Scale);Canvas.SetTop(visual,placement.Y*Scale);paper.Children.Add(visual);Drag(visual,band,f,(dx,dy)=>{f.X=Math.Max(0,f.X+dx);f.Y=Math.Max(0,f.Y+dy);});
+                    var f=placement.Element;var source=placement.SourceElement??f;
+                    var text=f.Binding.Length==0?f.Text:TicketPrintWindow.LegacySample(f.Binding,index+1);
+                    var visual=TicketPrintWindow.LegacyElementVisual(f,text,Scale);
+                    Canvas.SetLeft(visual,placement.X*Scale);Canvas.SetTop(visual,placement.Y*Scale);paper.Children.Add(visual);
+                    Drag(visual,position,source,(dx,dy)=>
+                    {
+                        var scale=placement.SourceScale;
+                        var sourceDx=placement.SourceQuarterTurn?-dy/scale:dx/scale;
+                        var sourceDy=placement.SourceQuarterTurn?dx/scale:dy/scale;
+                        source.X=Math.Max(0,source.X+sourceDx);source.Y=Math.Max(0,source.Y+sourceDy);
+                    });
                 }
             }
             return;

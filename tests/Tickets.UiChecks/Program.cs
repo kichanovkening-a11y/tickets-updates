@@ -269,6 +269,7 @@ internal static class Program
             var originalInvoice=store.Invoice(eventId,store.Issues(eventId).Single().Id);
             CheckTicketBlankPreview(store,eventId,originalInvoice);
             Print014Checks.Run(store);
+            FourUp015Checks.Run(store);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
             Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
             Exception? mixedPreviewError=null;
@@ -304,7 +305,7 @@ internal static class Program
             var many=sample with{Tickets=Enumerable.Range(0,25).Select(i=>sample.Tickets[0] with{Number=i+1,Seat=(i+1).ToString()}).ToArray()};
             var printedDocument=(FixedDocument)ticketPrintType.GetMethod("BuildDocument",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,new object[]{many,794d,1123d})!;
             printedDocument.DocumentPaginator.ComputePageCount();
-            Check(printedDocument.Pages.Count==4&&printedDocument.DocumentPaginator.GetPage(0).Visual is not null,"ticket cards paginate without dropping tickets");
+            Check(printedDocument.Pages.Count==7&&printedDocument.DocumentPaginator.GetPage(0).Visual is not null,"ticket cards paginate without dropping tickets");
             var cardCount=printedDocument.Pages.Sum(p=>p.Child.Children.OfType<Border>().Count());Check(cardCount==25,"each selected ticket has its own printable card");
             var raster=new System.Windows.Media.Imaging.RenderTargetBitmap(794,1123,96,96,PixelFormats.Pbgra32);raster.Render(printedDocument.DocumentPaginator.GetPage(0).Visual);
             var archivedVenue=store.CreateHall("UI archived venue","",new[]{new DraftSeat{Number="1"},new DraftSeat{Number="2",X=26}});
@@ -571,7 +572,7 @@ internal static class Program
         finally{editor.Close();}
         var blank=new TicketBlank{Name="UI custom blank",PageWidth=210,PageHeight=297};store.SaveTicketBlank(blank);
         var saved=store.TicketBlanks().Single(item=>item.Id==blank.Id);
-        Check(saved.Positions.Count==1&&saved.PageWidth==210&&saved.PageHeight==297,"custom one-ticket A4 blank persists for print preview");
+        Check(saved.Positions.Count==4&&saved.PageWidth==210&&saved.PageHeight==297,"custom one-ticket A4 blank is normalized to four positions for print preview");
         var printType=appAssembly.GetType("Tickets.App.TicketPrintWindow")!;
         var historyCount=store.History(eventId).Count;var issueCount=store.Issues(eventId).Count;
         var preview=(Window)Activator.CreateInstance(printType,new object[]{store,eventId,originalInvoice.Tickets.Select(ticket=>ticket.SeatId).ToArray()})!;preview.Show();Pump();
@@ -581,11 +582,11 @@ internal static class Program
             Check(choice.IsVisible&&choice.SelectedIndex==0&&Logical(preview).OfType<DocumentPageView>().Count()==1,"ticket preview opens with the standard blank and all three tickets on one page");
             choice.SelectedItem=choice.Items.OfType<TicketBlank>().Single(item=>item.Id==saved.Id);Pump();
             var pages=Logical(preview).OfType<DocumentPageView>().ToArray();
-            Check(choice.SelectedItem is TicketBlank selected&&selected.Id==saved.Id&&pages.Length==3,"selecting a saved one-position blank immediately rebuilds three preview pages");
+            Check(choice.SelectedItem is TicketBlank selected&&selected.Id==saved.Id&&pages.Length==1,"selecting a normalized saved blank places all three real tickets on one preview page");
             var document=(FixedDocument)pages[0].DocumentPaginator.Source;
             var firstPage=document.Pages[0].Child;var firstField=firstPage.Children.OfType<Viewbox>().First();const double mm=96.0/25.4;
             Check(Math.Abs(firstPage.Width-210*mm)<.001&&Math.Abs(firstPage.Height-297*mm)<.001,"custom preview uses the physical A4 page size");
-            Check(Math.Abs(FixedPage.GetLeft(firstField)-15*mm)<.001&&Math.Abs(FixedPage.GetTop(firstField)-13*mm)<.001,"custom ticket field stays at calibrated position plus field offset in millimeters");
+            Check(Math.Abs(FixedPage.GetLeft(firstField)-5*mm)<.001&&Math.Abs(FixedPage.GetTop(firstField)-3*mm)<.001,"normalized custom ticket keeps its unscaled source field offsets in millimeters");
             Check(firstField.Child is TextBlock title&&title.Text==originalInvoice.Title,"custom ticket preview renders the original invoice event");
         }
         finally{preview.Close();}
@@ -611,23 +612,24 @@ internal static class Program
                 var document=(FixedDocument)views[0].DocumentPaginator.Source;document.DocumentPaginator.ComputePageCount();
                 return document.Pages.Single().Child;
             }
-            var gift=Select("Gift.rpt");var boxes=gift.Children.OfType<Border>().ToArray();
-            Check(boxes.Length==7&&!Visual(gift).OfType<Viewbox>().Any(),"original Gift preview renders its seven source text boxes without scaling glyphs");
-            var theatre=boxes.Single(box=>box.Child is TextBlock text&&text.Text==originalInvoice.Venue);
-            var theatreText=(TextBlock)theatre.Child;
-            Check(Math.Abs(theatreText.FontSize-16)<.001&&theatreText.FontWeight==FontWeights.Bold&&theatreText.LayoutTransform is RotateTransform theatreRotation&&theatreRotation.Angle==-270,"Gift theatre preserves 12-point bold type and source 270-degree rotation");
-            Check(Math.Abs(FixedPage.GetLeft(theatre)-(6900+113)*96.0/1440)<.001&&Math.Abs(FixedPage.GetTop(theatre)-1200*96.0/1440)<.001,"Gift theatre retains source 6900-twip left plus 113-twip margin and 1200-twip top");
-            var invitation=boxes.Select(box=>(TextBlock)box.Child).Single(text=>text.Text=="Приглашаем Вас ");
-            Check(Math.Abs(invitation.FontSize-20*96.0/72)<.001&&invitation.FontWeight==FontWeights.Bold,"Gift invitation retains its literal trailing space and 20-point bold type");
-            var standard=Select("Стандарт1.rpt");
-            Check(!Visual(standard).OfType<Viewbox>().Any(),"original standard preview keeps source glyph sizes without fit scaling");
-            var labels=standard.Children.OfType<Border>().Select(box=>(TextBlock)box.Child).ToArray();
+            void CheckLegacyField(string sourceFile,string binding,string expectedText)
+            {
+                var page=Select(sourceFile);
+                var blank=choice.Items.OfType<TicketBlank>().Single(item=>item.Legacy?.SourceFile==sourceFile);
+                var placement=FourUpTicketLayouts.Paginate(blank,1).Single().Elements.Single(item=>item.Element.Binding==binding);
+                var visual=page.Children.OfType<Border>().Single(box=>box.Child is TextBlock text&&text.Text==expectedText);
+                var label=(TextBlock)visual.Child;var field=placement.Element;const double mm=96.0/25.4;
+                Check(Math.Abs(label.FontSize-field.FontSize*96/72)<.001&&label.FontWeight==(field.Bold?FontWeights.Bold:FontWeights.Normal),sourceFile+" keeps the fitted field typography");
+                Check(field.Rotation==0?label.LayoutTransform is not RotateTransform:label.LayoutTransform is RotateTransform rotation&&rotation.Angle==-field.Rotation,sourceFile+" applies the fitted field rotation");
+                Check(Math.Abs(FixedPage.GetLeft(visual)-placement.X*mm)<.001&&Math.Abs(FixedPage.GetTop(visual)-placement.Y*mm)<.001&&Math.Abs(visual.Width-field.Width*mm)<.001&&Math.Abs(visual.Height-field.Height*mm)<.001,sourceFile+" renders the physical four-ticket placement geometry");
+                Check(!Visual(page).OfType<Viewbox>().Any(),sourceFile+" renders fitted text boxes directly");
+            }
+            CheckLegacyField("Gift.rpt","theatre_name",originalInvoice.Venue);
             var showDate=DateTime.Parse(originalInvoice.EventDate,System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
             var tearOff=ticket.Series+" № "+ticket.Number.ToString("D6",System.Globalization.CultureInfo.InvariantCulture)+" Цена: "+ticket.Amount.ToString(System.Globalization.CultureInfo.InvariantCulture)+"р. "+showDate.ToString("dd.MM.yyyy HH:mm",System.Globalization.CultureInfo.GetCultureInfo("ru-RU"));
-            var small=labels.Single(text=>text.Text==tearOff);
-            Check(Math.Abs(small.FontSize-7*96.0/72)<.001&&small.LayoutTransform is RotateTransform smallRotation&&smallRotation.Angle==-90,"standard tear-off uses recovered number price date binding at 7 points and 90-degree rotation");
-            var title=labels.Single(text=>text.Text==originalInvoice.Title.Trim().ToUpper(System.Globalization.CultureInfo.GetCultureInfo("ru-RU")));
-            Check(Math.Abs(title.FontSize-20)<.001&&title.FontWeight==FontWeights.Bold,"standard event title retains original 15-point bold type");
+            CheckLegacyField("Стандарт1.rpt","small_info1",tearOff);
+            CheckLegacyField("Стандарт1.rpt","perf_name",originalInvoice.Title.Trim().ToUpper(System.Globalization.CultureInfo.GetCultureInfo("ru-RU")));
+
         }
         finally{preview.Close();}
         Check(store.History(eventId).SequenceEqual(history)&&store.Invoice(eventId,originalInvoice.Id).Tickets.SequenceEqual(originalTickets),"closing original report previews preserves history ticket identity and print state");

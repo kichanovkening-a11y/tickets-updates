@@ -12,9 +12,29 @@ public static class TicketBlankEditing
         copy.Id=Guid.NewGuid().ToString("N");copy.Name=source.Name+" — копия";copy.IsEditableCopy=true;
         return copy;
     }
+    public static void EnsureFourUp(TicketBlank blank)
+    {
+        if(blank.FourUpA4)return;
+        if(blank.Legacy is null&&blank.Positions.Count==4&&Math.Abs(blank.PageWidth-210)<.001&&Math.Abs(blank.PageHeight-297)<.001){blank.FourUpA4=true;return;}
+        var source=blank.Positions.ToArray();var positions=new List<TicketBlankPosition>();
+        for(var index=0;index<4;index++)
+        {
+            var position=new TicketBlankPosition{X=0,Y=index*FourUpTicketLayouts.SlotHeight,Width=210,Height=FourUpTicketLayouts.SlotHeight};
+            if(blank.Legacy is null)
+            {
+                var fields=source.Length>0?FieldsFor(blank,source[index%source.Length]):blank.Fields;
+                var enabled=fields.Where(f=>f.Enabled).ToArray();
+                var scale=enabled.Length==0?1:Math.Min(1,Math.Min(210/enabled.Max(f=>f.X+f.Width),FourUpTicketLayouts.SlotHeight/enabled.Max(f=>f.Y+f.Height)));
+                if(source.Length>0&&source[index%source.Length].Fields is null&&scale==1)position.Fields=null;
+                else position.Fields=fields.Select(f=>f with{X=f.X*scale,Y=f.Y*scale,Width=f.Width*scale,Height=f.Height*scale,FontSize=Math.Max(4,f.FontSize*scale)}).ToList();
+            }
+            positions.Add(position);
+        }
+        blank.PageWidth=210;blank.PageHeight=297;blank.Positions=positions;blank.FourUpA4=true;
+    }
     public static TicketBlank CreateA4()
     {
-        var blank=new TicketBlank {Name="А4 — 4 билета",Positions=[]};
+        var blank=new TicketBlank {Name="А4 — 4 билета",FourUpA4=true,Positions=[]};
         blank.Fields=blank.Fields.Select((f,i)=>f with {Y=3+i*8,Width=80,Height=7}).ToList();
         for(var i=0;i<4;i++)blank.Positions.Add(new(){X=10,Y=8+i*70,Width=190,Height=70});
         return blank;

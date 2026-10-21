@@ -552,16 +552,22 @@ internal static class Program
         var wide=Enumerable.Range(0,80).Select(i=>source[0] with{Id=i+1,X=i*20,Y=0,Number="",Row="",TicketId=null,IsReserved=false,IsPrinted=false}).ToArray();
         hall.Load(wide,Array.Empty<SectorInfo>(),true);hall.Zoom(3);Pump();
         offset=(Vector)offsetField.GetValue(hall)!;zoom=(double)zoomField.GetValue(hall)!;
-        var start=new Point(hall.ActualWidth/2,offset.Y+8*zoom);var edge=new Point(hall.ActualWidth-2,start.Y);
+        var start=new Point(hall.ActualWidth/2,offset.Y-2*zoom);var edge=new Point(hall.ActualWidth-2,offset.Y+18*zoom);
         void Position(Point p){var point=hall.PointToScreen(p);Check(SetCursorPos((int)point.X,(int)point.Y),"cursor moves during edge marquee");WaitForInput();}
         Position(start);mouse_event(2,0,0,0,UIntPtr.Zero);WaitForInput();
         var anchor=(Point)hallType.GetField("worldAnchor",flags)!.GetValue(hall)!;Position(edge);
         for(var i=0;i<4;i++)WaitForInput();
         var after=(Vector)offsetField.GetValue(hall)!;var anchorAfter=(Point)hallType.GetField("worldAnchor",flags)!.GetValue(hall)!;
         mouse_event(4,0,0,0,UIntPtr.Zero);WaitForInput();
-        var end=new Point((edge.X-after.X)/zoom,(edge.Y-after.Y)/zoom);
+        // Native cursor coordinates are integer screen pixels and the timer can tick
+        // until mouse-up is dispatched. Derive the final rectangle from actual input.
+        var finalOffset=(Vector)offsetField.GetValue(hall)!;var actualEnd=Mouse.GetPosition(hall);
+        var end=new Point((actualEnd.X-finalOffset.X)/zoom,(actualEnd.Y-finalOffset.Y)/zoom);
         var expected=SeatSelection.ApplyRectangle(wide,new HashSet<long>(),anchor.X,anchor.Y,end.X,end.Y,false);
-        Check(after.X<offset.X&&anchorAfter==anchor&&hall.Selected.SetEquals(expected),"marquee auto-pans at viewport edge while preserving its world anchor and selected range");
+        Console.WriteLine($"Edge marquee: offset {offset} -> {after} -> {finalOffset}; anchor {anchor} -> {anchorAfter}; expected {string.Join(",",expected)}; selected {string.Join(",",hall.Selected)}");
+        Check(after.X<offset.X,"marquee auto-pans at viewport edge");
+        Check(anchorAfter==anchor,"edge marquee preserves its world anchor");
+        Check(expected.Count>0&&hall.Selected.SetEquals(expected),"edge marquee selects every seat in its final rectangle");
     }
     private static void WaitForInput()
     {

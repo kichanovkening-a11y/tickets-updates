@@ -21,7 +21,7 @@ public partial class MainWindow
         if(editor.ShowDialog()==true)RefreshSenders(editor.CreatedName);
     });
     private void EditRecipientClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(string.IsNullOrWhiteSpace(RecipientBox.Text))throw new TicketException("Выберите получателя или нажмите «Создать получателя».");
+        if(string.IsNullOrWhiteSpace(RecipientName))throw new TicketException("Выберите получателя или нажмите «Создать получателя».");
         var editor=new RecipientEditorWindow(store,RecipientBox.Text,true);
         if(editor.ShowDialog()==true){RefreshRecipients();RecipientBox.Text=editor.CreatedName;UpdateSelection();}
     });
@@ -29,7 +29,7 @@ public partial class MainWindow
         if(current is null)return;
         if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
         PersistSelectedSender();var selected=Hall.SelectedSeats;
-        var id=store.Reserve(current.Id,selected.Select(s=>s.Id).ToArray(),RecipientBox.Text,SeriesBox.Text,first);
+        var id=store.Reserve(current.Id,selected.Select(s=>s.Id).ToArray(),RecipientName,SeriesBox.Text,first);
         LoadEvent(false);Hall.Clear();StatusText.Text=$"Забронировано мест: {selected.Count}. Бронь № {id}. Для накладной выберите места и нажмите «Оформить накладную».";
     });
     private void ExtendInvoiceClick(object sender,RoutedEventArgs e)=>Run(()=>{
@@ -39,6 +39,6 @@ public partial class MainWindow
         if(choice.ShowDialog()!=true)return;
         var invoice=store.Invoice(current.Id,choice.SelectedIssueId);
         if(MessageBox.Show(this,$"Добавить {selected.Count} мест в накладную № {invoice.Id} для {invoice.Recipient}?\nОт кого: {invoice.Sender}","Дополнение накладной",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
-        store.ExtendInvoice(current.Id,invoice.Id,selected.Select(s=>s.Id).ToArray());LoadEvent(false);Hall.Clear();OpenInvoice(invoice.Id);
+        store.ExtendInvoice(current.Id,invoice.Id,selected.Select(s=>s.Id).ToArray());LoadEvent(false);Hall.Clear();SaveIssuedDocuments(current.Id,invoice.Id);OpenInvoice(invoice.Id);
     });
 }

@@ -6,6 +6,8 @@ namespace Tickets.App;
 public partial class MainWindow
 {
     private bool recipientUpdating;
+    private bool recipientRefreshPending;
+    private string RecipientName => ((RecipientBox.Template?.FindName("PART_EditableTextBox",RecipientBox) as TextBox)?.Text??RecipientBox.Text);
     private IEnumerable<TreeViewItem> EventRows()
     {
         IEnumerable<TreeViewItem> Walk(ItemsControl parent)
@@ -30,8 +32,16 @@ public partial class MainWindow
     }
     private void RecipientChanged(object sender,TextChangedEventArgs e)
     {
-        if(!ready||recipientUpdating)return;RefreshRecipients();UpdateSelection();
-        if(RecipientBox.IsKeyboardFocusWithin&&RecipientBox.Text.Length>0)RecipientBox.IsDropDownOpen=true;
+        if(!ready||recipientUpdating)return;
+        UpdateSelection();
+        if(recipientRefreshPending)return;
+        recipientRefreshPending=true;
+        Dispatcher.BeginInvoke(new Action(()=>{
+            recipientRefreshPending=false;
+            if(!ready||recipientUpdating)return;
+            RefreshRecipients();UpdateSelection();
+            if(RecipientBox.IsKeyboardFocusWithin&&RecipientName.Length>0)RecipientBox.IsDropDownOpen=true;
+        }),System.Windows.Threading.DispatcherPriority.Background);
     }
     private void RecipientOpened(object sender,EventArgs e){if(ready&&!recipientUpdating)RefreshRecipients();}
     private void RefreshRecipients()
@@ -39,8 +49,8 @@ public partial class MainWindow
         if(recipientUpdating)return;recipientUpdating=true;
         try
         {
-            var text=RecipientBox.Text;var box=RecipientBox.Template?.FindName("PART_EditableTextBox",RecipientBox) as TextBox;var caret=box?.CaretIndex??text.Length;
-            RecipientBox.ItemsSource=store.Recipients(text);RecipientBox.Text=text;if(box is not null)box.CaretIndex=Math.Min(caret,text.Length);
+            var text=RecipientName;var box=RecipientBox.Template?.FindName("PART_EditableTextBox",RecipientBox) as TextBox;var caret=box?.CaretIndex??text.Length;
+            RecipientBox.ItemsSource=store.Recipients(text);RecipientBox.SelectedItem=null;RecipientBox.Text=text;if(box is not null){box.Text=text;box.CaretIndex=Math.Min(caret,text.Length);}
         }
         finally{recipientUpdating=false;}
     }

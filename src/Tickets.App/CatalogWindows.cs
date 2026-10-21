@@ -94,16 +94,16 @@ internal sealed class PriceEditorWindow : EditorWindow
             if(plans.SelectedItem is not PlanChoice choice)throw new TicketException("Выберите расценовку.");
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
             var values=store.CopyPlanPrices(choice.Plan.Id,v.Id);var blocks=store.CopyPlanBlockedSeats(choice.Plan.Id,v.Id);
-            Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;withdrawn.Clear();withdrawn.UnionWith(blocks);name.Text=store.PricePlanDisplayName(choice.Plan)+" (копия)";
+            Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;withdrawn.Clear();withdrawn.UnionWith(blocks);name.Text="";preview.FocusPrice=null;
             sourcePlan=new(choice.Plan.Id,values.ToArray(),blocks.ToArray());
             copied.Text=$"Загружено цен: {values.Count}; снято с продажи: {blocks.Count}. Изменённая расценовка сохранится под новым названием.";Refresh();refreshCategory();
         }
         Button(form,"Загрузить выбранную расценовку",()=>Try(LoadSelectedPlan));form.Children.Add(copied);
         var category=new Grid();category.ColumnDefinitions.Add(new ColumnDefinition());category.ColumnDefinitions.Add(new ColumnDefinition());form.Children.Add(category);
-        var priceColumn=new StackPanel{Margin=new Thickness(0,0,8,0)};category.Children.Add(priceColumn);
-        var colorColumn=new StackPanel();Grid.SetColumn(colorColumn,1);category.Children.Add(colorColumn);
-        var amount=Field(priceColumn,"Цена, ₽","1000");
-        var palette=Combo(colorColumn,"Готовый цвет",PricePalette.Colors,"");palette.ItemTemplate=ColorChoices.Template();
+        var priceColumn=new StackPanel{Margin=new Thickness(0,0,4,0)};category.Children.Add(priceColumn);
+        var colorColumn=new StackPanel{Margin=new Thickness(4,0,0,0)};Grid.SetColumn(colorColumn,1);category.Children.Add(colorColumn);
+        var amount=Field(priceColumn,"Цена, ₽","1000");amount.Height=34;
+        var palette=Combo(colorColumn,"Готовый цвет",PricePalette.Colors,"");palette.ItemTemplate=ColorChoices.Template();palette.Height=34;palette.MinHeight=34;palette.Padding=new Thickness(8,2,8,2);
         var rememberedColors=store.PriceColors().ToDictionary(p=>p.Amount,p=>p.Color);var choosingColor=false;
         void SelectCategoryColor()
         {
@@ -130,8 +130,9 @@ internal sealed class PriceEditorWindow : EditorWindow
             var body=new StackPanel{Margin=new Thickness(16)};dialog.Content=body;
             var input=Field(body,label,initial);var error=new TextBlock{Foreground=Brushes.Firebrick,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,0)};body.Children.Add(error);
             var buttons=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};body.Children.Add(buttons);
-            var apply=Button(buttons,"Применить",()=>{var message=validate(input.Text);if(message is not null){error.Text=message;return;}dialog.DialogResult=true;});apply.IsDefault=true;
-            var cancel=Button(buttons,"Отмена",()=>dialog.DialogResult=false);cancel.IsCancel=true;cancel.Margin=new Thickness(8,10,0,0);
+            var apply=Button(buttons,"Применить",()=>{var message=validate(input.Text);if(message is not null){error.Text=message;return;}dialog.DialogResult=true;});apply.IsDefault=true;apply.Width=140;apply.Padding=new Thickness(4,2,4,2);apply.ContentTemplate=null;
+            var cancel=Button(buttons,"Отмена",()=>dialog.DialogResult=false);cancel.IsCancel=true;cancel.Width=140;cancel.Padding=new Thickness(4,2,4,2);cancel.ContentTemplate=null;cancel.Margin=new Thickness(8,10,0,0);
+            void Validate(){var message=validate(input.Text);apply.IsEnabled=message is null;error.Text=message??"";}input.TextChanged+=(_,_)=>Validate();Validate();
             dialog.Loaded+=(_,_)=>{input.Focus();input.SelectAll();};
             return dialog.ShowDialog()==true?input.Text.Trim():null;
         }
@@ -184,27 +185,31 @@ internal sealed class PriceEditorWindow : EditorWindow
                     CreatedId=sourcePlan.Id;Finish(true);return;
                 }
                 var existingNames=store.Plans(v.Id).Select(p=>CatalogText.Key(p.Name)).ToHashSet();
-                var entered=Prompt("Сохранить новую расценовку","Новое уникальное название",name.Text,text=>
+                var entered=Prompt("Сохранить новую расценовку","Новое уникальное название","",text=>
                     string.IsNullOrWhiteSpace(text)?"Введите название расценовки.":existingNames.Contains(CatalogText.Key(text))?"Такое название уже есть. Введите новое название.":null);
                 if(entered is null)return;name.Text=entered;
             }
             CreatedId=store.SavePlan(v.Id,name.Text,prices.Values.ToArray(),withdrawn.ToArray());Finish(true);
         }
         HeaderSaveAction=()=>Try(Save);
-        var fallbackSave=Button(form,"Сохранить",HeaderSaveAction);OnShown(()=>fallbackSave.Visibility=IsInline?Visibility.Collapsed:Visibility.Visible);
+        var standaloneHeader=new Grid{Margin=new Thickness(0,0,0,8)};standaloneHeader.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});standaloneHeader.ColumnDefinitions.Add(new ColumnDefinition());
+        var standaloneSave=new Button{Content="Сохранить",Width=140,Margin=new Thickness(0)};standaloneSave.Click+=(_,_)=>HeaderSaveAction();standaloneHeader.Children.Add(standaloneSave);
+        var standaloneTitle=new TextBlock{Text="Расценовка",FontSize=21,FontWeight=FontWeights.SemiBold,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};Grid.SetColumn(standaloneTitle,1);standaloneHeader.Children.Add(standaloneTitle);
+        var standaloneClose=new Button{Content="Закрыть",Width=110,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0)};standaloneClose.Click+=(_,_)=>Close();Grid.SetColumn(standaloneClose,1);standaloneHeader.Children.Add(standaloneClose);
+        var shell=new DockPanel();Content=shell;DockPanel.SetDock(standaloneHeader,Dock.Top);shell.Children.Add(standaloneHeader);shell.Children.Add(grid);OnShown(()=>standaloneHeader.Visibility=IsInline?Visibility.Collapsed:Visibility.Visible);
         form.Children.Add(new TextBlock{Text="Назначьте цену каждому месту или уберите его из продажи. Цвет каждой цены общий для всех схем.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
-        var heading=new TextBlock{Text="Расценовка",FontSize=24,FontWeight=FontWeights.SemiBold,HorizontalAlignment=HorizontalAlignment.Center,Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(heading,Dock.Top);area.Children.Add(heading);
         DockPanel.SetDock(hallTotals,Dock.Top);area.Children.Add(hallTotals);DockPanel.SetDock(priceSummary,Dock.Top);area.Children.Add(priceSummary);area.Children.Add(preview);
         void LoadPlans()
         {
-            if(venue.SelectedItem is not VenueInfo v)return;var selectedId=(plans.SelectedItem as PlanChoice)?.Plan.Id;
-            plans.ItemsSource=store.Plans(v.Id).Select(p=>new PlanChoice(p,store.PricePlanCaption(p))).ToList();plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==selectedId)??plans.Items.Cast<PlanChoice>().FirstOrDefault();
+            if(venue.SelectedItem is not VenueInfo v)return;
+            plans.ItemsSource=store.Plans(v.Id).Select(p=>new PlanChoice(p,store.PricePlanCaption(p))).ToList();plans.SelectedIndex=-1;
         }
         void LoadVenue()
         {
-            if(venue.SelectedItem is not VenueInfo v)return;seats=store.VenueSeats(v.Id);prices.Clear();withdrawn.Clear();sourcePlan=null;history.Clear();if(undo is not null)undo.IsEnabled=false;copied.Text="";LoadPlans();Refresh(true);SelectCategoryColor();SelectionSummary();
+            if(venue.SelectedItem is not VenueInfo v)return;seats=store.VenueSeats(v.Id);prices.Clear();withdrawn.Clear();sourcePlan=null;name.Text="";preview.FocusPrice=null;history.Clear();if(undo is not null)undo.IsEnabled=false;copied.Text="";LoadPlans();Refresh(true);SelectCategoryColor();SelectionSummary();
         }
+        preview.EmptySpaceClicked+=(_,_)=>preview.FocusPrice=null;
         venue.SelectionChanged+=(_,_)=>Try(LoadVenue);OnShown(()=>Try(()=>{LoadVenue();if(planId.HasValue){plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==planId.Value);LoadSelectedPlan();}}));
     }
     private void Refresh(bool fit=false)
@@ -220,6 +225,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         {
             var text=new TextBlock{Text=$"{item.Amount:N0} ₽ × {item.Count} = {item.Total:N0} ₽",Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold};
             var cell=new Border{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,Padding=new Thickness(8,4,8,4),Margin=new Thickness(0,0,5,4),CornerRadius=new CornerRadius(3)};
+            cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.FocusPrice=preview.FocusPrice==item.Amount?null:item.Amount;e.Handled=true;};
             Grid.SetRow(cell,item.Row);Grid.SetColumn(cell,item.Column);priceSummary.Children.Add(cell);
         }
         var ids=preview.Selected.ToArray();

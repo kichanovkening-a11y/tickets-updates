@@ -14,6 +14,14 @@ public sealed class HallView : FrameworkElement
 {
     private List<SeatInfo> seats=[];
     private DrawingGroup drawing=new();
+    private IReadOnlyList<SectorInfo> sectors=[];
+    private decimal? focusPrice;
+    /// <summary>Visual price focus, preserved across reloads until the caller clears it.</summary>
+    public decimal? FocusPrice
+    {
+        get=>focusPrice;
+        set { if(focusPrice==value)return; focusPrice=value; RebuildDrawing(); InvalidateVisual(); }
+    }
     private Rect bounds=new(0,0,100,100);
     private double zoom=1;
     private Vector offset;
@@ -27,6 +35,7 @@ public sealed class HallView : FrameworkElement
     private long? hoverId;
     public HashSet<long> Selected { get; }=[];
     public event Action? SelectionChanged;
+    public event EventHandler? EmptySpaceClicked;
     public event Action<long,Point>? SeatContextRequested;
     public IReadOnlyList<SeatInfo> SelectedSeats => seats.Where(s=>Selected.Contains(s.Id)).ToList();
 
@@ -50,7 +59,14 @@ public sealed class HallView : FrameworkElement
 
     public void Load(IReadOnlyList<SeatInfo> source,IReadOnlyList<SectorInfo> sectors,bool fit)
     {
-        EndGesture(); CloseTip(); seats=source.ToList(); Selected.Clear(); hoverId=null;
+        EndGesture(); CloseTip(); seats=source.ToList(); this.sectors=sectors.ToList(); Selected.Clear(); hoverId=null;
+        RebuildDrawing();
+        if(fit) Fit(); else InvalidateVisual();
+        SelectionChanged?.Invoke();
+    }
+
+    private void RebuildDrawing()
+    {
         var group=new DrawingGroup();
         using(var dc=group.Open())
         {
@@ -67,9 +83,10 @@ public sealed class HallView : FrameworkElement
                 var rect=new Rect(s.X,s.Y,16,16);
                 var occupied=s.TicketId.HasValue || s.IsReserved;
                 var printed=occupied && s.IsPrinted && !s.IsReserved;
-                var brush=s.IsBlocked?Brushes.LightGray:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
+                var dimmed=focusPrice.HasValue && s.Amount!=focusPrice.Value;
+                var brush=dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
-                if(occupied && !s.IsBlocked)
+                if(occupied && !s.IsBlocked && !dimmed)
                 {
                     // Clip a dense pattern to the seat, including its rounded corners.
                     dc.PushClip(new RectangleGeometry(rect,2,2));
@@ -78,7 +95,7 @@ public sealed class HallView : FrameworkElement
                         dc.DrawLine(hatchPen,new Point(s.X+x,s.Y+16),new Point(s.X+x+16,s.Y));
                     dc.Pop();
                 }
-                if(s.IsBlocked)
+                if(s.IsBlocked && !dimmed)
                 {
                     var cross=new Pen(Brushes.Black,2.6);
                     dc.DrawLine(cross,new Point(s.X+3,s.Y+3),new Point(s.X+13,s.Y+13));
@@ -88,9 +105,18 @@ public sealed class HallView : FrameworkElement
                 var textColor=Brushes.Black;
                 if(brush is SolidColorBrush solid && (solid.Color.R*.299+solid.Color.G*.587+solid.Color.B*.114)<145) textColor=Brushes.White;
                 var text=Text(s.Number,10.4,textColor);
-                // Keep the complete label visible even when it contains several letters or digits.
-                if(text.Width>14)text.SetFontSize(10.4*14/text.Width);
-                dc.DrawText(text,new Point(s.X+(16-text.Width)/2,s.Y+(16-text.Height)/2));
+                // Advance width and line height include bearings and font leading. Center
+                // the actual visible glyph outlines instead, in the same world space as seats.
+                var ink=text.BuildGeometry(new Point());
+                var inkBounds=ink.Bounds;
+                if(!inkBounds.IsEmpty && inkBounds.Width>0 && inkBounds.Height>0)
+                {
+                    var scale=Math.Min(1,Math.Min(14/inkBounds.Width,14/inkBounds.Height));
+                    ink.Transform=new MatrixTransform(scale,0,0,scale,
+                        s.X+8-(inkBounds.X+inkBounds.Width/2)*scale,
+                        s.Y+8-(inkBounds.Y+inkBounds.Height/2)*scale);
+                    dc.DrawGeometry(textColor,null,ink);
+                }
             }
             foreach(var row in seats.GroupBy(s=>(s.Sector,s.Y,s.Row)))
             {
@@ -102,8 +128,6 @@ public sealed class HallView : FrameworkElement
         group.Freeze(); drawing=group;
         bounds=drawing.Bounds;
         if(bounds.IsEmpty) bounds=new Rect(0,0,100,100);
-        if(fit) Fit(); else InvalidateVisual();
-        SelectionChanged?.Invoke();
     }
 
     public void Fit()
@@ -190,6 +214,7 @@ public sealed class HallView : FrameworkElement
     {
         if(!dragging || e.ChangedButton!=gestureButton) return;
         var p=e.GetPosition(this);
+        var emptyClick=false;
         var contextSeat=rightGesture && e.ChangedButton==MouseButton.Right && !panMoved && (p-start).Length<3?Hit(p):null;
         if(!panning)
         {
@@ -201,11 +226,13 @@ public sealed class HallView : FrameworkElement
             {
                 var s=Hit(p);
                 if(s is not null) SeatSelection.Toggle(Selected,s.Id);
+                else if(e.ChangedButton==MouseButton.Left && Hit(start) is null)emptyClick=true;
             }
             SelectionChanged?.Invoke();
         }
         EndGesture(); e.Handled=true;
         if(contextSeat is not null) SeatContextRequested?.Invoke(contextSeat.Id,p);
+        if(emptyClick)EmptySpaceClicked?.Invoke(this,EventArgs.Empty);
     }
     private void SelectRange(Point end)
     {

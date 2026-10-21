@@ -12,8 +12,8 @@ internal static class ColorChoices
         var panel=new FrameworkElementFactory(typeof(StackPanel));
         panel.SetValue(StackPanel.OrientationProperty,Orientation.Horizontal);
         var swatch=new FrameworkElementFactory(typeof(Border));
-        swatch.SetValue(FrameworkElement.WidthProperty,42d);
-        swatch.SetValue(FrameworkElement.HeightProperty,25d);
+        swatch.SetValue(FrameworkElement.WidthProperty,26d);
+        swatch.SetValue(FrameworkElement.HeightProperty,18d);
         swatch.SetValue(FrameworkElement.MarginProperty,new Thickness(0,2,4,2));
         swatch.SetValue(Border.CornerRadiusProperty,new CornerRadius(3));
         swatch.SetValue(Border.BorderThicknessProperty,new Thickness(1));

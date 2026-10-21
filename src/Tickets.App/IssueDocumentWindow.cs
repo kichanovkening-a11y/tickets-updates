@@ -14,11 +14,11 @@ internal sealed class IssueDocumentWindow:EditorWindow
     private readonly FlowDocumentScrollViewer preview=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,3,0,3)};
     private string original="";
-    public IssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,IssueDocumentKinds.Name(kind)+$" · выдача № {issueId}",1000,850)
+    public IssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,IssueDocumentKinds.Name(kind)+$" · выдача № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
         var root=new Grid{Margin=new Thickness(10)};Content=root;
-        root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(124)});
+        root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(152)});
         var header=new StackPanel();Grid.SetColumnSpan(header,2);root.Children.Add(header);
         var info=Store.GetIssueDocument(eventId,issueId,kind);original=info.Template;template.Text=original;
         header.Children.Add(new TextBlock{Text="Получатель: "+info.Invoice.Recipient,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap});header.Children.Add(status);
@@ -44,16 +44,14 @@ internal sealed class IssueDocumentWindow:EditorWindow
     internal void SaveForNavigation(){if(template.Text!=original)Save();}
     private void Save()
     {
-        var info=Store.SaveIssueDocument(eventId,issueId,kind,template.Text);original=info.Template;preview.Document=Document(info);
+        var info=template.Text==original?Store.GetIssueDocument(eventId,issueId,kind):Store.SaveIssueDocument(eventId,issueId,kind,template.Text);original=info.Template;preview.Document=Document(info);
         try{status.Text="Сохранено: "+Store.SaveIssueDocumentWord(eventId,issueId,kind);}
         catch(Exception ex){status.Text="Документ сохранён в базе. Не удалось сохранить Word: "+ex.Message;}
     }
     private void Print()
     {
-        Save();var dialog=new PrintDialog();if(kind==IssueDocumentKinds.Waybill)dialog.PrintTicket.PageOrientation=System.Printing.PageOrientation.Landscape;if(dialog.ShowDialog()!=true)return;
-        var document=Document(Store.GetIssueDocument(eventId,issueId,kind));document.PageWidth=dialog.PrintableAreaWidth;document.PageHeight=dialog.PrintableAreaHeight;document.PagePadding=new Thickness(32);document.ColumnWidth=dialog.PrintableAreaWidth;
-        var paginator=((IDocumentPaginatorSource)document).DocumentPaginator;
-        dialog.PrintDocument(kind==IssueDocumentKinds.Contract?new SourceFormPreview.NumberedPaginator(paginator):paginator,Title);
+        SaveForNavigation();var info=Store.GetIssueDocument(eventId,issueId,kind);
+        DocumentPrintPreview.Show(DialogOwner,Title,width=>Document(info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);
     }
     internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null)
     {

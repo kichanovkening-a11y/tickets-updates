@@ -43,19 +43,45 @@ public sealed partial class Store
     private void EnsurePricing()
     {
         using var c=Open();using var version=Command(c,"PRAGMA user_version");
-        if(Convert.ToInt32(version.ExecuteScalar())>=6)return;
+        var needsMigration=Convert.ToInt32(version.ExecuteScalar())<6;
         var copy=Path+".before-v6.db";
-        if(!File.Exists(copy))
+        if(needsMigration&&!File.Exists(copy))
         {using var dest=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=copy,Pooling=false}.ToString());dest.Open();c.BackupDatabase(dest);}
         using var tx=c.BeginTransaction(deferred:false);
         using(var create=Command(c,"CREATE TABLE IF NOT EXISTS price_color(amount INTEGER PRIMARY KEY CHECK(amount>=0),color TEXT NOT NULL COLLATE NOCASE UNIQUE)"))
         {create.Transaction=tx;create.ExecuteNonQuery();}
         var amounts=new List<long>();
-        using(var query=Command(c,"SELECT amount FROM event_price UNION SELECT amount FROM plan_price UNION SELECT amount FROM ticket ORDER BY amount"))
+        // Imports or older builds can add price levels after v6. Repair absent global mappings
+        // without changing established colors, monetary amounts, or ticket states.
+        using(var query=Command(c,"SELECT amount FROM event_price UNION SELECT amount FROM plan_price UNION SELECT amount FROM ticket EXCEPT SELECT amount FROM price_color ORDER BY amount"))
         {query.Transaction=tx;using var read=query.ExecuteReader();while(read.Read())amounts.Add(read.GetInt64(0));}
         foreach(var amount in amounts)EnsurePriceColor(c,tx,amount,null);
-        using(var bump=Command(c,"PRAGMA user_version=6")){bump.Transaction=tx;bump.ExecuteNonQuery();}
+        RepairConfusablePriceColors(c,tx);
+        if(needsMigration){using var bump=Command(c,"PRAGMA user_version=6");bump.Transaction=tx;bump.ExecuteNonQuery();}
         tx.Commit();
+    }
+    private static void RepairConfusablePriceColors(SqliteConnection c,SqliteTransaction tx)
+    {
+        var lower=ExistingPriceColor(c,tx,1500);var higher=ExistingPriceColor(c,tx,5000);
+        if(lower is null||higher is null)return;
+        static (int R,int G,int B) Rgb(string color)=>(Convert.ToInt32(color.Substring(1,2),16),Convert.ToInt32(color.Substring(3,2),16),Convert.ToInt32(color.Substring(5,2),16));
+        static int Distance(string first,string second)
+        {var a=Rgb(first);var b=Rgb(second);return (a.R-b.R)*(a.R-b.R)+(a.G-b.G)*(a.G-b.G)+(a.B-b.B)*(a.B-b.B);}
+        if(Distance(lower,higher)>=10000)return;
+        var used=new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using(var query=Command(c,"SELECT color FROM price_color WHERE amount!=5000"))
+        {query.Transaction=tx;using var read=query.ExecuteReader();while(read.Read())used.Add(read.GetString(0));}
+        // Only repair this reported ambiguous pair. Preserve all other user color choices.
+        var replacement=PricePalette.Colors.Where(color=>!used.Contains(color))
+            .Where(color=>{var rgb=Rgb(color);return Math.Max(rgb.R,Math.Max(rgb.G,rgb.B))-Math.Min(rgb.R,Math.Min(rgb.G,rgb.B))>=120;})
+            .OrderByDescending(color=>Distance(lower,color)).FirstOrDefault();
+        if(replacement is null)
+        {
+            // Palette exhaustion must still permit a clearly different, persistent RGB value.
+            replacement=Enumerable.Range(0,24).Select(i=>PricePalette.NextAvailable(used))
+                .Select(color=>{used.Add(color);return color;}).OrderByDescending(color=>Distance(lower,color)).First();
+        }
+        EnsurePriceColor(c,tx,5000,replacement);
     }
     private static string NormalizePriceColor(string color)
     {

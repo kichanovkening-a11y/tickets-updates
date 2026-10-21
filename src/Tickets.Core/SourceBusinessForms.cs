@@ -13,10 +13,20 @@ internal static class SourceBusinessForms
     private const string StampPath="tickets/generated.xml";
     private static Stream Template(string kind)=>typeof(SourceBusinessForms).Assembly.GetManifestResourceStream($"Tickets.Core.Resources.BusinessForms.{kind}.docx")??throw new TicketException("Исходный бланк документа не найден.");
     private static XDocument Xml(ZipArchive zip,string name){using var s=zip.GetEntry(name)!.Open();return XDocument.Load(s);}
-    public static string DefaultText(string kind)
+    internal static string Version012Text(string kind)
     {
         using var stream=Template(kind);using var zip=new ZipArchive(stream,ZipArchiveMode.Read);var xml=Xml(zip,"word/document.xml");
         return string.Join("\n",xml.Descendants(W+"p").Select(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value))));
+    }
+    public static string DefaultText(string kind)=>CurrentText(kind,Version012Text(kind));
+    internal static string CurrentText(string kind,string text)=>kind==IssueDocumentKinds.Contract
+        ?text.Replace("не позднее ____________.","не позднее 3 дней с момента получения счёта.",StringComparison.Ordinal):text;
+    internal static string EventCalendarDate(InvoiceInfo invoice)
+    {
+        var ru=System.Globalization.CultureInfo.GetCultureInfo("ru-RU");
+        return DateTime.TryParse(invoice.EventDate,ru,System.Globalization.DateTimeStyles.None,out var date)
+            ||DateTime.TryParse(invoice.EventDate,System.Globalization.CultureInfo.InvariantCulture,System.Globalization.DateTimeStyles.None,out date)
+            ?date.ToString("dd.MM.yyyy",ru):System.Text.RegularExpressions.Regex.Replace(invoice.EventDate,@"\s+\d{1,2}:\d{2}.*$","");
     }
     internal static bool CanUseSource(string kind,string template)=>template.Replace("\r\n","\n").Replace('\r','\n').Split('\n').Length==DefaultText(kind).Split('\n').Length;
     public static Dictionary<string,string> Values(InvoiceInfo invoice)
@@ -61,8 +71,11 @@ internal static class SourceBusinessForms
             using(var zip=ZipFile.Open(temporary,ZipArchiveMode.Update))
             {
                 var xml=Xml(zip,"word/document.xml");var values=Values(document.Invoice);
+                if(document.Kind==IssueDocumentKinds.Act)values["date"]=EventCalendarDate(document.Invoice);
                 if(document.Kind==IssueDocumentKinds.Waybill)
                 {values["senderDetails"]=values["senderDetails"].Replace("\n",", ");values["recipientDetails"]=values["recipientDetails"].Replace("\n",", ");}
+                foreach(var paragraph in xml.Descendants(W+"p"))
+                {var text=string.Concat(paragraph.Descendants(W+"t").Select(t=>t.Value));var current=CurrentText(document.Kind,text);if(current!=text)SetParagraph(paragraph,current);}
                 if(document.Template!=DefaultText(document.Kind))
                 {
                     var lines=document.Template.Replace("\r\n","\n").Replace('\r','\n').Split('\n');var paragraphs=xml.Descendants(W+"p").ToArray();

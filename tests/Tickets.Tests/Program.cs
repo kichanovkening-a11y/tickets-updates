@@ -323,6 +323,8 @@ Test("41-ticket complete document package uses recipient and exact totals",s=>{
 });
 DocsLayoutChecks.Register(Test);
 Docs012Checks.Register(Test);
+Docs013Checks.Register(Test);
+Pricing013Checks.Register(Test);
 TicketBlankChecks.Register(Test);
 Test("hall and pricing presentation refinements",s=>HallEditorRefinementChecks.Run());
 BusinessDocumentChecks.Register(Test);

@@ -24,8 +24,9 @@ internal sealed class TicketBlankWindow:EditorWindow
     private readonly TextBlock scan=new(){TextWrapping=TextWrapping.Wrap};
     public TicketBlankWindow(Store store):base(store,"Бланки печати",1200,900)
     {
-        var root=new Grid{Margin=new Thickness(14)};root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(590)});root.ColumnDefinitions.Add(new ColumnDefinition());Content=root;
-        var form=new StackPanel{Margin=new Thickness(0,0,14,0)};root.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
+        var root=new Grid{Margin=new Thickness(14)};root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(1,GridUnitType.Star)});Content=root;
+        var form=new StackPanel{Margin=new Thickness(0,0,14,0),MinWidth=430};
+        var settingsScroll=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};root.Children.Add(settingsScroll);
         form.Children.Add(new TextBlock{Text="Сохранённые бланки",FontWeight=FontWeights.Bold});form.Children.Add(templates);
         templates.SelectionChanged+=(_,_)=>{if(templates.SelectedItem is TicketBlank selected)Load(selected);};
         var actions=new WrapPanel();form.Children.Add(actions);
@@ -59,7 +60,9 @@ internal sealed class TicketBlankWindow:EditorWindow
         form.Children.Add(new TextBlock{Text="Координаты полей отсчитываются от края каждого билета. Текст, не помещающийся в поле, уменьшается.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,0)});
         Button(form,"Обновить предпросмотр",()=>Try(()=>{Read();Render();}));Button(form,"Сохранить бланк",()=>Try(()=>{Read();Store.SaveTicketBlank(blank);Refresh(blank.Id);MessageBox.Show(DialogOwner,"Бланк сохранён и доступен при печати.","Бланки печати");}));
         calibrationControls.AddRange(form.Children.Cast<UIElement>().Skip(settingsStart));
-        var preview=new StackPanel();Grid.SetColumn(preview,1);root.Children.Add(new ScrollViewer{Content=preview,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto});preview.Children.Add(new TextBlock{Text="Пример размещения. Скан виден для настройки даже без печати фона.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});preview.Children.Add(paper);
+        var preview=new StackPanel();
+        var previewScroll=new ScrollViewer{Content=preview,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};
+        Grid.SetColumn(previewScroll,1);root.Children.Add(previewScroll);preview.Children.Add(new TextBlock{Text="Пример размещения. Скан виден для настройки даже без печати фона.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});preview.Children.Add(paper);
         Refresh();Load(templates.SelectedItem as TicketBlank??new());
     }
     private static void Column(DataGrid grid,string label,string path)=>grid.Columns.Add(new DataGridTextColumn{Header=label,Binding=new Binding(path){UpdateSourceTrigger=UpdateSourceTrigger.LostFocus,ValidatesOnExceptions=true},Width=new DataGridLength(1,DataGridLengthUnitType.Star)});

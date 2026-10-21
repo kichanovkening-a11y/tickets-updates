@@ -873,7 +873,7 @@ internal static class Program
                     var wasEnabled=button.IsEnabled;button.IsEnabled=true;
                     try
                     {
-                        var center=button.TranslatePoint(new Point(button.ActualWidth/2,button.ActualHeight/2),mainRoot);var hit=mainRoot.InputHitTest(center) as DependencyObject;
+                        var center=button.TranslatePoint(new Point(button.ActualWidth/2,button.ActualHeight/2),mainRoot);var hit=mainRoot.InputHitTest(center) as DependencyObject;Console.WriteLine($"Toolbar scale={scale}; viewport={toolbarScroll.ViewportWidth}; offset={toolbarScroll.HorizontalOffset}; button={button.Content}; size={button.ActualWidth}x{button.ActualHeight}; center={center}; root={mainRoot.ActualWidth}x{mainRoot.ActualHeight}; hit={hit?.GetType().Name}");
                         Check(hit is not null&&(ReferenceEquals(hit,button)||Visual(button).Contains(hit)),"show action is hit-testable at "+scale+": "+button.Name);
                     }
                     finally{button.IsEnabled=wasEnabled;}

@@ -9,6 +9,13 @@ public partial class MainWindow
     private void UpdateCompactLayout()
     {
         EventSubtitle.Visibility=Workspace.ActualHeight>0&&Workspace.ActualHeight<550?Visibility.Collapsed:Visibility.Visible;
+        if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
+        {
+            var navigation=layout.ActualWidth<1050?236d:280d;
+            var selection=layout.ActualWidth<900?270d:300d;
+            if(layout.ColumnDefinitions[0].Width.Value!=navigation)layout.ColumnDefinitions[0].Width=new GridLength(navigation);
+            if(Workspace.ColumnDefinitions[1].Width.Value!=selection)Workspace.ColumnDefinitions[1].Width=new GridLength(selection);
+        }
     }
     private static TreeViewItem? NearestTreeItem(DependencyObject? source)
     {

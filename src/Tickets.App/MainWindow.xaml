@@ -42,7 +42,7 @@
       </Border>
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <StackPanel Margin="8,0,0,10"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
-          <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" MaxHeight="80" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
+          <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" MaxHeight="60" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
         <ScrollViewer Grid.Row="1" Margin="8,0,0,6" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal">
           <Button Content="Изменить цену" Click="TogglePriceClick" Margin="0,0,6,4"/>
           <Button x:Name="UndoPriceButton" Content="Отменить изменение цены" Click="UndoPriceClick" IsEnabled="False" Margin="0,0,6,4"/>
@@ -53,9 +53,9 @@
             <Grid>
               <DockPanel>
                 <ScrollViewer DockPanel.Dock="Top" Margin="10" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
-                  <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Click="FitClick"/><Button Content="−" Click="ZoomOutClick"/><Button Content="+" Click="ZoomInClick"/></StackPanel>
+                  <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Click="FitClick"/><Button Content="−" Width="44" Click="ZoomOutClick"/><Button Content="+" Width="44" Click="ZoomInClick"/></StackPanel>
                 </ScrollViewer>
-                <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="110" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="80" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                   <StackPanel><TextBlock x:Name="HallTotals" Margin="10,4" FontWeight="Bold" TextWrapping="Wrap"/><WrapPanel x:Name="LegendPanel" Margin="10,4"/></StackPanel>
                 </ScrollViewer>
                 <local:HallView x:Name="Hall" Margin="5"/>

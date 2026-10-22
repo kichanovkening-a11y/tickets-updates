@@ -254,7 +254,7 @@ internal static class Program
             var printButton=(Button)main.FindName("PrintTicketsButton");Check(!printButton.IsEnabled,"issued place cannot print from generic selection");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[0],new Point(20,20)});Pump();
             Check(((TextBlock)main.FindName("StatusText")).Text.Contains("UI recipient"),"occupied place status identifies original recipient");
-            Check(hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную"))&&!hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Печать билетов")),"occupied context exposes original invoice without generic printing");hall.ContextMenu.IsOpen=false;
+            Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную"))&&!hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Печать билетов")),"occupied context exposes original invoice without generic printing");hall.ContextMenu.IsOpen=false;
             hall.SetSelection(new[]{seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI print preview only";Pump();
             Check(printButton.IsVisible&&printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"primary ticket printing action is visible and available");
             var freePreviewSelection=hall.Selected.ToArray();var freePreviewSummary=((TextBlock)main.FindName("SelectedSummary")).Text;
@@ -318,7 +318,7 @@ internal static class Program
             typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});hall.SetSelection(new[]{seatIds[3]});
             Check(hall.Selected.Count==0&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot be selected issued or printed");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[3],new Point(20,20)});Pump();
-            Check(hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Вернуть в продажу")),"withdrawn place context exposes restore action");hall.ContextMenu.IsOpen=false;
+            Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Вернуть в продажу")),"withdrawn place context exposes restore action");hall.ContextMenu.IsOpen=false;
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},false);typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});
             var sample=store.TicketReprint(eventId,new[]{seatIds[0]});
             var many=sample with{Tickets=Enumerable.Range(0,25).Select(i=>sample.Tickets[0] with{Number=i+1,Seat=(i+1).ToString()}).ToArray()};
@@ -335,7 +335,7 @@ internal static class Program
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Удалённые из справочников")==true)&&((Grid)main.FindName("Workspace")).IsVisible,"deleted shows remain accessible in archive without losing selected context");
             hall.SetSelection(new[]{archivedSeats[0]});Check(hall.Selected.Count==0&&!((Button)main.FindName("ReturnButton")).IsEnabled,"archived occupied place cannot enter generic selection");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{archivedSeats[0],new Point(20,20)});Pump();
-            Check(hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную")),"archived occupied place retains original invoice access");hall.ContextMenu.IsOpen=false;
+            Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную")),"archived occupied place retains original invoice access");hall.ContextMenu.IsOpen=false;
             hall.SetSelection(new[]{archivedSeats[1]});((ComboBox)main.FindName("RecipientBox")).Text="Blocked archived issuance";
             Check(!((Button)main.FindName("IssueButton")).IsEnabled&&!((Button)main.FindName("ApplyPriceButton")).IsEnabled,"archived show disables new issuance and price edits");
             main.SelectEvent(store.Events().First(e=>e.Id!=eventId).Id);Pump();
@@ -542,7 +542,8 @@ internal static class Program
         Check(Count(2,(r,g,b)=>r<20&&g<20&&b<20)>1000&&Count(2,(r,g,b)=>r>220&&g>220&&b>220)>500,"reserved seat renders black with white hatching");
         Check(Count(3,(r,g,b)=>r>180&&r<230&&Math.Abs(r-g)<3&&Math.Abs(g-b)<3)>1000&&Count(3,(r,g,b)=>r<20&&g<20&&b<20)>500,"withdrawn seat renders gray with a black cross");
         Check(pixels[(64*712+136)*4+3]==0,"seat hatching remains clipped inside seat bounds");
-        CheckSelectionBorder(hall,states[0]);hall.Clear();
+        // Pricing mode still renders selection over unavailable seats; issuance mode forbids it.
+        hall.AllowUnavailableSelection=true;CheckSelectionBorder(hall,states[0]);hall.Clear();hall.AllowUnavailableSelection=false;
         var contexts=new List<long>();hall.SeatContextRequested+=(id,_)=>contexts.Add(id);var offsetField=typeof(Tickets.App.HallView).GetField("offset",BindingFlags.Instance|BindingFlags.NonPublic)!;
         var before=(Vector)offsetField.GetValue(hall)!;Gesture(hall,new Point(8,8),new Point(8,8),true);
         Check(contexts.SequenceEqual(new[]{states[0].Id})&&((Vector)offsetField.GetValue(hall)!)==before,"stationary right click requests seat context without panning");

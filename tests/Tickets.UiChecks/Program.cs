@@ -35,6 +35,7 @@ internal static class Program
         try
         {
             Hall013Checks.Run();
+            DocumentEditor019Checks.Run();
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
             var actions=Logical(main).OfType<Button>().ToList();
@@ -214,10 +215,11 @@ internal static class Program
                     Check(ReferenceEquals(compactSave.Parent,compactPrint.Parent)&&compactSave.Parent is StackPanel {Orientation:Orientation.Horizontal}&&compactSave.FontSize==16.9&&compactPrint.FontSize==16.9,"document save and print share one compact row without shrinking type");
                     CheckDocumentActions(window);
                     CheckNativePrintPreview(app,window);
-                    Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Печать билетов")||Equals(b.Content,"Дополнить накладную")),"invoice omits duplicate white ticket printing and extension actions");
+                    var invoiceTicketPrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Печать билетов"));
+                    Check(ReferenceEquals(invoiceTicketPrint.Parent,((FrameworkElement)compactSave.Parent).Parent)&&DockPanel.GetDock(invoiceTicketPrint)==Dock.Right&&Math.Abs(invoiceTicketPrint.ActualHeight-compactPrint.ActualHeight)<1&&!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Дополнить накладную")),"one compact invoice ticket-print action sits at right on the document action row");
                     Check(Logical(window).OfType<FlowDocumentScrollViewer>().Single().ActualHeight>400,"invoice preview uses enlarged content area");
                     var invoiceTab=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Накладная"));Check(Equals(invoiceTab.Background,Brushes.SteelBlue),"invoice tab is visibly active");
-                    var senderField=Logical(window).OfType<ComboBox>().Single();Check(senderField.IsEditable&&senderField.Items.Contains(Store.DefaultSender),"invoice sender supports saved choice and manual entry");
+                    var senderField=Logical(window).OfType<ComboBox>().Single(b=>b.IsEditable);Check(senderField.IsEditable&&senderField.Items.Contains(Store.DefaultSender),"invoice sender supports saved choice and manual entry");
                     senderField.Text="UI sender";SaveDocumentThroughDialog(window,Path.Combine(work,"chosen-documents","invoice.docx"));
                     Check(File.Exists(Path.Combine(work,"chosen-documents","invoice.docx")),"invoice manual Save writes its selected destination");
                     var issuedId=store.Issues(eventId).Single().Id;
@@ -234,8 +236,15 @@ internal static class Program
                             Check(!contractText.Contains("Билеты и места"),"contract omits the ticket item table");
                             Check(Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Открыть в Word")),"contract offers opening the saved Word document");
                             CheckDocumentTableLayout(Logical(form).OfType<FlowDocumentScrollViewer>().Single(),"contract");
-                            Logical(form).OfType<TabControl>().Single().SelectedIndex=1;Logical(form).OfType<TextBox>().Single().Text="Договор для {recipient}. Отправитель: {sender}.";Click(form,"Сохранить шаблон");
-                            Check(store.DocumentTemplate(IssueDocumentKinds.Contract).Contains("{recipient}"),"document template saves for later issuances");
+                            Logical(form).OfType<TabControl>().Single().SelectedIndex=1;
+                            var nativeEditor=Logical(form).OfType<RichTextBox>().Single();
+                            var originalTemplate=CustomDocumentForms.Text(store.CustomIssueTemplate(eventId,issuedId,IssueDocumentKinds.Contract)!);
+                            var protectedCount=System.Text.RegularExpressions.Regex.Matches(originalTemplate,@"\{\w+\}").Count;
+                            Check(new TextRange(nativeEditor.Document.ContentStart,nativeEditor.Document.ContentEnd).Text.Contains("avto"),"contract native editor displays protected automatic fields");
+                            var ordinary=nativeEditor.Document.Blocks.OfType<Paragraph>().SelectMany(p=>p.Inlines.OfType<Run>()).First(r=>!string.IsNullOrWhiteSpace(r.Text)&&r.Text!="avto");
+                            ordinary.Text+=" UI019 ordinary edit";Click(form,"Сохранить текст документа");Click(form,"Сохранить как форму получателя");
+                            var savedTemplate=CustomDocumentForms.Text(store.RecipientForm("UI recipient",IssueDocumentKinds.Contract)!.Content);
+                            Check(savedTemplate.Contains("UI019 ordinary edit")&&System.Text.RegularExpressions.Regex.Matches(savedTemplate,@"\{\w+\}").Count==protectedCount,"native ordinary text and protected token identities save as recipient template for later issuances");
                         }catch(Exception ex){documentError=ex;}finally{form.Close();}
                     }));Click(window,"Договор");if(documentError is not null)throw documentError;
                     var paginator=((IDocumentPaginatorSource)CloneFlowDocument(document)).DocumentPaginator;paginator.ComputePageCount();
@@ -285,6 +294,11 @@ internal static class Program
             Isolated("issuance018",s=>{
                 var isolatedMain=new Tickets.App.MainWindow(s);isolatedMain.Show();Pump();
                 try{Issuance018Checks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
+            });
+            Isolated("invoice-editor019",DocumentEditor019Checks.RunInvoice);
+            Isolated("ui019",s=>{
+                var isolatedMain=new Tickets.App.MainWindow(s);isolatedMain.Show();Pump();
+                try{Ui019Checks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
             });
             Isolated("parties018",Parties018Checks.Run);
             Isolated("merge018",Merge018Checks.Run);
@@ -753,7 +767,7 @@ internal static class Program
                     {if(pointer.GetPointerContext(LogicalDirection.Forward)!=TextPointerContext.Text)continue;var rectangle=pointer.GetCharacterRect(LogicalDirection.Forward);if(!rectangle.IsEmpty)bounds.Add(rectangle);}
                     var columnLeft=document.PagePadding.Left+table.Columns[0].Width.Value;var columnRight=columnLeft+table.Columns[1].Width.Value;
                     Check(bounds.Count>0&&bounds.All(rectangle=>rectangle.Left>=columnLeft-1&&rectangle.Right<=columnRight+1),caption+" right-aligned recipient text stays inside its column and the page");
-                    if(caption=="invoice")Check(row.Cells.Count==2&&row.Cells[0].Blocks.OfType<Paragraph>().Single().TextAlignment==TextAlignment.Left&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal)&&new TextRange(row.Cells[1].ContentStart,row.Cells[1].ContentEnd).Text.StartsWith("Получил:",StringComparison.Ordinal),"invoice signatures explicitly align sender left and recipient right");
+                    if(caption=="invoice"&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal))Check(row.Cells.Count==2&&row.Cells[0].Blocks.OfType<Paragraph>().Single().TextAlignment==TextAlignment.Left&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal)&&new TextRange(row.Cells[1].ContentStart,row.Cells[1].ContentEnd).Text.StartsWith("Получил:",StringComparison.Ordinal),"invoice signatures explicitly align sender left and recipient right");
                 }
                 else Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
                 if(new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim().Length<=20)Check(!last.IsEmpty&&last.Bottom-first.Top<160,caption+" rendered short row does not expand into a giant empty cell");

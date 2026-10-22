@@ -9,9 +9,10 @@ namespace Tickets.App;
 internal sealed class InvoiceWindow : EditorWindow
 {
     private readonly long eventId,issueId;
-    private readonly ComboBox senderBox=new(){IsEditable=true,IsTextSearchEnabled=true,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
+    private readonly ComboBox senderBox=new(){FontSize=18,IsEditable=true,IsTextSearchEnabled=true,Height=34,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
     private readonly TextBlock savedStatus=new(){TextTrimming=TextTrimming.CharacterEllipsis,Margin=new Thickness(0,3,0,3),FontSize=12};
     private string persistedSender="";
+    private readonly DocumentTextEditor textEditor=new();
     private ScrollViewer? documentNavigation;
     private readonly FlowDocumentScrollViewer reader=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     public InvoiceWindow(Store store,long eventId,long issueId,bool print=false):base(store,$"Накладная № {issueId}",1030,850)
@@ -21,18 +22,16 @@ internal sealed class InvoiceWindow : EditorWindow
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(documentNavigation=IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
-            PersistSender();
+            PersistSender();SaveText();
             IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
             Refresh();
         })));
         header.Children.Add(DocumentActions.Toolbar(
-            ()=>Try(()=>{PersistSender();IssueDocumentNavigation.OpenWord(Store.InvoiceDocumentPath(issueId),()=>Store.SaveInvoiceDocument(eventId,issueId));}),
+            ()=>Try(OpenWord),
             ()=>Try(()=>{
-                var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{PersistSender();InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});
+                var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",SaveWord);
                 if(path is not null){savedStatus.Text="Сохранено: "+path;Refresh();}
-            }),()=>Try(Print)));
-        var invoiceTools=new WrapPanel();header.Children.Add(invoiceTools);
-        var ticketsButton=Button(invoiceTools,"Печать билетов накладной",()=>Try(PrintInvoiceTickets));ticketsButton.ContentTemplate=null;ticketsButton.Width=double.NaN;ticketsButton.Padding=new Thickness(10,2,10,2);ticketsButton.Margin=new Thickness(0,0,0,4);
+            }),()=>Try(Print),()=>Try(PrintInvoiceTickets)));
         var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});header.Children.Add(senderRow);
         senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
         var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
@@ -46,13 +45,19 @@ internal sealed class InvoiceWindow : EditorWindow
             if(senderBox.SelectedItem is not string selected)return;
             if(MessageBox.Show(DialogOwner,$"Удалить отправителя «{selected}» из списка?\nРанее оформленные документы сохранятся.","Удаление отправителя",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             Store.RemoveSenderChoice(selected);
-            var current=senderBox.Text;senderBox.ItemsSource=Store.Senders();senderBox.Text=current;
+            var current=senderBox.Text;senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Senders().Contains(current)?current:"";persistedSender=senderBox.Text;
         });
-        senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
+        senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Senders().Contains(Store.Invoice(eventId,issueId).Sender)?Store.Invoice(eventId,issueId).Sender:"";persistedSender=senderBox.Text;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
-        Grid.SetRow(reader,1);root.Children.Add(reader);reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Document(Store.Invoice(eventId,issueId),reader.ActualWidth-20);};Refresh();
+        var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);tabs.Items.Add(new TabItem{Header="Документ",Content=reader});
+        var editing=new DockPanel();var saveRow=new WrapPanel{Margin=new Thickness(0,5,0,5)};DockPanel.SetDock(saveRow,Dock.Bottom);editing.Children.Add(saveRow);
+        var saveText=Button(saveRow,"Сохранить текст накладной",()=>Try(SaveText));saveText.ContentTemplate=null;saveText.Width=double.NaN;saveText.Padding=new Thickness(10,3,10,3);
+        editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст / шаблон",Content=editing});
+        textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,"invoice")??throw new TicketException("Шаблон накладной не найден."),"invoice");
+        tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveText);};
+        reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};Refresh();
         Closing+=(_,e)=>{
-            try{PersistSender();}
+            try{PersistSender();SaveText();}
             catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Отправитель",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
         // Printing is always an explicit choice in the document toolbar.
@@ -63,7 +68,29 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private void Refresh()
     {
-        var invoice=Store.Invoice(eventId,issueId);if(documentNavigation is not null)IssueDocumentNavigation.SetBusinessEnabled(documentNavigation,Store.CanUseBusinessDocuments(eventId,issueId));reader.Document=Document(invoice,reader.ActualWidth>100?reader.ActualWidth-20:794);
+        var invoice=Store.Invoice(eventId,issueId);if(documentNavigation is not null)IssueDocumentNavigation.SetBusinessEnabled(documentNavigation,Store.CanUseBusinessDocuments(eventId,issueId));reader.Document=Preview(reader.ActualWidth>100?reader.ActualWidth-20:794);
+    }
+    private FlowDocument Preview(double width)
+    {
+        var custom=Store.CustomIssueDocument(eventId,issueId,"invoice");
+        return custom is not null?SourceFormPreview.Document(custom,width):Document(Store.Invoice(eventId,issueId),width);
+    }
+    private void SaveText()
+    {
+        if(!textEditor.IsDirty)return;
+        var bytes=textEditor.SaveBytes();Store.SaveCustomIssueForm(eventId,issueId,"invoice",bytes);textEditor.Load(bytes,"invoice");Refresh();savedStatus.Text="Текст накладной сохранён. Автоматические поля защищены.";
+    }
+    private void SaveWord(string destination)
+    {
+        PersistSender();SaveText();var custom=Store.CustomIssueDocument(eventId,issueId,"invoice");
+        if(custom is not null)InvoiceDocuments.SaveIssueDocumentWord(custom,destination);
+        else InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);
+    }
+    private void OpenWord()
+    {
+        var directory=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"Tickets-export");System.IO.Directory.CreateDirectory(directory);
+        var path=System.IO.Path.Combine(directory,$"Накладная-{issueId}-{Guid.NewGuid():N}.docx");SaveWord(path);IssueDocumentNavigation.OpenWord(path,()=>path);
+        savedStatus.Text="Открыта отдельная копия накладной: автоматические данные в ней можно изменять.";
     }
     private void SaveFiles()
     {
@@ -89,7 +116,7 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private void PersistSender()
     {
-        if(senderBox.Text==persistedSender)return;
+        if(senderBox.Text==persistedSender||string.IsNullOrWhiteSpace(senderBox.Text))return;
         Store.UpdateInvoiceSender(eventId,issueId,senderBox.Text);persistedSender=senderBox.Text;
         SaveFiles();
     }
@@ -102,8 +129,8 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private void Print()
     {
-        PersistSender();var invoice=Store.Invoice(eventId,issueId);
-        DocumentPrintPreview.Show(DialogOwner,$"Накладная № {issueId}",width=>Document(invoice,width));
+        PersistSender();SaveText();
+        DocumentPrintPreview.Show(DialogOwner,$"Накладная № {issueId}",Preview);
     }
     internal static FlowDocument Document(InvoiceInfo invoice,double pageWidth=794)
     {

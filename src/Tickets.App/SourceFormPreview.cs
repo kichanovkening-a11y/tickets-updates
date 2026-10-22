@@ -11,15 +11,15 @@ namespace Tickets.App;
 internal static class SourceFormPreview
 {
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null)
+    internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null,Func<XElement,Paragraph>? paragraphFactory=null)
     {
         var xml=InvoiceDocuments.IssueDocumentXml(info);var body=xml.Root!.Element(W+"body")!;
         var width=pageWidth??(info.Kind==IssueDocumentKinds.Waybill?1123:794);var usable=Math.Max(100,width-50);
         var document=new FlowDocument{PageWidth=width,PagePadding=new Thickness(25),ColumnWidth=usable,FontFamily=new FontFamily(info.Kind==IssueDocumentKinds.Contract?"Times New Roman":"Arial"),FontSize=13};
         foreach(var block in body.Elements())
         {
-            if(block.Name==W+"p")document.Blocks.Add(Paragraph(block,document.FontFamily.Source));
-            else if(block.Name==W+"tbl")document.Blocks.Add(Table(block,usable,document.FontFamily.Source));
+            if(block.Name==W+"p")document.Blocks.Add(paragraphFactory?.Invoke(block)??Paragraph(block,document.FontFamily.Source));
+            else if(block.Name==W+"tbl")document.Blocks.Add(Table(block,usable,document.FontFamily.Source,paragraphFactory));
         }
         return document;
     }
@@ -38,23 +38,23 @@ internal static class SourceFormPreview
         }
     }
     private static int Number(XElement? element,string attribute,int fallback=0)=>int.TryParse((string?)element?.Attribute(W+attribute),NumberStyles.Integer,CultureInfo.InvariantCulture,out var value)?value:fallback;
-    private static Paragraph Paragraph(XElement source,string defaultFont)
+    internal static Paragraph Paragraph(XElement source,string defaultFont)
     {
         var p=new Paragraph{Margin=new Thickness(0,0,0,Number(source.Element(W+"pPr")?.Element(W+"spacing"),"after",0)/15d)};
         p.TextAlignment=(string?)source.Element(W+"pPr")?.Element(W+"jc")?.Attribute(W+"val") switch{"right"=>TextAlignment.Right,"center"=>TextAlignment.Center,"both"=>TextAlignment.Justify,_=>TextAlignment.Left};
-        foreach(var r in source.Elements(W+"r"))
+        foreach(var r in source.Descendants(W+"r").Where(r=>r.Ancestors(W+"p").FirstOrDefault()==source))
         {
             var props=r.Element(W+"rPr");var size=Number(props?.Element(W+"sz"),"val",defaultFont=="Times New Roman"?24:20)*2d/3;
             foreach(var node in r.Elements())
             {
                 if(node.Name==W+"br")p.Inlines.Add(new LineBreak());
-                else if(node.Name==W+"tab")p.Inlines.Add(new Run("    "));
+                else if(node.Name==W+"tab")p.Inlines.Add(new Run("    "){Tag="DocxTab"});
                 else if(node.Name==W+"t")p.Inlines.Add(new Run(node.Value){FontSize=Math.Max(8,size),FontWeight=props?.Element(W+"b") is not null?FontWeights.Bold:FontWeights.Normal,FontFamily=new FontFamily((string?)props?.Element(W+"rFonts")?.Attribute(W+"ascii")??defaultFont)});
             }
         }
         return p;
     }
-    private static Table Table(XElement source,double width,string defaultFont)
+    private static Table Table(XElement source,double width,string defaultFont,Func<XElement,Paragraph>? paragraphFactory)
     {
         var grid=source.Element(W+"tblGrid")?.Elements(W+"gridCol").Select(c=>Number(c,"w",1)).ToArray()??[1,1];
         var table=new Table{CellSpacing=0,Margin=new Thickness(0)};
@@ -82,7 +82,15 @@ internal static class SourceFormPreview
                 var result=new TableCell{ColumnSpan=span,RowSpan=rowSpan,Padding=new Thickness(1,0,1,0)};
                 var borders=props?.Element(W+"tcBorders");
                 if(borders is not null&&borders.Elements().Any(b=>(string?)b.Attribute(W+"val") is not ("nil" or "none"))){result.BorderBrush=Brushes.Black;result.BorderThickness=new Thickness(.4);}
-                foreach(var p in cell.Elements(W+"p"))result.Blocks.Add(Paragraph(p,defaultFont));
+                // A native Word cell can contain paragraphs and nested tables in
+                // any order. Keep that order and the same editable factory at
+                // every depth, rather than losing nested ordinary text.
+                var cellWidth=Math.Max(30,width*grid.Skip(col).Take(span).Sum()/Math.Max(1,grid.Sum()));
+                foreach(var block in cell.Elements())
+                {
+                    if(block.Name==W+"p")result.Blocks.Add(paragraphFactory?.Invoke(block)??Paragraph(block,defaultFont));
+                    else if(block.Name==W+"tbl")result.Blocks.Add(Table(block,cellWidth,defaultFont,paragraphFactory));
+                }
                 if(result.Blocks.Count==0)result.Blocks.Add(new Paragraph());
                 row.Cells.Add(result);col+=span;
             }

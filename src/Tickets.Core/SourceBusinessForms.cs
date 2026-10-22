@@ -31,19 +31,20 @@ internal static class SourceBusinessForms
     internal static bool CanUseSource(string kind,string template)=>template.Replace("\r\n","\n").Replace('\r','\n').Split('\n').Length==DefaultText(kind).Split('\n').Length;
     public static Dictionary<string,string> Values(InvoiceInfo invoice)
     {
-        var seller=invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender);var buyer=invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient);
+        var seller=DocumentParties.Sender(invoice);var buyer=invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient);
         string Representative(OrganizationDetails details)=>string.IsNullOrWhiteSpace(details.Signatory)?"":"в лице "+string.Join(" ",new[]{details.Position,details.Signatory}.Where(v=>!string.IsNullOrWhiteSpace(v)));
-        var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["issueId"]=invoice.Id.ToString(),["date"]=invoice.Date,["sender"]=string.IsNullOrWhiteSpace(seller.LegalName)?invoice.Sender:seller.LegalName,["recipient"]=string.IsNullOrWhiteSpace(buyer.LegalName)?invoice.Recipient:buyer.LegalName,["event"]=invoice.Title,["venue"]=invoice.Venue,["eventDate"]=invoice.EventDate,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["amountWords"]=RussianWords.Money(invoice.Total),["countWords"]=RussianWords.Number(invoice.Tickets.Count),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),["lineCountWords"]=RussianWords.Number(BusinessLines(invoice).Count),["sellerRepresentative"]=Representative(seller),["buyerRepresentative"]=Representative(buyer)};
+        var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["contractNumber"]=string.IsNullOrWhiteSpace(invoice.ContractNumber)?invoice.Id.ToString():invoice.ContractNumber,["contractDate"]=(invoice.ContractDate??DateTimeOffset.Parse(invoice.IssuedAt).Date).ToString("dd.MM.yyyy"),["receivedBy"]=DocumentParties.ReceivedBy(invoice),["issueId"]=invoice.Id.ToString(),["date"]=invoice.Date,["sender"]=string.IsNullOrWhiteSpace(seller.LegalName)?invoice.Sender:seller.LegalName,["recipient"]=string.IsNullOrWhiteSpace(buyer.LegalName)?invoice.Recipient:buyer.LegalName,["event"]=invoice.Title,["venue"]=invoice.Venue,["eventDate"]=invoice.EventDate,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["amountWords"]=RussianWords.Money(invoice.Total),["countWords"]=RussianWords.Number(invoice.Tickets.Count),["summary"]=DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),["lineCountWords"]=RussianWords.Number(BusinessLines(invoice).Count),["sellerRepresentative"]=Representative(seller),["buyerRepresentative"]=Representative(buyer)};
         foreach(var (prefix,details) in new[]{("sender",seller),("recipient",buyer)})
         {
-            values[prefix+"Details"]=BusinessDocumentTemplates.Requisites(details);
+            values[prefix+"Details"]=BusinessDocumentTemplates.Requisites(details);values[prefix+"DetailsInline"]=values[prefix+"Details"].Replace("\n",", ");
+            values[prefix+"Authority"]=string.IsNullOrWhiteSpace(details.Authority)?"":", действующего на основании "+details.Authority;values[prefix+"Inn"]=details.Inn;values[prefix+"Kpp"]=details.Kpp;values[prefix+"Ogrn"]=details.Ogrn;
             values[prefix+"Position"]=details.Position;values[prefix+"Signatory"]=details.Signatory;
             values[prefix+"InnKpp"]=string.Join(" / ",new[]{details.Inn,details.Kpp}.Where(v=>!string.IsNullOrWhiteSpace(v)));
             values[prefix+"Bank"]=details.Bank;values[prefix+"Bik"]=details.Bik;values[prefix+"Account"]=details.Account;values[prefix+"CorrespondentAccount"]=details.CorrespondentAccount;values[prefix+"Address"]=details.Address;
         }
         var lines=BusinessLines(invoice);
         values["itemDescription"]=string.Join("\n",lines.Select(line=>$"Театральные билеты на культурно-массовое мероприятие «{invoice.Title}». {invoice.Venue}. {invoice.EventDate}."));
-        values["itemNumber"]="1";values["itemCount"]=invoice.Tickets.Count.ToString();values["itemPrice"]=string.Join(" / ",lines.Select(line=>DocumentTotals.Amount(line.Price)).Distinct());values["itemTotal"]=DocumentTotals.Amount(invoice.Total);
+        values["itemDescriptionShort"]="Театральные билеты";values["itemNumber"]="1";values["itemCount"]=invoice.Tickets.Count.ToString();values["itemPrice"]=string.Join(" / ",lines.Select(line=>DocumentTotals.Amount(line.Price)).Distinct());values["itemTotal"]=DocumentTotals.Amount(invoice.Total);
         return values;
     }
     private static IReadOnlyList<InvoiceLine> BusinessLines(InvoiceInfo invoice)=>invoice.Tickets.GroupBy(t=>t.Amount).OrderBy(g=>g.Key).Select(g=>new InvoiceLine("","","",g.Count(),g.Key,g.Sum(t=>(decimal)t.Amount),"")).ToArray();
@@ -161,6 +162,7 @@ internal static class SourceBusinessForms
                     }
                 }
                 NormalizeSignatures(xml,document);
+                WordDocumentStructure.Normalize(xml);WordDocumentStructure.Validate(xml);
                 var entry=zip.GetEntry("word/document.xml")!;entry.Delete();using(var s=zip.CreateEntry("word/document.xml").Open())xml.Save(s);
                 Stamp(zip);
             }
@@ -168,7 +170,7 @@ internal static class SourceBusinessForms
         }
         finally{if(File.Exists(temporary))File.Delete(temporary);}
     }
-    private static void NormalizeSignatures(XDocument xml,IssueDocumentInfo document)
+    internal static void NormalizeSignatures(XDocument xml,IssueDocumentInfo document)
     {
         var body=xml.Root!.Element(W+"body")!;var section=body.Element(W+"sectPr");
         var page=section?.Element(W+"pgSz");var margins=section?.Element(W+"pgMar");
@@ -200,15 +202,16 @@ internal static class SourceBusinessForms
         if(document.Kind==IssueDocumentKinds.Contract)foreach(var font in table.Descendants(W+"rFonts")){font.SetAttributeValue(W+"ascii","Times New Roman");font.SetAttributeValue(W+"hAnsi","Times New Roman");}
         if(document.Kind==IssueDocumentKinds.Bill)
         {
-            var cells=table.Descendants(W+"tc").ToArray();
-            SetParagraph(cells[0].Element(W+"p")!,"Руководитель предприятия: "+document.Invoice.SenderDetails?.Position+"\n________________ / "+document.Invoice.SenderDetails?.Signatory+" /");
-            SetParagraph(cells[1].Element(W+"p")!,"Получил: "+document.Invoice.RecipientDetails?.Position+"\n________________ / "+document.Invoice.RecipientDetails?.Signatory+" /");
+            var cells=table.Elements(W+"tr").First().Elements(W+"tc").ToArray();
+            SetParagraph(cells[0].Element(W+"p")!,"Руководитель предприятия: "+DocumentParties.Sender(document.Invoice).Signatory);
+            SetParagraph(cells[1].Element(W+"p")!,"Получил: "+DocumentParties.ReceivedBy(document.Invoice));
         }
         else if(document.Kind==IssueDocumentKinds.Waybill)
         {
-            var cells=table.Descendants(W+"tc").ToArray();
-            SetParagraph(cells[0].Element(W+"p")!,"Отпуск груза разрешил: "+document.Invoice.SenderDetails?.Position+"\n________________ / "+document.Invoice.SenderDetails?.Signatory+" /\nГлавный (старший) бухгалтер: ________________\nОтпуск груза произвел: ________________\nМ.П.");
-            SetParagraph(cells[1].Element(W+"p")!,"Груз принял: ________________\nГруз получил грузополучатель: "+document.Invoice.RecipientDetails?.Position+"\n________________ / "+document.Invoice.RecipientDetails?.Signatory+" /\nМ.П.");
+            var cells=table.Elements(W+"tr").First().Elements(W+"tc").ToArray();
+            SetParagraph(cells[0].Element(W+"p")!,"Отпуск груза разрешил: "+DocumentParties.Sender(document.Invoice).Position+" "+DocumentParties.Sender(document.Invoice).Signatory);
+            SetParagraph(cells[1].Element(W+"p")!,"Груз получил грузополучатель: "+DocumentParties.ReceivedBy(document.Invoice));
+            table.Add(new XElement(W+"tr",new XElement(W+"tc",InvoiceDocuments.Paragraph("Главный (старший) бухгалтер: ________________\nОтпуск груза произвел: ________________\nМ.П.",false,16)),new XElement(W+"tc",InvoiceDocuments.Paragraph("Груз принял: ________________\nМ.П.",false,16))));
         }
         if(section is null)body.Add(InvoiceDocuments.Paragraph(""),InvoiceDocuments.Paragraph(""),table);
         else section.AddBeforeSelf(InvoiceDocuments.Paragraph(""),InvoiceDocuments.Paragraph(""),table);

@@ -70,6 +70,7 @@ internal static class IssueDocumentNavigation
                     // Persist edits on document changes; the editors retain their
                     // save/discard/cancel warnings when closed normally.
                     if(editor is IssueDocumentWindow document)document.SaveForNavigation();
+                    if(editor is CustomIssueDocumentWindow custom)custom.SaveForNavigation();
                     if(editor is SpecificationWindow specification&&!specification.SaveForNavigation())return;
                     editor.Close();
                     if(editor.HasClosedForHost)next=target;

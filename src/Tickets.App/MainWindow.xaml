@@ -41,7 +41,7 @@
         </DockPanel>
       </Border>
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <StackPanel Margin="8,0,0,4"><DockPanel><TextBlock x:Name="EventDate" Foreground="Red" DockPanel.Dock="Right" FontSize="18" Margin="12,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></DockPanel>
+        <StackPanel Margin="8,0,0,4"><StackPanel Orientation="Horizontal"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="EventDate" Foreground="Red" FontSize="18" Margin="10,3,0,0" FontWeight="Bold"/></StackPanel>
           <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" MaxHeight="60" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
         <ScrollViewer Grid.Row="1" Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,5">
           <Grid x:Name="UpperActions" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -72,7 +72,7 @@
           <TabItem x:Name="JournalTab"><TabItem.Header><TextBlock Text="Журнал выдачи и возвратов" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>
             <DockPanel Margin="10">
               <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
-                <Grid Height="52"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Button x:Name="MergeInvoicesButton" Width="Auto" Padding="10,2" Content="Объединить накладные" Visibility="Collapsed" HorizontalAlignment="Left" Click="MergeInvoicesClick"/><TextBlock x:Name="JournalSelectionStatus" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" Margin="10,0,0,0"/></Grid>
+                <Grid x:Name="JournalMergeActions" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Button x:Name="MergeInvoicesButton" Width="Auto" Padding="10,2" Content="Объединить накладные" Visibility="Collapsed" HorizontalAlignment="Left" Click="MergeInvoicesClick"/><TextBlock x:Name="JournalSelectionStatus" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" Margin="10,0,0,0"/></Grid>
                 <TextBlock Text="Нажмите строку, чтобы открыть накладную. Для объединения отметьте несколько накладных." Foreground="#64748B" TextWrapping="Wrap" Margin="0,4,0,0"/>
               </StackPanel>
               <DataGrid x:Name="HistoryGrid" SelectionMode="Single" SelectionUnit="FullRow" PreviewMouseLeftButtonUp="HistoryRowClick">
@@ -98,7 +98,7 @@
             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,5">
               <TextBlock x:Name="SelectedSummary" Text="Ничего не выбрано" FontSize="16.8" FontWeight="Bold" Foreground="#C1121F" Margin="0,0,0,7" TextWrapping="Wrap"/>
               <TextBlock Text="Получатель / организация" Margin="0,0,0,4"/>
-              <ComboBox x:Name="RecipientBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" MinHeight="34" Padding="4" DropDownOpened="RecipientOpened"/>
+              <ComboBox x:Name="RecipientBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" MinHeight="34" Padding="4" DropDownOpened="RecipientOpened" SelectionChanged="RecipientSelected"/>
               <TextBlock x:Name="IssuedRecipients" Visibility="Collapsed" Foreground="#9A3412" FontWeight="Bold" TextWrapping="Wrap" MaxHeight="44" Margin="0,4,0,3"/>
             </StackPanel>
             <StackPanel DockPanel.Dock="Bottom">

@@ -34,6 +34,7 @@ public sealed class HallView : FrameworkElement
         Foreground=Brushes.Black,FontWeight=FontWeights.Bold,Background=Brushes.LightYellow,
         Opacity=1,Padding=new Thickness(9,6,9,6),BorderBrush=Brushes.Gray,BorderThickness=new Thickness(1)
     };
+    private readonly Popup rejectionPopup=new(){Placement=PlacementMode.RelativePoint,StaysOpen=true,AllowsTransparency=true};
     private bool dragging, panning, marquee, removing, rightGesture, panMoved;
     private HashSet<long> gestureSelection=[];
     private long? hoverId;
@@ -49,10 +50,10 @@ public sealed class HallView : FrameworkElement
     public HallView()
     {
         ClipToBounds=true; Focusable=true;
-        seatTip.PlacementTarget=this;
+        seatTip.PlacementTarget=this;rejectionPopup.PlacementTarget=this;
         scrollTimer=new DispatcherTimer(TimeSpan.FromMilliseconds(30),DispatcherPriority.Input,(_,_)=>AutoScroll(),Dispatcher);
         scrollTimer.Stop();
-        Unloaded+=(_,_)=> { EndGesture(); CloseTip(); };
+        Unloaded+=(_,_)=> { EndGesture(); CloseTip(); rejectionPopup.IsOpen=false; };
         SizeChanged+=(_,_)=> { if(seats.Count>0) Fit(); };
     }
 
@@ -66,7 +67,7 @@ public sealed class HallView : FrameworkElement
 
     public void Load(IReadOnlyList<SeatInfo> source,IReadOnlyList<SectorInfo> sectors,bool fit)
     {
-        EndGesture(); CloseTip(); seats=source.ToList(); this.sectors=sectors.ToList(); Selected.Clear(); hoverId=null;
+        EndGesture(); CloseTip(); rejectionPopup.IsOpen=false; seats=source.ToList(); this.sectors=sectors.ToList(); Selected.Clear(); hoverId=null;
         RebuildDrawing();
         if(fit) Fit(); else InvalidateVisual();
         SelectionChanged?.Invoke();
@@ -125,7 +126,9 @@ public sealed class HallView : FrameworkElement
                     dc.DrawGeometry(textColor,null,ink);
                 }
             }
-            foreach(var row in seats.GroupBy(s=>(s.Sector,s.Y,s.Row)))
+            // A logical row can curve through many Y coordinates. Draw its caption once,
+            // at the leftmost seat, rather than repeating it beside every curved seat.
+            foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)))
             {
                 var first=row.MinBy(s=>s.X)!;
                 var label=Text(first.Row,11.7,Brushes.SlateGray);
@@ -191,7 +194,7 @@ public sealed class HallView : FrameworkElement
         if(dragging)return;
         if(e.ChangedButton==MouseButton.Left && e.ClickCount==2 && Hit(e.GetPosition(this)) is null)
         { Fit(); e.Handled=true; return; }
-        CloseTip();
+        CloseTip();rejectionPopup.IsOpen=false;
         Focus(); start=last=e.GetPosition(this); dragging=true;
         gestureButton=e.ChangedButton;
         panning=e.ChangedButton is MouseButton.Right or MouseButton.Middle || Keyboard.IsKeyDown(Key.Space);
@@ -222,12 +225,14 @@ public sealed class HallView : FrameworkElement
         if(!dragging || e.ChangedButton!=gestureButton) return;
         var p=e.GetPosition(this);
         var emptyClick=false;
+        SeatInfo? rejected=null;
         var contextSeat=rightGesture && e.ChangedButton==MouseButton.Right && !panMoved && (p-start).Length<3?Hit(p):null;
         if(!panning)
         {
             if(marquee || (p-start).Length>=6)
             {
                 SelectRange(p);
+                rejected=RejectedSeats(p).FirstOrDefault();
             }
             else if((p-start).Length<6)
             {
@@ -235,13 +240,14 @@ public sealed class HallView : FrameworkElement
                 if(s is not null)
                 {
                     if(AllowUnavailableSelection)SeatSelection.Toggle(Selected,s.Id);else SeatSelection.Toggle(Selected,s);
-                    if(!CanSelect(s))SeatSelectionRejected?.Invoke(s);
+                    if(!CanSelect(s))rejected=s;
                 }
                 else if(e.ChangedButton==MouseButton.Left && Hit(start) is null)emptyClick=true;
             }
             SelectionChanged?.Invoke();
         }
         EndGesture(); e.Handled=true;
+        if(rejected is not null){SeatSelectionRejected?.Invoke(rejected);ShowSeatRejection(rejected,p);}
         if(contextSeat is not null) SeatContextRequested?.Invoke(contextSeat.Id,p);
         if(emptyClick)EmptySpaceClicked?.Invoke(this,EventArgs.Empty);
     }
@@ -249,14 +255,19 @@ public sealed class HallView : FrameworkElement
     {
         var to=World(end);
         var next=SeatSelection.ApplyRectangle(seats,gestureSelection,worldAnchor.X,worldAnchor.Y,to.X,to.Y,removing,AllowUnavailableSelection);
-        if(!AllowUnavailableSelection)
-        {
-            var left=Math.Min(worldAnchor.X,to.X);var right=Math.Max(worldAnchor.X,to.X);var top=Math.Min(worldAnchor.Y,to.Y);var bottom=Math.Max(worldAnchor.Y,to.Y);
-            foreach(var seat in seats.Where(s=>!CanSelect(s)&&s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top))SeatSelectionRejected?.Invoke(seat);
-        }
         if(Selected.SetEquals(next))return;
         Selected.Clear();Selected.UnionWith(next);SelectionChanged?.Invoke();
     }
+    private IReadOnlyList<SeatInfo> RejectedSeats(Point end)
+    {
+        if(AllowUnavailableSelection)return [];
+        var to=World(end);
+        var left=Math.Min(worldAnchor.X,to.X);var right=Math.Max(worldAnchor.X,to.X);
+        var top=Math.Min(worldAnchor.Y,to.Y);var bottom=Math.Max(worldAnchor.Y,to.Y);
+        if(left>=right||top>=bottom)return [];
+        return seats.Where(s=>!CanSelect(s)&&s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top).ToArray();
+    }
+
     protected override void OnLostMouseCapture(MouseEventArgs e)
     { EndGesture(); base.OnLostMouseCapture(e); }
 
@@ -302,10 +313,31 @@ public sealed class HallView : FrameworkElement
         return Math.Clamp(value,Math.Min(a,b),Math.Max(a,b));
     }
 
+    private void ShowSeatRejection(SeatInfo seat,Point position)
+    {
+        CloseTip();
+        var body=new StackPanel();
+        body.Children.Add(new TextBlock{
+            Text=$"{seat.Label}: {seat.Status}.\nМесто занято и не выбирается. Повторная печать — из исходной накладной.",
+            TextWrapping=TextWrapping.Wrap,Foreground=Brushes.Black,FontSize=14,MaxWidth=270
+        });
+        var ok=new Button{Content="ОК",Width=70,Height=30,FontSize=14,Margin=new Thickness(0,6,0,0),ContentTemplate=null,HorizontalAlignment=HorizontalAlignment.Right};
+        ok.Click+=(_,_)=>rejectionPopup.IsOpen=false;body.Children.Add(ok);
+        var border=new Border{Child=body,Background=Brushes.White,BorderBrush=Brushes.Red,BorderThickness=new Thickness(2),Padding=new Thickness(8),MaxWidth=290};
+        border.Measure(new Size(290,double.PositiveInfinity));
+        rejectionPopup.Child=border;
+        // This separate visual overlays the hall without changing its measured size,
+        // fit, or current selection. StaysOpen avoids taking mouse capture from drags.
+        rejectionPopup.HorizontalOffset=position.X-border.DesiredSize.Width-12;
+        rejectionPopup.VerticalOffset=position.Y;
+        rejectionPopup.IsOpen=true;
+    }
+
     private void CloseTip() { seatTip.IsOpen=false; hoverId=null; }
 
     private void UpdateTip(Point p)
     {
+        if(rejectionPopup.IsOpen){CloseTip();return;}
         var s=Hit(p);
         if(s is null || ActualWidth<40 || ActualHeight<40) { CloseTip(); return; }
         if(s.Id!=hoverId)

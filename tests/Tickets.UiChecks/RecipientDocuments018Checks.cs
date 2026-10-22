@@ -19,7 +19,7 @@ internal static class RecipientDocuments018Checks
         {
             Check(Logical(invoice).OfType<Button>().Single(b=>Equals(b.Content,"Накладная")).IsEnabled,"invoice stays available without details");
             foreach(var caption in new[]{"Договор","Акт","ТТН","Счёт","Спецификация"})Check(!Logical(invoice).OfType<Button>().Single(b=>Equals(b.Content,caption)).IsEnabled,"missing details disables "+caption);
-            Check(Logical(invoice).OfType<Button>().Single(b=>Equals(b.Content,"Печать билетов накладной")).IsEnabled,"ticket printing stays available");
+            Check(Logical(invoice).OfType<Button>().Single(b=>Equals(b.Content,"Печать билетов")).IsEnabled,"ticket printing stays available");
             store.SaveOrganizationDetails("UI018 без реквизитов",false,new(Name:"UI018 без реквизитов",Inn:"018"));store.RefreshInvoiceRecipient(show.Id,id);
             type.GetMethod("Refresh",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(invoice,null);Pump();
             Check(Logical(invoice).OfType<Button>().Single(b=>Equals(b.Content,"Договор")).IsEnabled,"saved requisites enable business docs");

@@ -37,6 +37,8 @@ void Reject(Action action)
 }
 SeatSelectionChecks.Register(Test);
 RecipientForms018Checks.Register(Test);
+Docs019Checks.Register(Test);
+Hall019Checks.Register(Test);
 Merge018Checks.Register(Test);
 Issuance018Checks.Register(Test);
 Parties018Checks.Register(Test);

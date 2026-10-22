@@ -55,7 +55,7 @@ public sealed partial class Store
     public string SaveInvoiceDocument(long eventId,long issueId)
     {
         var directory=System.IO.Path.Combine(DocumentsDirectory,"Накладные");Directory.CreateDirectory(directory);
-        var file=System.IO.Path.Combine(directory,$"Накладная-{issueId}.docx");InvoiceDocuments.SaveWord(Invoice(eventId,issueId),file);return file;
+        var file=System.IO.Path.Combine(directory,$"Накладная-{issueId}.docx");if(CustomIssueDocument(eventId,issueId,"invoice") is {} custom)InvoiceDocuments.SaveIssueDocumentWord(custom,file);else InvoiceDocuments.SaveWord(Invoice(eventId,issueId),file);return file;
     }
     public List<SpecificationInfo> Specifications()
     {

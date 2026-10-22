@@ -153,14 +153,16 @@ public static class InvoiceDocuments
     }
     internal static XElement SignaturesTable(InvoiceInfo invoice,string left,string right,int width=9600)
     {
-        var details=new[]{invoice.SenderDetails,invoice.RecipientDetails};var labels=new[]{left,right};
-        return new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(e=>new XElement(W+e,new XAttribute(W+"w",0),new XAttribute(W+"type","dxa"))))),
-            new XElement(W+"tblGrid",Enumerable.Range(0,2).Select(_=>new XElement(W+"gridCol",new XAttribute(W+"w",width/2)))),
-            new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),Enumerable.Range(0,2).Select(i=>{
-                var p=Paragraph(labels[i]+": "+details[i]?.Position+"\n________________ / "+details[i]?.Signatory+" /",false,20);
-                p.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")));
-                return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),p);
+        var labels=new[]{left,right};var seller=DocumentParties.Sender(invoice);
+        var identities=new[]{string.Join(" ",new[]{seller.Position,seller.Signatory}.Where(x=>!string.IsNullOrWhiteSpace(x))),DocumentParties.ReceivedBy(invoice)};
+        var table=new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(e=>new XElement(W+e,new XAttribute(W+"w",0),new XAttribute(W+"type","dxa"))))),new XElement(W+"tblGrid",Enumerable.Range(0,2).Select(_=>new XElement(W+"gridCol",new XAttribute(W+"w",width/2)))));
+        foreach(var signatureRow in new[]{false,true})
+            table.Add(new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),Enumerable.Range(0,2).Select(i=>{
+                var paragraph=Paragraph(signatureRow?"________________":labels[i]+": "+identities[i],false,20);
+                paragraph.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")),!signatureRow?new XElement(W+"keepNext"):null);
+                return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),paragraph);
             })));
+        return table;
     }
     private static void AddPageNumberParts(ZipArchive archive)
     {
@@ -184,6 +186,7 @@ public static class InvoiceDocuments
         body.Add(new XElement(W+"sectPr",pageNumbers?new XElement(W+"footerReference",new XAttribute(W+"type","default"),new XAttribute(XNamespace.Get("http://schemas.openxmlformats.org/officeDocument/2006/relationships")+"id","footer1")):null,new XElement(W+"pgSz",new XAttribute(W+"w",landscape?16838:11906),new XAttribute(W+"h",landscape?11906:16838),landscape?new XAttribute(W+"orient","landscape"):null),
             new XElement(W+"pgMar",new XAttribute(W+"top",1134),new XAttribute(W+"bottom",1134),new XAttribute(W+"left",1134),new XAttribute(W+"right",1134))));
         var document=new XDocument(new XElement(W+"document",new XAttribute(XNamespace.Xmlns+"w",W),body));
+        WordDocumentStructure.Normalize(document);WordDocumentStructure.Validate(document);
         SourceBusinessForms.CheckExternalEdits(destination);
         var temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
         try

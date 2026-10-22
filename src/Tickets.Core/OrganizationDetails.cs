@@ -6,10 +6,10 @@ namespace Tickets.Core;
 
 public sealed record OrganizationExtraField(string Label,string Value);
 
-public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="",string Okpo="",string Okved="",string Okato="",IReadOnlyList<OrganizationExtraField>? ExtraFields=null,string LegalName="")
+public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="",string Okpo="",string Okved="",string Okato="",IReadOnlyList<OrganizationExtraField>? ExtraFields=null,string LegalName="",string Authority="")
 {
-    public bool HasRequisites=>new[]{Inn,Kpp,Ogrn,Address,Bank,Account,CorrespondentAccount,Bik,Signatory,Position,Phone,Okpo,Okved,Okato}.Any(value=>!string.IsNullOrWhiteSpace(value))||(ExtraFields?.Any(field=>!string.IsNullOrWhiteSpace(field.Label)&&!string.IsNullOrWhiteSpace(field.Value))??false);
-    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Телефон",Phone)}.Concat((ExtraFields??[]).Where(field=>!string.IsNullOrWhiteSpace(field.Label)).Select(field=>Line(field.Label,field.Value))).Where(x=>x.Length>0));
+    public bool HasRequisites=>new[]{LegalName,Authority,Inn,Kpp,Ogrn,Address,Bank,Account,CorrespondentAccount,Bik,Signatory,Position,Phone,Okpo,Okved,Okato}.Any(value=>!string.IsNullOrWhiteSpace(value))||(ExtraFields?.Any(field=>!string.IsNullOrWhiteSpace(field.Label)&&!string.IsNullOrWhiteSpace(field.Value))??false);
+    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Основание полномочий",Authority),Line("Телефон",Phone)}.Concat((ExtraFields??[]).Where(field=>!string.IsNullOrWhiteSpace(field.Label)).Select(field=>Line(field.Label,field.Value))).Where(x=>x.Length>0));
     private static string Line(string label,string value)=>string.IsNullOrWhiteSpace(value)?"":label+": "+value;
 }
 
@@ -121,7 +121,7 @@ public sealed partial class Store
             extras.Add(new(label,value));
         }
         if(extras.Count>100)throw new TicketException("Добавьте не более 100 дополнительных реквизитов.");
-        details=new(Name:name,LegalName:Clean(details.LegalName),Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone),Okpo:Clean(details.Okpo),Okved:Clean(details.Okved),Okato:Clean(details.Okato),ExtraFields:extras);
+        details=new(Name:name,LegalName:Clean(details.LegalName),Authority:Clean(details.Authority),Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone),Okpo:Clean(details.Okpo),Okved:Clean(details.Okved),Okato:Clean(details.Okato),ExtraFields:extras);
         name=sender?SaveSender(name):SaveRecipient(name);details=details with{Name=name};
         using var c=Open();EnsureOrganizationTable(c);
         using var cmd=Command(c,"INSERT INTO organization_details(role,name_key,details) VALUES($r,$k,$d) ON CONFLICT(role,name_key) DO UPDATE SET details=excluded.details","$r",sender?"sender":"recipient","$k",CatalogText.Key(name),"$d",JsonSerializer.Serialize(details));cmd.ExecuteNonQuery();

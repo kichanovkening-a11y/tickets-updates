@@ -202,7 +202,7 @@ public static class BusinessDocumentTemplates
     {
         var lines=new List<string>();
         void Add(string label,string value){if(!string.IsNullOrWhiteSpace(value))lines.Add(label+value.Trim());}
-        Add("",details.Name);Add("ОГРН / ОГРНИП: ",details.Ogrn);Add("ИНН: ",details.Inn);Add("КПП: ",details.Kpp);
+        Add("",string.IsNullOrWhiteSpace(details.LegalName)?details.Name:details.LegalName);Add("ОГРН / ОГРНИП: ",details.Ogrn);Add("ИНН: ",details.Inn);Add("КПП: ",details.Kpp);
         Add("Адрес: ",details.Address);Add("ОКПО: ",details.Okpo);Add("ОКВЭД: ",details.Okved);Add("ОКАТО: ",details.Okato);
         Add("Банк: ",details.Bank);Add("БИК: ",details.Bik);Add("Расчётный счёт: ",details.Account);Add("Корр. счёт: ",details.CorrespondentAccount);Add("Телефон: ",details.Phone);
         foreach(var field in details.ExtraFields??[])if(!string.IsNullOrWhiteSpace(field.Label))Add(field.Label.Trim()+": ",field.Value);

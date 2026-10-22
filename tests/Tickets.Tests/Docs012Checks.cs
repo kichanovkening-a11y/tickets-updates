@@ -9,13 +9,13 @@ internal static class Docs012Checks
     {
         test("source contract keeps clauses and excludes individual places",s=>{
             var (evt,id)=Issue(s);var info=s.GetIssueDocument(evt,id,IssueDocumentKinds.Contract);var xml=InvoiceDocuments.IssueDocumentXml(info);var text=string.Concat(xml.Descendants(W+"t").Select(x=>x.Value));
-            Require(text.Contains("5.4. Настоящий договор составлен в двух экземплярах")&&text.Contains("Арбитражном суде г. Москвы"),"source clauses missing");
+            Require(text.Contains("6.2. Настоящий договор составлен в 2-х экземплярах")&&text.Contains("4.2. В случае не возможности разрешения споров"),"universal source clauses missing");
             Require(!text.Contains("места ")&&!info.Template.Contains("{items}"),"contract exposes seat list");
             Require(text.Contains("Документные доп. сведения: Особое значение"),"populated custom requisite missing");
             Require(!text.Contains("[не заполнено]")&&!text.Contains("не указано")&&!text.Contains("ОКПО:"),"empty requisites rendered");
             var path=s.SaveIssueDocumentWord(evt,id,IssueDocumentKinds.Contract);using var zip=ZipFile.OpenRead(path);
             var footers=zip.Entries.Where(x=>x.FullName.StartsWith("word/footer",StringComparison.Ordinal)&&x.FullName.EndsWith(".xml",StringComparison.Ordinal)).ToArray();
-            Require(footers.Any(x=>{using var stream=x.Open();var footer=XDocument.Load(stream);return footer.Descendants(W+"fldSimple").Any(f=>((string?)f.Attribute(W+"instr"))?.Contains("PAGE")==true)&&footer.Descendants(W+"jc").Any(j=>(string?)j.Attribute(W+"val")=="left");}),"left page number missing");
+            Require(footers.Any(x=>{using var stream=x.Open();var footer=XDocument.Load(stream);return (footer.Descendants(W+"fldSimple").Any(f=>((string?)f.Attribute(W+"instr"))?.Contains("PAGE")==true)||footer.Descendants(W+"instrText").Any(f=>f.Value.Contains("PAGE")))&&footer.Descendants(W+"jc").Any(j=>(string?)j.Attribute(W+"val")=="left");}),"left page number missing");
         });
         test("invoice and issuance specification share grouped places without requisites or state",s=>{
             var (evt,id)=Issue(s);var invoice=s.Invoice(evt,id);var dir=System.IO.Path.GetDirectoryName(s.Path)!;

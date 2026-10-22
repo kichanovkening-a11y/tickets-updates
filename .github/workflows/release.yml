@@ -12,7 +12,7 @@ concurrency:
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -21,7 +21,7 @@ jobs:
       - name: Restore test data
         run: python scripts/restore_seed.py
       - name: Verify Windows editor controls
-        timeout-minutes: 3
+        timeout-minutes: 6
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db
       - name: Test accounting and updater
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db

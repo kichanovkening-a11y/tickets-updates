@@ -13,7 +13,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     private readonly string kind;
     private readonly FlowDocumentScrollViewer preview=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)};
-    private string? editingPath;
+    private readonly DocumentTextEditor textEditor=new();
     private IssueDocumentInfo Info=>Store.CustomIssueDocument(eventId,issueId,kind)??throw new TicketException("Форма получателя не найдена.");
 
     internal CustomIssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,Tickets.Core.Store.RecipientDocumentName(kind)+$" · выдача № {issueId}",1030,850)
@@ -25,28 +25,23 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         header.Children.Add(DocumentActions.Toolbar(
             ()=>Try(OpenWord),
             ()=>Try(()=>{
-                var info=Info;
+                SaveForNavigation();var info=Info;
                 var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueDocumentWord(info,destination));
                 if(path is not null)status.Text="Сохранено: "+path;
             }),
-            ()=>Try(()=>DocumentPrintPreview.Show(DialogOwner,Title,width=>SourceFormPreview.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract))));
+            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>SourceFormPreview.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);})));
         header.Children.Add(new TextBlock{Text="Получатель: "+Info.Invoice.Recipient,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold});
-        if(kind==IssueDocumentKinds.Contract)
-        {
-            var dateRow=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,4,0,4)};header.Children.Add(dateRow);
-            dateRow.Children.Add(new TextBlock{Text="Дата договора",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)});
-            var date=new DatePicker{SelectedDate=Store.ContractDate(eventId,issueId),MinWidth=160};dateRow.Children.Add(date);
-            date.SelectedDateChanged+=(_,_)=>Try(()=>{
-                if(date.SelectedDate is not DateTime selected)return;
-                Store.SetContractDate(eventId,issueId,selected);Refresh();status.Text="Дата договора сохранена.";
-            });
-        }
-        var editing=new WrapPanel();header.Children.Add(editing);
-        CompactButton(editing,"Изменить в Word",()=>Try(EditWord));
-        CompactButton(editing,"Обновить из Word",()=>Try(ImportWord));
-        header.Children.Add(new TextBlock{Text="Весь текст и оформление можно изменить в Word. Нажмите «Изменить в Word», сохраните документ и нажмите «Обновить из Word». Подстановки в фигурных скобках сохраняйте для автоматического заполнения; {contractDate} — дата договора, {eventCalendarDate} — дата показа для акта.",TextWrapping=TextWrapping.Wrap,FontSize=12,Margin=new Thickness(0,4,0,0)});
+        header.Children.Add(ContractFields.Row(Store,eventId,issueId,()=>{Refresh();status.Text="Поля договора сохранены для всего комплекта.";}));
         header.Children.Add(status);
-        Grid.SetRow(preview,1);root.Children.Add(preview);
+        var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
+        tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
+        var editing=new DockPanel();var saveRow=new WrapPanel{Margin=new Thickness(0,5,0,5)};DockPanel.SetDock(saveRow,Dock.Bottom);editing.Children.Add(saveRow);
+        CompactButton(saveRow,"Сохранить текст документа",()=>Try(SaveForNavigation));
+        CompactButton(saveRow,"Сохранить как форму получателя",()=>Try(()=>{SaveForNavigation();var bytes=Store.CustomIssueTemplate(eventId,issueId,kind)!;Store.SaveRecipientForm(Info.Invoice.Recipient,kind,bytes,Tickets.Core.Store.RecipientDocumentName(kind)+".docx");status.Text="Форма сохранена для следующих выдач.";}));
+        editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст / шаблон",Content=editing});
+        textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,kind)!,kind);
+        tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveForNavigation);};
+        Closing+=(_,e)=>{try{SaveForNavigation();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
         preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)Refresh();};
         Refresh();status.Text="Форма получателя подготовлена для текущей выдачи.";
     }
@@ -64,25 +59,14 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     }
     private void OpenWord()
     {
-        var bytes=Info.SourceDocument??throw new TicketException("Документ Word не подготовлен.");
+        SaveForNavigation();var bytes=Info.SourceDocument??throw new TicketException("Документ Word не подготовлен.");
         var path=WorkingPath(bytes,false);
         IssueDocumentNavigation.OpenWord(path,()=>{File.WriteAllBytes(path,bytes);return path;});
-        status.Text="Документ открыт в Word. Для сохранения правок в выдаче используйте «Изменить в Word» и «Обновить из Word».";
+        status.Text="Открыта отдельная копия документа: автоматические данные в ней можно изменять.";
     }
-    private void EditWord()
+    internal void SaveForNavigation()
     {
-        var bytes=Store.CustomIssueTemplate(eventId,issueId,kind)??throw new TicketException("Форма получателя не найдена.");
-        editingPath??=WorkingPath(bytes,true);
-        IssueDocumentNavigation.OpenWord(editingPath,()=>{File.WriteAllBytes(editingPath,bytes);return editingPath;});
-        status.Text="Сохраните изменения в Word, затем нажмите «Обновить из Word». Рабочий файл: "+editingPath;
-    }
-    private void ImportWord()
-    {
-        if(editingPath is null||!File.Exists(editingPath))throw new TicketException("Сначала нажмите «Изменить в Word» и сохраните изменения в открытом документе.");
-        byte[] bytes;
-        using(var file=new FileStream(editingPath,FileMode.Open,FileAccess.Read,FileShare.ReadWrite))
-        using(var copy=new MemoryStream()){file.CopyTo(copy);bytes=copy.ToArray();}
-        Store.SaveCustomIssueForm(eventId,issueId,kind,bytes);Refresh();
-        status.Text="Правки Word сохранены для этой выдачи. Предварительный просмотр обновлён.";
+        if(!textEditor.IsDirty)return;
+        var bytes=textEditor.SaveBytes();Store.SaveCustomIssueForm(eventId,issueId,kind,bytes);textEditor.Load(bytes,kind);Refresh();status.Text="Текст документа сохранён. Автоматические поля заполняются из выдачи.";
     }
 }

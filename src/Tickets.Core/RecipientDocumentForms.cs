@@ -15,10 +15,11 @@ public sealed partial class Store
         using var cmd=Command(c,"""
             CREATE TABLE IF NOT EXISTS recipient_document_form(recipient_id INTEGER NOT NULL REFERENCES recipient(id),kind TEXT NOT NULL,file_name TEXT NOT NULL,content BLOB NOT NULL,PRIMARY KEY(recipient_id,kind));
             CREATE TABLE IF NOT EXISTS issue_custom_form(issue_id INTEGER NOT NULL REFERENCES issue_batch(id),kind TEXT NOT NULL,file_name TEXT NOT NULL,content BLOB NOT NULL,PRIMARY KEY(issue_id,kind));
+            CREATE TABLE IF NOT EXISTS issue_contract_number(issue_id INTEGER PRIMARY KEY REFERENCES issue_batch(id),value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS issue_contract_date(issue_id INTEGER PRIMARY KEY REFERENCES issue_batch(id),value TEXT NOT NULL);
             """);cmd.ExecuteNonQuery();
     }
-    public static string RecipientDocumentName(string kind)=>kind=="specification"?"Спецификация":IssueDocumentKinds.Name(kind);
+    public static string RecipientDocumentName(string kind)=>kind=="invoice"?"Накладная":kind=="specification"?"Спецификация":IssueDocumentKinds.Name(kind);
     public void SaveRecipientForm(string recipient,string kind,byte[] content,string fileName)
     {
         RecipientDocumentName(kind);CustomDocumentForms.Validate(content);recipient=SaveRecipient(recipient);
@@ -28,6 +29,8 @@ public sealed partial class Store
             ON CONFLICT(recipient_id,kind) DO UPDATE SET file_name=excluded.file_name,content=excluded.content
             ""","$n",CatalogText.Key(recipient),"$k",kind,"$f",System.IO.Path.GetFileName(fileName),"$b",content);cmd.ExecuteNonQuery();
     }
+    public static RecipientDocumentForm? DefaultRecipientForm(string kind)
+    { RecipientDocumentName(kind);var bytes=StandardDocumentForms.Resolve(kind,null);return bytes is null?null:new(kind,RecipientDocumentName(kind)+".docx",bytes); }
     public RecipientDocumentForm? RecipientForm(string recipient,string kind)
     {
         RecipientDocumentName(kind);using var c=Open();EnsureRecipientForms(c);
@@ -72,19 +75,25 @@ public sealed partial class Store
     }
     private static void CopyCustomIssueForms(SqliteConnection c,SqliteTransaction tx,long source,long target)
     {
-        using var copy=Command(c,"INSERT INTO issue_custom_form(issue_id,kind,file_name,content) SELECT $t,kind,file_name,content FROM issue_custom_form WHERE issue_id=$s; INSERT INTO issue_contract_date(issue_id,value) SELECT $t,value FROM issue_contract_date WHERE issue_id=$s","$t",target,"$s",source);copy.Transaction=tx;copy.ExecuteNonQuery();
+        using var copy=Command(c,"INSERT INTO issue_custom_form(issue_id,kind,file_name,content) SELECT $t,kind,file_name,content FROM issue_custom_form WHERE issue_id=$s; INSERT INTO issue_contract_date(issue_id,value) SELECT $t,value FROM issue_contract_date WHERE issue_id=$s; INSERT INTO issue_contract_number(issue_id,value) SELECT $t,value FROM issue_contract_number WHERE issue_id=$s","$t",target,"$s",source);copy.Transaction=tx;copy.ExecuteNonQuery();
     }
-    public byte[]? CustomIssueTemplate(long eventId,long issueId,string kind)=>SnapshotRecipientForm(Invoice(eventId,issueId),kind)?.Content;
+    public byte[]? CustomIssueTemplate(long eventId,long issueId,string kind)
+    {var invoice=Invoice(eventId,issueId);return StandardDocumentForms.Resolve(kind,SnapshotRecipientForm(invoice,kind)?.Content)??StandardDocumentForms.EditorTemplate(kind);}
     public IssueDocumentInfo? CustomIssueDocument(long eventId,long issueId,string kind)
     {
-        var invoice=Invoice(eventId,issueId);var form=SnapshotRecipientForm(invoice,kind);if(form is null)return null;
-        var bytes=CustomDocumentForms.Fill(form.Content,invoice,kind,ContractDate(eventId,issueId));
-        return new(kind,invoice,CustomDocumentForms.Text(form.Content),CustomDocumentForms.Text(bytes)){SourceDocument=bytes};
+        var invoice=Invoice(eventId,issueId);var form=SnapshotRecipientForm(invoice,kind);
+        // Explicit saved text takes precedence over the standard starter.
+        if(form is null&&kind!="specification"&&kind!="invoice") { using var c=Open();using var read=Command(c,"SELECT template FROM issue_document WHERE event_id=$e AND issue_id=$i AND kind=$k","$e",eventId,"$i",issueId,"$k",kind);var selected=read.ExecuteScalar() as string;if(selected is null){using var global=Command(c,"SELECT template FROM document_template WHERE kind=$k","$k",kind);selected=global.ExecuteScalar() as string;}if(selected is not null&&selected!=IssueDocumentKinds.DefaultTemplate(kind))return null; }
+        var template=StandardDocumentForms.Resolve(kind,form?.Content);if(template is null)return null;
+        var bytes=CustomDocumentForms.Fill(template,invoice,kind,ContractDate(eventId,issueId));
+        var templateText=form is null&&IssueDocumentKinds.All.Contains(kind)?IssueDocumentKinds.DefaultTemplate(kind):CustomDocumentForms.Text(template);
+        return new(kind,invoice,templateText,CustomDocumentForms.Text(bytes)){SourceDocument=bytes};
     }
     public void SaveCustomIssueForm(long eventId,long issueId,string kind,byte[] content)
     {
         CustomDocumentForms.Validate(content);Invoice(eventId,issueId);using var c=Open();EnsureRecipientForms(c);
         using var cmd=Command(c,"INSERT INTO issue_custom_form(issue_id,kind,file_name,content) VALUES($i,$k,$f,$b) ON CONFLICT(issue_id,kind) DO UPDATE SET content=excluded.content","$i",issueId,"$k",kind,"$f",RecipientDocumentName(kind)+".docx","$b",content);cmd.ExecuteNonQuery();
+        if(kind=="contract")SynchronizeContractRepresentative(eventId,issueId,CustomDocumentForms.Text(content));
     }
 }
 
@@ -125,12 +134,15 @@ public static class CustomDocumentForms
     {
         using var output=new MemoryStream();output.Write(content);output.Position=0;
         using(var zip=new ZipArchive(output,ZipArchiveMode.Update,true))foreach(var entry in zip.Entries.Where(e=>Part(e.FullName)).ToArray())
-        {XDocument xml;using(var s=entry.Open())xml=XDocument.Load(s);change(xml);var name=entry.FullName;entry.Delete();using var target=zip.CreateEntry(name).Open();xml.Save(target);}
+        {XDocument xml;using(var s=entry.Open())xml=XDocument.Load(s);change(xml);WordDocumentStructure.Normalize(xml);WordDocumentStructure.Validate(xml);var name=entry.FullName;entry.Delete();using var target=zip.CreateEntry(name).Open();xml.Save(target);}
         return output.ToArray();
     }
     public static byte[] Fill(byte[] content,InvoiceInfo invoice,string kind,DateTime contractDate)
     {
-        var values=SourceBusinessForms.Values(invoice);var calendar=SourceBusinessForms.EventCalendarDate(invoice);
+        var standard=StandardDocumentForms.IsStandard(content);
+        var values=SourceBusinessForms.Values(invoice);
+        if(standard&&kind=="ttn"){values["senderDetails"]=values["senderDetails"].Replace("\n",", ");values["recipientDetails"]=values["recipientDetails"].Replace("\n",", ");}
+        var calendar=SourceBusinessForms.EventCalendarDate(invoice);
         values["contractDate"]=contractDate.ToString("dd.MM.yyyy");values["eventCalendarDate"]=calendar;
         if(kind=="act"){values["date"]=calendar;}else if(kind=="contract")values["date"]=values["contractDate"];
         var seatGroups=InvoiceDocuments.Lines(invoice);
@@ -138,19 +150,30 @@ public static class CustomDocumentForms
         values["date"]=kind=="act"?calendar:kind=="contract"?values["contractDate"]:DateTimeOffset.Parse(invoice.IssuedAt).ToString("dd.MM.yyyy");
         values["lineCountWords"]=RussianWords.Number(priceGroups.Length);
         return Rewrite(content,xml=>{
-            foreach(var row in xml.Descendants(W+"tr").Where(r=>Regex.IsMatch(string.Concat(r.Descendants(W+"t").Select(t=>t.Value)),@"\{item(Section|Description|Row|Count)\}")).ToArray())
+            foreach(var row in xml.Descendants(W+"tr").Where(r=>Regex.IsMatch(string.Concat(r.Descendants(W+"t").Select(t=>t.Value)),@"\{item(Section|DescriptionShort|Description|Row|Count)\}")).ToArray())
             {
                 var rowText=string.Concat(row.Descendants(W+"t").Select(t=>t.Value));
                 var groups=rowText.Contains("{itemRow}")||rowText.Contains("{itemSection}")||rowText.Contains("{itemSeat}")?seatGroups:priceGroups;
                 var index=0;
                 foreach(var line in groups)
                 {
-                    var copy=new XElement(row);copy.Element(W+"trPr")?.Elements(W+"trHeight").Remove();var rowValues=new Dictionary<string,string>(values){["itemNumber"]=(++index).ToString(),["itemSection"]=line.Sector,["itemRow"]=line.Row,["itemSeat"]=line.Seats,["itemCount"]=line.Count.ToString(),["itemPrice"]=DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total),["itemDescription"]=$"Театральные билеты на мероприятие «{invoice.Title}». {invoice.Venue}. {invoice.EventDate}."};
+                    var copy=new XElement(row);copy.Element(W+"trPr")?.Elements(W+"trHeight").Remove();if(standard&&kind=="ttn"){var props=copy.Element(W+"trPr");if(props is null){props=new XElement(W+"trPr");copy.AddFirst(props);}props.Add(new XElement(W+"cantSplit"));}var rowValues=new Dictionary<string,string>(values){["itemNumber"]=(++index).ToString(),["itemSection"]=line.Sector,["itemRow"]=line.Row,["itemSeat"]=line.Seats,["itemCount"]=line.Count.ToString(),["itemPrice"]=DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total),["itemDescriptionShort"]="Театральные билеты",["itemDescription"]=standard&&kind=="ttn"?"Театральные билеты":$"Театральные билеты на мероприятие «{invoice.Title}». {invoice.Venue}. {invoice.EventDate}."};
                     foreach(var p in copy.Descendants(W+"p"))Replace(p,rowValues);row.AddBeforeSelf(copy);
                 }
                 row.Remove();
             }
             foreach(var p in xml.Descendants(W+"p"))Replace(p,values);
+            foreach(var text in xml.Descendants(W+"t").Where(t=>t.Value.Contains('\n')).ToArray())
+            {
+                var lines=text.Value.Replace("\r\n","\n").Replace('\r','\n').Split('\n');
+                text.ReplaceWith(lines.SelectMany((line,index)=>index==0?new XElement[]{new(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),line)}:new XElement[]{new(W+"br"),new(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),line)}));
+            }
+            if(standard&&kind=="ttn"&&xml.Root?.Name==W+"document")
+            {
+                xml.Descendants(W+"trHeight").Remove();
+                foreach(var row in xml.Descendants(W+"tr").Where(r=>!r.Descendants(W+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value))).ToArray())row.Remove();
+                foreach(var size in xml.Descendants(W+"sz"))size.SetAttributeValue(W+"val",16);
+            }
             if(kind=="contract"&&xml.Root?.Name==W+"ftr")foreach(var p in xml.Descendants(W+"p"))
             {
                 if(!p.Descendants(W+"instrText").Any(t=>t.Value.Contains("PAGE",StringComparison.OrdinalIgnoreCase)))continue;

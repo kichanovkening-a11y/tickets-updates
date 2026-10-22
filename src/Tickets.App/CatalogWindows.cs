@@ -60,7 +60,7 @@ internal class EditorWindow : Window
 
 internal sealed class PriceEditorWindow : EditorWindow
 {
-    private readonly HallView preview=new();
+    private readonly HallView preview=new(){AllowUnavailableSelection=true};
     private List<SeatInfo> seats=[];
     private readonly Dictionary<long,PriceValue> prices=[];
     private readonly HashSet<long> withdrawn=[];

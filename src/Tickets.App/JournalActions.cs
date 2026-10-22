@@ -78,6 +78,12 @@ public partial class MainWindow
         HistoryGrid.ItemsSource=issues.Select(issue=>new JournalIssueRow(issue,journalSelection.Contains(issue.Id))).ToArray();
         UpdateJournalSelection();
     }
+    private void ClearJournalSelection()
+    {
+        journalSelection.Clear();
+        foreach(var row in HistoryGrid.Items.OfType<JournalIssueRow>())row.IsSelected=false;
+        HistoryGrid.Items.Refresh();UpdateJournalSelection();
+    }
     private void JournalChecked(object sender,RoutedEventArgs e)
     {
         if(sender is not CheckBox box||box.Tag is not long id)return;
@@ -89,15 +95,14 @@ public partial class MainWindow
         MergeInvoicesButton.Visibility=journalSelection.Count>=2?Visibility.Visible:Visibility.Collapsed;
         var selected=SelectedJournalInvoices(out var error);
         MergeInvoicesButton.IsEnabled=journalSelection.Count>=2&&error.Length==0;
-        MergeInvoicesButton.Content=selected.Length>=2?$"Объединить в № {selected[0].Id}":"Объединить накладные";
-        JournalSelectionStatus.Text=journalSelection.Count<2?"":error.Length>0?error:$"Выбрано: {selected.Length}. Номер и реквизиты № {selected[0].Id} сохранятся.";
+        MergeInvoicesButton.Content="Объединить накладные";
+        JournalSelectionStatus.Text=journalSelection.Count<2?"":error.Length>0?error:$"Выбрано: {selected.Length}. Будет создана новая накладная со следующим общим номером.";
     }
     private IssueInfo[] SelectedJournalInvoices(out string error)
     {
         error="";
         if(current is null||journalSelection.Count<2)return [];
-        // Choose the oldest selected invoice explicitly, independent of checkbox
-        // click order and the current sorting of the journal.
+        // Keep the source header choice stable across checkbox and sort order.
         var selected=store.Issues(current.Id).Where(issue=>journalSelection.Contains(issue.Id)).OrderBy(issue=>issue.Id).ToArray();
         if(selected.Length!=journalSelection.Count)error="Выберите накладные одного мероприятия. Обновите журнал.";
         else if(selected.Select(issue=>CatalogText.Key(issue.Recipient)).Distinct().Count()>1)error="Объединение: выберите одного получателя.";
@@ -114,7 +119,7 @@ public partial class MainWindow
             var selected=SelectedJournalInvoices(out var error);
             if(error.Length>0){UpdateJournalSelection();return;}
             var target=selected[0];
-            var message=$"Объединить накладные {string.Join(", ",selected.Select(issue=>"№ "+issue.Id))} в № {target.Id}?\nПолучатель: {target.Recipient}\nОтправитель: {target.Sender}\nНомер, дата и реквизиты № {target.Id} сохранятся. Исходные записи и возвраты останутся в истории.";
+            var message=$"Объединить накладные {string.Join(", ",selected.Select(issue=>"№ "+issue.Id))} в новую накладную?\nПолучатель: {target.Recipient}\nОтправитель: {target.Sender}\nБудет присвоен следующий общий номер. Дата и реквизиты взяты из № {target.Id}. Исходные накладные и возвраты останутся в истории.";
             if(MessageBox.Show(this,message,"Объединение накладных",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             var eventId=current.Id;
             var mergedId=store.MergeInvoices(eventId,selected.Select(issue=>issue.Id).ToArray());

@@ -52,6 +52,12 @@ public sealed partial class Store
             var current=result[^1];
             result[^1]=current with{Issue=current.Issue with{Count=current.Issue.Count+1,ReturnedCount=current.Issue.ReturnedCount+(r.IsDBNull(9)?0:1),Total=current.Issue.Total+r.GetInt64(10)}};
         }
-        return result;
+        // A merged invoice owns links rather than physical ticket rows. Display
+        // current canonical invoices with their aggregate counts; originals remain
+        // available through their historical invoice IDs.
+        var headers=result.ToDictionary(item=>item.Issue.Id);
+        return result.Select(item=>item.Issue.EventId).Distinct()
+            .SelectMany(eventId=>Issues(eventId).Select(issue=>headers[issue.Id] with{Issue=issue}))
+            .OrderByDescending(item=>item.Issue.IssuedAt).ThenByDescending(item=>item.Issue.Id).ToList();
     }
 }

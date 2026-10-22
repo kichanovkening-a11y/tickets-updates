@@ -29,8 +29,8 @@ internal static class Journal016Checks
                 Reject(()=>store.MergeInvoices(show.Id,new[]{ids[0],other}));
                 Check(store.ResolveInvoiceId(other)==other,"Rejected merge changed membership");
             }
-            Check(store.MergeInvoices(show.Id,new[]{ids[0],ids[4]})==ids[0],"Same-recipient merge should remain available");
-            var invoice=store.Invoice(show.Id,ids[0]);
+            var merged=store.MergeInvoices(show.Id,new[]{ids[0],ids[4]});Check(merged>ids.Max(),"Same-recipient merge should allocate a new invoice");
+            var invoice=store.Invoice(show.Id,merged);
             Check(invoice.Tickets.All(t=>t.Recipient=="Оля"),"Merged recipient ownership changed");
         });
     }

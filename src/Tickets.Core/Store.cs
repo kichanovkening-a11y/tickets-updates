@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); }
 
     private SqliteConnection Open()
     {
@@ -129,6 +129,7 @@ public sealed partial class Store
             {
                 senderQuery.Transaction=tx;
                 CaptureIssueOrganizations(c,tx,issueId,Convert.ToString(senderQuery.ExecuteScalar())!,recipient);
+                CaptureRecipientForms(c,tx,issueId,recipient);
             }
             foreach(var sid in seats)
             {

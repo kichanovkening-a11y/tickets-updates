@@ -27,14 +27,14 @@ internal static class SeatSelectionChecks
             var shrunken=SeatSelection.ApplyRectangle(seats,initial,8,8,15,15,true);
             Require(shrunken.SetEquals(new long[]{2,3,4,5,6}),"drag did not recompute from gesture snapshot");
         });
-        test("click toggles only the hit seat and occupied seats stay selectable",_=>{
+        test("click toggles free seats while occupied hits remain available for status",_=>{
             var seats=Grid();seats[0]=seats[0] with {TicketId=77};
             var selection=new HashSet<long>{6};var hit=SeatSelection.Hit(seats,8,8);
-            Require(hit?.Id==1,"occupied hit missing");SeatSelection.Toggle(selection,hit!.Id);
-            Require(selection.SetEquals(new long[]{1,6}),"click did not preserve other selections");
-            SeatSelection.Toggle(selection,hit.Id);Require(selection.SetEquals(new long[]{6}),"second click did not remove only hit seat");
+            Require(hit?.Id==1,"occupied hit missing");SeatSelection.Toggle(selection,hit!);
+            Require(selection.SetEquals(new long[]{6}),"occupied click selected a seat");
+            SeatSelection.Toggle(selection,hit!);Require(selection.SetEquals(new long[]{6}),"second click did not remove only hit seat");
             Require(SeatSelection.Hit(seats,16,8) is null,"point at seat outer edge must not hit");
-            Require(SeatSelection.ApplyRectangle(seats,selection,0,0,15,15,false).SetEquals(new long[]{1,6}),"occupied seat filtered out of marquee");
+            Require(SeatSelection.ApplyRectangle(seats,selection,0,0,15,15,false).SetEquals(new long[]{6}),"occupied seat entered marquee");
         });
     }
     private static SeatInfo[] Grid()=>Enumerable.Range(0,6).Select(i=>new SeatInfo(i+1,"S","R",(i+1).ToString(),i%3*30,i/3*30,100,"#123456",null,"","",null)).ToArray();

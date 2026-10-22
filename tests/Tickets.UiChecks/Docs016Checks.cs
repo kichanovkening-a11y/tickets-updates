@@ -21,7 +21,7 @@ internal static class Docs016Checks
             CheckNavigation(window);
             foreach(var saveEdit in new[]{true,false})
             {
-                const string caption="Реквизиты";
+                const string caption="Реквизиты получателя";
                 Exception? error=null;
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                     Window? editor=null;

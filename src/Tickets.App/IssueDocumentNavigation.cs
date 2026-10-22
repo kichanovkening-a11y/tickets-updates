@@ -26,6 +26,7 @@ internal static class IssueDocumentNavigation
                 button.Background=Brushes.SteelBlue;button.Foreground=Brushes.White;button.FontWeight=FontWeights.Bold;
                 button.ToolTip="Текущий документ";
             }
+            button.Tag=key;
             button.Click+=(_,_)=>{if(!active)navigate(key);};
             panel.Children.Add(button);
         }
@@ -33,6 +34,13 @@ internal static class IssueDocumentNavigation
         foreach(var kind in IssueDocumentKinds.All)Add(kind,IssueDocumentKinds.Name(kind));
         Add(Specification,"Спецификация");
         return new ScrollViewer{Content=panel,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(0,0,0,4)};
+    }
+
+    internal static void SetBusinessEnabled(ScrollViewer toolbar,bool enabled)
+    {
+        if(toolbar.Content is not Panel panel)return;
+        foreach(var button in panel.Children.OfType<Button>().Where(b=>b.Tag is string key&&key!=Invoice))
+        {button.IsEnabled=enabled;if(!enabled)button.ToolTip="Заполните реквизиты получателя";else button.ToolTip=null;}
     }
 
     internal static void OpenWord(string path,Func<string> create)
@@ -43,10 +51,13 @@ internal static class IssueDocumentNavigation
 
     internal static void Open(Store store,long eventId,long issueId,string selected)
     {
+        if(selected!=Invoice&&!store.CanUseBusinessDocuments(eventId,issueId))throw new TicketException("Заполните реквизиты получателя. Пока доступны накладная и печать билетов.");
         while(selected!=Invoice)
         {
             string next=Invoice;
-            EditorWindow editor=selected==Specification
+            EditorWindow editor=store.CustomIssueDocument(eventId,issueId,selected) is not null
+                ?new CustomIssueDocumentWindow(store,eventId,issueId,selected)
+                :selected==Specification
                 ?new SpecificationWindow(store,eventId,issueId)
                 :new IssueDocumentWindow(store,eventId,issueId,selected);
             if(selected==Specification)editor.Title=$"Спецификация · выдача № {issueId}";

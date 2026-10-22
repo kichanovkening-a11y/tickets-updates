@@ -42,12 +42,13 @@ internal static class Journal017Checks
             Select(first,long.MaxValue);
             Check(!merge.IsEnabled&&status.Text.Contains("мероприятия"),"Missing or cross-event selection immediately requests one event");
             Select(second,first);
-            Check(merge.IsEnabled&&merge.Content.ToString()!.Contains($"№ {first}"),"Inline merge explicitly targets the oldest selected invoice regardless of click order");
+            Check(merge.IsEnabled&&status.Text.Contains("новая накладная"),"Inline merge explains that a new invoice will be created");
             ConfirmMerge(Click,false);
             Check(store.ResolveInvoiceId(second)==second&&selection.Count==2,"Declining confirmation preserves both invoices and checked rows");
             ConfirmMerge(Click,true);
-            Check(store.ResolveInvoiceId(second)==first&&selection.Count==0,"Accepting inline confirmation merges the checked invoices and clears selection");
-            Check(status.Text.Contains($"№ {first}")&&status.Text.Contains("Документы обновлены"),"Successful inline merge refreshes documents and reports target invoice");
+            var merged=store.ResolveInvoiceId(second);
+            Check(merged>otherSender&&store.ResolveInvoiceId(first)==merged&&selection.Count==0,"Accepting inline confirmation creates a new invoice and clears selection");
+            Check(status.Text.Contains($"№ {merged}")&&status.Text.Contains("Документы обновлены"),"Successful inline merge refreshes documents and reports target invoice");
             Check(!Application.Current.Windows.Cast<Window>().Any(w=>w.GetType().Name=="InvoiceWindow"||w.GetType().Name=="InvoiceMergeWindow"),"Inline merge never opens an invoice or selection window");
         }
         finally{main.Close();}

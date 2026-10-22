@@ -249,11 +249,12 @@ internal static class Program
             issueButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(invoiceError is not null)throw invoiceError;
             var history=(DataGrid)main.FindName("HistoryGrid");Check(history.Items.Count==1,"one journal row for one issuance");
             Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
-            hall.Selected.Add(seatIds[0]);typeof(Tickets.App.MainWindow).GetMethod("UpdateSelection",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);
-            Check(((TextBlock)main.FindName("IssuedRecipients")).Text.Contains("UI recipient"),"issued selection explicitly identifies recipient");
-            var warning=((ListBox)main.FindName("SelectedList")).Items.Cast<object>().Single();
-            Check(Equals(warning.GetType().GetProperty("AlertBrush")!.GetValue(warning),Brushes.Red),"occupied selected place is red in the selected list");
-            var printButton=(Button)main.FindName("PrintTicketsButton");Check(printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"issued but unprinted places expose initial printing without changing ticket numbers");
+            hall.SetSelection(new[]{seatIds[0]});Pump();
+            Check(hall.SelectedSeats.Count==0,"issued place cannot enter generic selection");
+            var printButton=(Button)main.FindName("PrintTicketsButton");Check(!printButton.IsEnabled,"issued place cannot print from generic selection");
+            typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[0],new Point(20,20)});Pump();
+            Check(((TextBlock)main.FindName("StatusText")).Text.Contains("UI recipient"),"occupied place status identifies original recipient");
+            Check(hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную"))&&!hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Печать билетов")),"occupied context exposes original invoice without generic printing");hall.ContextMenu.IsOpen=false;
             hall.SetSelection(new[]{seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI print preview only";Pump();
             Check(printButton.IsVisible&&printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"primary ticket printing action is visible and available");
             var freePreviewSelection=hall.Selected.ToArray();var freePreviewSummary=((TextBlock)main.FindName("SelectedSummary")).Text;
@@ -279,22 +280,28 @@ internal static class Program
             Isolated("journal016",Journal016Checks.Run);
             Isolated("blank017",Blank017Checks.Run);
             Isolated("docs017",Docs017Checks.Run);
+            Isolated("documents018",RecipientDocuments018Checks.Run);
             Isolated("journal017",Journal017Checks.Run);
+            Isolated("issuance018",s=>{
+                var isolatedMain=new Tickets.App.MainWindow(s);isolatedMain.Show();Pump();
+                try{Issuance018Checks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
+            });
+            Isolated("parties018",Parties018Checks.Run);
+            Isolated("merge018",Merge018Checks.Run);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
-            Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
+            Check(hall.Selected.SetEquals(new[]{seatIds[3]})&&printButton.IsEnabled,"mixed selection excludes occupied place and retains free place");
             Exception? mixedPreviewError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
                 previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
-                var occupied=(InvoiceInfo)ticketPrintType.GetField("originalOccupied",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(previewWindow)!;
-                Check(occupied.Tickets.Count==1&&occupied.Tickets[0]==originalInvoice.Tickets.Single(t=>t.SeatId==seatIds[0]),"mixed preview retains occupied ticket identity, price, series and invoice");
+                Check(ticketPrintType.GetField("originalOccupied",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(previewWindow) is null,"generic preview contains no original occupied ticket");
                 var page=Logical(previewWindow).OfType<DocumentPageView>().First().DocumentPaginator.GetPage(0).Visual;
-                Check(Visual(page).OfType<Border>().Count()==2,"mixed preview renders both free and occupied ticket cards");
+                Check(Visual(page).OfType<Border>().Count()==1,"generic preview renders only free selected ticket");
             }catch(Exception ex){mixedPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(mixedPreviewError is not null)throw mixedPreviewError;
-            Check(hall.Selected.SetEquals(new[]{seatIds[0],seatIds[3]}),"closing mixed print preview retains its complete selection");
+            Check(hall.Selected.SetEquals(new[]{seatIds[3]}),"closing preview retains free selection without occupied place");
             var invoiceAfterPreview=store.Invoice(eventId,originalInvoice.Id);
-            Check(store.History(eventId).Count==3&&store.Issues(eventId).Count==1&&invoiceAfterPreview.Tickets.SequenceEqual(originalInvoice.Tickets)&&invoiceAfterPreview.Sender==originalInvoice.Sender&&!store.Recipients().Contains("UI mixed preview only")&&store.Seats(eventId).Single(s=>s.Id==seatIds[3]).Available,"closing mixed preview preserves original invoice and leaves free seat unissued");
+            Check(store.History(eventId).Count==3&&store.Issues(eventId).Count==1&&invoiceAfterPreview.Tickets.SequenceEqual(originalInvoice.Tickets)&&invoiceAfterPreview.Sender==originalInvoice.Sender&&!store.Recipients().Contains("UI mixed preview only")&&store.Seats(eventId).Single(s=>s.Id==seatIds[3]).Available,"closing preview preserves original invoice and leaves free seat unissued");
             // Exercise the main-window response to a successful print without submitting a physical print job.
-            hall.SetSelection(new[]{seatIds[0]});Exception? printedResultError=null;
+            hall.SetSelection(new[]{seatIds[3]});Exception? printedResultError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
                 previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
                 ticketPrintType.GetProperty("Printed")!.GetSetMethod(true)!.Invoke(previewWindow,new object[]{true});
@@ -306,10 +313,12 @@ internal static class Program
             Check(extensionHall.ActualWidth>100&&extensionHall.ActualHeight>100&&!extendButton.IsEnabled,"invoice extension renders hall and requires a selection");
             extensionHall.SetSelection(new[]{seatIds[0]});Check(!extendButton.IsEnabled,"invoice extension rejects occupied seat selection");
             extensionHall.SetSelection(new[]{seatIds[3]});Check(extendButton.IsEnabled&&Logical(extension).OfType<TextBlock>().Any(t=>t.Text.Contains("Мест: 1")),"invoice extension enables one free priced seat and updates summary");
-            extensionHall.SetSelection(new[]{seatIds[0],seatIds[3]});Check(!extendButton.IsEnabled,"invoice extension rejects mixed occupied and free selection");extension.Close();
+            extensionHall.SetSelection(new[]{seatIds[0],seatIds[3]});Check(extendButton.IsEnabled&&extensionHall.Selected.SetEquals(new[]{seatIds[3]}),"invoice extension filters occupied place and retains eligible free place");extension.Close();
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},true);
             typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});hall.SetSelection(new[]{seatIds[3]});
-            Check(Equals(((Button)main.FindName("SaleStateButton")).Content,"Вернуть в продажу")&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot issue or print and expose restore action");
+            Check(hall.Selected.Count==0&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot be selected issued or printed");
+            typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[3],new Point(20,20)});Pump();
+            Check(hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Вернуть в продажу")),"withdrawn place context exposes restore action");hall.ContextMenu.IsOpen=false;
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},false);typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});
             var sample=store.TicketReprint(eventId,new[]{seatIds[0]});
             var many=sample with{Tickets=Enumerable.Range(0,25).Select(i=>sample.Tickets[0] with{Number=i+1,Seat=(i+1).ToString()}).ToArray()};
@@ -324,7 +333,9 @@ internal static class Program
             var reload=typeof(Tickets.App.MainWindow).GetMethod("RefreshCatalogNavigation",BindingFlags.Instance|BindingFlags.NonPublic)!;reload.Invoke(main,null);main.SelectEvent(archivedEvent);Pump();
             store.DeleteVenue(archivedVenue);store.DeleteRecipient("Архив UI организация");reload.Invoke(main,null);Pump();
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Удалённые из справочников")==true)&&((Grid)main.FindName("Workspace")).IsVisible,"deleted shows remain accessible in archive without losing selected context");
-            hall.SetSelection(new[]{archivedSeats[0]});Check(((Button)main.FindName("ReturnButton")).IsEnabled,"archived show still permits returning issued seats on scheme");
+            hall.SetSelection(new[]{archivedSeats[0]});Check(hall.Selected.Count==0&&!((Button)main.FindName("ReturnButton")).IsEnabled,"archived occupied place cannot enter generic selection");
+            typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{archivedSeats[0],new Point(20,20)});Pump();
+            Check(hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную")),"archived occupied place retains original invoice access");hall.ContextMenu.IsOpen=false;
             hall.SetSelection(new[]{archivedSeats[1]});((ComboBox)main.FindName("RecipientBox")).Text="Blocked archived issuance";
             Check(!((Button)main.FindName("IssueButton")).IsEnabled&&!((Button)main.FindName("ApplyPriceButton")).IsEnabled,"archived show disables new issuance and price edits");
             main.SelectEvent(store.Events().First(e=>e.Id!=eventId).Id);Pump();
@@ -782,11 +793,10 @@ internal static class Program
             Check(boxes.Length==3&&boxes.Count(box=>box.IsChecked==true)==1&&!action.IsEnabled,"merge requires two checked invoices and retains initial selection");
             CheckBox Box(long id)=>boxes.Single(box=>box.Content?.ToString()?.StartsWith("№ "+id+" ·")==true);
             Box(second).IsChecked=true;Pump();
-            var primary=Logical(window).OfType<ComboBox>().Single();
-            Check(action.IsEnabled&&primary.Items.Count==2&&primary.SelectedItem is not null,"merge accepts canonical matching parties and offers selected primary invoices");
+            Check(action.IsEnabled&&!Logical(window).OfType<ComboBox>().Any(),"merge accepts matching parties and allocates a new number without primary selector");
             Box(other).IsChecked=true;Pump();Check(!action.IsEnabled,"merge disables invoices with a different recipient");
             Box(other).IsChecked=false;Box(first).IsChecked=false;Pump();
-            Check(!action.IsEnabled&&primary.Items.Count==1,"unchecking invoices updates primary choices and disables single-invoice merge");
+            Check(!action.IsEnabled,"unchecking invoices disables single-invoice merge");
             Check(store.Issues(eventId).Count==3,"merge selection alone preserves all original issuances");
         }
         finally{window.Close();}

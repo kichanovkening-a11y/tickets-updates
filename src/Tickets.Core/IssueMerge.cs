@@ -49,34 +49,42 @@ public sealed partial class Store
 
     private IReadOnlyList<TicketInfo> InvoiceTickets(long eventId,long issueId)
     {
-        using var c=Open();EnsureInvoiceMergeTable(c);var links=InvoiceMergeLinks(c);
-        // An old source reference remains its original historical invoice.
-        var canonical=ResolveInvoiceId(issueId,links)==issueId;
-        return History(eventId).Where(t=>canonical?ResolveInvoiceId(t.IssueId,links)==issueId:t.IssueId==issueId)
+        using var c=Open();EnsureInvoiceMergeTable(c);
+        // Follow only this invoice's sources: an earlier merged invoice remains
+        // readable after it becomes a source of a later merge.
+        using var read=Command(c,"""
+            WITH RECURSIVE members(id) AS (
+                SELECT id FROM issue_batch WHERE id=$i AND event_id=$e
+                UNION SELECT m.source_issue_id FROM invoice_merge m JOIN members b ON m.target_issue_id=b.id)
+            SELECT id FROM members
+            ""","$i",issueId,"$e",eventId);
+        using var rows=read.ExecuteReader();var members=new HashSet<long>();
+        while(rows.Read())members.Add(rows.GetInt64(0));
+        return History(eventId).Where(t=>members.Contains(t.IssueId))
             .OrderBy(t=>t.Series,StringComparer.Ordinal).ThenBy(t=>t.Number).ThenBy(t=>t.Id).ToList();
     }
     private List<IssueInfo> MergeIssueSummaries(long eventId)
     {
         using var c=Open();EnsureInvoiceMergeTable(c);var links=InvoiceMergeLinks(c);
-        var senders=new Dictionary<long,string>();
-        using(var command=Command(c,"SELECT id,sender FROM issue_batch WHERE event_id=$e","$e",eventId))
+        var headers=new Dictionary<long,(string Recipient,string IssuedAt,string Sender)>();
+        using(var command=Command(c,"SELECT id,recipient,issued_at,sender FROM issue_batch WHERE event_id=$e","$e",eventId))
         using(var rows=command.ExecuteReader())
-            while(rows.Read())senders.Add(rows.GetInt64(0),rows.GetString(1));
-        var tickets=History(eventId);var originals=tickets.GroupBy(t=>t.IssueId).ToDictionary(g=>g.Key,g=>g.First());
+            while(rows.Read())headers.Add(rows.GetInt64(0),(rows.GetString(1),rows.GetString(2),rows.GetString(3)));
+        var tickets=History(eventId);
         return tickets.GroupBy(t=>ResolveInvoiceId(t.IssueId,links)).Select(g=>{
-            var original=originals[g.Key];
+            var original=headers[g.Key];
             return new IssueInfo(g.Key,eventId,original.Recipient,original.IssuedAt,g.Count(),g.Count(t=>t.ReturnedAt is not null),
-                g.Sum(t=>(decimal)t.Amount),g.Count(t=>t.ReturnedAt is null&&t.IsReserved),g.Count(t=>t.ReturnedAt is null&&t.IsPrinted)){Sender=senders[g.Key]};
+                g.Sum(t=>(decimal)t.Amount),g.Count(t=>t.ReturnedAt is null&&t.IsReserved),g.Count(t=>t.ReturnedAt is null&&t.IsPrinted)){Sender=original.Sender};
         }).OrderByDescending(i=>i.Id).ToList();
     }
 
-    // The first ID is the invoice whose number, date and organization snapshots are kept.
+    // Allocate a new global number, retaining the first source header and organization snapshots.
     // Tickets and historical invoice records never change ownership during a merge.
     public long MergeInvoices(long eventId,IReadOnlyList<long> issueIds)
     {
         ArgumentNullException.ThrowIfNull(issueIds);
         if(issueIds.Count<2||issueIds.Any(id=>id<=0)||issueIds.Distinct().Count()!=issueIds.Count)
-            throw new TicketException("Выберите не менее двух разных накладных. Первой укажите основную.");
+            throw new TicketException("Выберите не менее двух разных накладных.");
         try
         {
             using var c=Open();EnsureInvoiceMergeTable(c);using var tx=c.BeginTransaction(deferred:false);
@@ -111,8 +119,21 @@ public sealed partial class Store
                 if(state.GetInt64(0)==0)throw new TicketException("Выберите действующие накладные с билетами на руках.");
                 if(state.GetInt64(1)>0)throw new TicketException("Сначала подтвердите все брони: объединять можно только выданные накладные.");
             }
-            var target=issueIds[0];var timestamp=DateTimeOffset.Now.ToString("O");
-            foreach(var source in issueIds.Skip(1))
+            long target;
+            using(var create=Command(c,"""
+                INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date,sender)
+                SELECT event_id,recipient,issued_at,series,title,venue,event_date,sender FROM issue_batch WHERE id=$source;
+                SELECT last_insert_rowid();
+                ""","$source",issueIds[0]))
+            {create.Transaction=tx;target=Convert.ToInt64(create.ExecuteScalar());}
+            using(var snapshot=Command(c,"""
+                INSERT INTO issue_organization_details(issue_id,role,details)
+                SELECT $target,role,details FROM issue_organization_details WHERE issue_id=$source
+                ""","$target",target,"$source",issueIds[0]))
+            {snapshot.Transaction=tx;snapshot.ExecuteNonQuery();}
+            CopyCustomIssueForms(c,tx,issueIds[0],target);
+            var timestamp=DateTimeOffset.Now.ToString("O");
+            foreach(var source in issueIds)
             {
                 using var write=Command(c,"INSERT INTO invoice_merge(source_issue_id,target_issue_id,merged_at) VALUES($s,$t,$at)","$s",source,"$t",target,"$at",timestamp);
                 write.Transaction=tx;write.ExecuteNonQuery();

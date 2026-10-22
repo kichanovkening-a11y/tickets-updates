@@ -51,6 +51,9 @@ internal sealed class RecipientsWindow:EditorWindow
             var editor=new RecipientEditorWindow(Store,organization.Name,true);
             if(editor.ShowDialog()==true){directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();ShowHistory();}
         }));edit.Margin=new Thickness(0,0,10,0);
+        Button(actions,"Документы получателя",()=>Try(()=>{
+            if(organizations.SelectedItem is RecipientDirectoryInfo organization)new RecipientFormsWindow(Store,organization.Name).ShowDialog();
+        }));
         organizations.MouseDoubleClick+=(_,_)=>{if(edit.IsEnabled)edit.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));};
         delete=new MenuItem{Header="Удалить"};
         delete.Click+=(_,_)=>Try(()=>{

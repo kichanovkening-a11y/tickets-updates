@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using Tickets.Core;
 
 namespace Tickets.App;
 
@@ -14,11 +15,24 @@ public partial class MainWindow
     private void OpenSeatContext(long seatId,Point position)
     {
         if(current is null)return;
-        if(!Hall.Selected.Contains(seatId))Hall.SetSelection(new[]{seatId});
-        UpdateSelection();
+        var seat=store.Seats(current.Id).FirstOrDefault(s=>s.Id==seatId);
+        if(seat is null)return;
         var menu=new ContextMenu{PlacementTarget=Hall,Placement=PlacementMode.RelativePoint,HorizontalOffset=position.X,VerticalOffset=position.Y};
         void Action(string label,bool enabled,System.Action perform)
         {if(!enabled)return;var item=new MenuItem{Header=label};item.Click+=(_,_)=>perform();menu.Items.Add(item);}
+        if(!SeatSelection.CanSelect(seat))
+        {
+            StatusText.Text=$"{seat.Label}: {seat.Status}. Место не выбирается.";
+            menu.Items.Add(new MenuItem{Header=seat.Status,IsEnabled=false});
+            if(seat.IssueId.HasValue)Action("Открыть исходную накладную",true,()=>Run(()=>OpenInvoice(seat.IssueId.Value)));
+            Action("Вернуть в продажу",seat.IsBlocked&&!currentArchived,()=>Run(()=>{
+                if(MessageBox.Show(this,$"Вернуть в продажу: {seat.Label}?","Возврат в продажу",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+                store.SetSeatsBlocked(current.Id,[seat.Id],false);LoadEvent(false);
+            }));
+            Hall.ContextMenu=menu;menu.IsOpen=true;return;
+        }
+        if(!Hall.Selected.Contains(seatId))Hall.SetSelection(new[]{seatId});
+        UpdateSelection();
         Action(IssueButton.Content?.ToString()??"Выдать накладную",IssueButton.IsEnabled,()=>IssueClick(this,new RoutedEventArgs()));
         Action(PrintTicketsButton.Content?.ToString()??"Печать билетов",PrintTicketsButton.IsEnabled,()=>PrintTicketsClick(this,new RoutedEventArgs()));
         Action("Забронировать",ReserveButton.IsEnabled,()=>ReserveClick(this,new RoutedEventArgs()));

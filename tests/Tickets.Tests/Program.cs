@@ -36,6 +36,10 @@ void Reject(Action action)
     throw new Exception("seed has no event with 3 priced seats");
 }
 SeatSelectionChecks.Register(Test);
+RecipientForms018Checks.Register(Test);
+Merge018Checks.Register(Test);
+Issuance018Checks.Register(Test);
+Parties018Checks.Register(Test);
 Hall012Checks.Register(Test);
 Pricing012Checks.Register(Test);
 OrgMerge012Checks.Register(Test);

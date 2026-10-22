@@ -38,9 +38,12 @@ public sealed class HallView : FrameworkElement
     private HashSet<long> gestureSelection=[];
     private long? hoverId;
     public HashSet<long> Selected { get; }=[];
+    public bool AllowUnavailableSelection{get;set;}
+    private bool CanSelect(SeatInfo seat)=>AllowUnavailableSelection||SeatSelection.CanSelect(seat);
     public event Action? SelectionChanged;
     public event EventHandler? EmptySpaceClicked;
     public event Action<long,Point>? SeatContextRequested;
+    public event Action<SeatInfo>? SeatSelectionRejected;
     public IReadOnlyList<SeatInfo> SelectedSeats => seats.Where(s=>Selected.Contains(s.Id)).ToList();
 
     public HallView()
@@ -146,7 +149,7 @@ public sealed class HallView : FrameworkElement
     public void Zoom(double factor) => ZoomAt(new Point(ActualWidth/2,ActualHeight/2),factor);
     public void Clear() { Selected.Clear(); SelectionChanged?.Invoke(); InvalidateVisual(); }
     public void SetSelection(IEnumerable<long> ids)
-    { var allowed=seats.Select(s=>s.Id).ToHashSet();Selected.Clear();foreach(var id in ids)if(allowed.Contains(id))Selected.Add(id);SelectionChanged?.Invoke();InvalidateVisual(); }
+    { var allowed=seats.Where(CanSelect).Select(s=>s.Id).ToHashSet();Selected.Clear();foreach(var id in ids)if(allowed.Contains(id))Selected.Add(id);SelectionChanged?.Invoke();InvalidateVisual(); }
     private Point World(Point p)=>new((p.X-offset.X)/zoom,(p.Y-offset.Y)/zoom);
     private Point Screen(Point p)=>new(p.X*zoom+offset.X,p.Y*zoom+offset.Y);
     private void ZoomAt(Point pivot,double factor)
@@ -229,7 +232,11 @@ public sealed class HallView : FrameworkElement
             else if((p-start).Length<6)
             {
                 var s=Hit(p);
-                if(s is not null) SeatSelection.Toggle(Selected,s.Id);
+                if(s is not null)
+                {
+                    if(AllowUnavailableSelection)SeatSelection.Toggle(Selected,s.Id);else SeatSelection.Toggle(Selected,s);
+                    if(!CanSelect(s))SeatSelectionRejected?.Invoke(s);
+                }
                 else if(e.ChangedButton==MouseButton.Left && Hit(start) is null)emptyClick=true;
             }
             SelectionChanged?.Invoke();
@@ -241,7 +248,12 @@ public sealed class HallView : FrameworkElement
     private void SelectRange(Point end)
     {
         var to=World(end);
-        var next=SeatSelection.ApplyRectangle(seats,gestureSelection,worldAnchor.X,worldAnchor.Y,to.X,to.Y,removing);
+        var next=SeatSelection.ApplyRectangle(seats,gestureSelection,worldAnchor.X,worldAnchor.Y,to.X,to.Y,removing,AllowUnavailableSelection);
+        if(!AllowUnavailableSelection)
+        {
+            var left=Math.Min(worldAnchor.X,to.X);var right=Math.Max(worldAnchor.X,to.X);var top=Math.Min(worldAnchor.Y,to.Y);var bottom=Math.Max(worldAnchor.Y,to.Y);
+            foreach(var seat in seats.Where(s=>!CanSelect(s)&&s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top))SeatSelectionRejected?.Invoke(seat);
+        }
         if(Selected.SetEquals(next))return;
         Selected.Clear();Selected.UnionWith(next);SelectionChanged?.Invoke();
     }

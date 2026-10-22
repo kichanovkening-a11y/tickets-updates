@@ -10,7 +10,8 @@ public static class IssueDocumentKinds
     public static string DefaultTemplate(string kind)=>BusinessDocumentTemplates.Default(kind);
 }
 
-public sealed record IssueDocumentInfo(string Kind,InvoiceInfo Invoice,string Template,string Body);
+public sealed record IssueDocumentInfo(string Kind,InvoiceInfo Invoice,string Template,string Body)
+{public byte[]? SourceDocument{get;init;}}
 
 public sealed partial class Store
 {
@@ -108,6 +109,7 @@ public sealed partial class Store
     public IssueDocumentInfo GetIssueDocument(long eventId,long issueId,string kind)
     {
         IssueDocumentKinds.Name(kind);UpgradeBusinessDocumentTemplates();
+        if(CustomIssueDocument(eventId,issueId,kind) is {} custom)return custom;
         using var c=Open();using var cmd=Command(c,"SELECT template FROM issue_document WHERE event_id=$e AND issue_id=$i AND kind=$k","$e",eventId,"$i",issueId,"$k",kind);
         if(cmd.ExecuteScalar() is string text)return RenderIssueDocument(kind,Invoice(eventId,issueId),text);
         return PrepareIssueDocuments(eventId,issueId).Single(document=>document.Kind==kind);
@@ -125,7 +127,7 @@ public sealed partial class Store
     public string SaveIssueSpecificationDocument(long eventId,long issueId)
     {
         var directory=System.IO.Path.Combine(DocumentsDirectory,"Спецификации");Directory.CreateDirectory(directory);
-        var file=System.IO.Path.Combine(directory,$"Спецификация-выдача-{issueId}.docx");InvoiceDocuments.SaveIssueSpecificationWord(Invoice(eventId,issueId),file);return file;
+        var file=System.IO.Path.Combine(directory,$"Спецификация-выдача-{issueId}.docx");if(CustomIssueDocument(eventId,issueId,"specification") is {} custom)InvoiceDocuments.SaveIssueDocumentWord(custom,file);else InvoiceDocuments.SaveIssueSpecificationWord(Invoice(eventId,issueId),file);return file;
     }
     public string InvoiceDocumentPath(long issueId)=>System.IO.Path.Combine(DocumentsDirectory,"Накладные",$"Накладная-{issueId}.docx");
     public string IssueDocumentPath(long issueId,string kind)=>System.IO.Path.Combine(DocumentsDirectory,IssueDocumentKinds.Name(kind),$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx");
@@ -134,6 +136,7 @@ public sealed partial class Store
     {
         PrepareIssueDocuments(eventId,issueId);var paths=new List<string>();var failures=new List<Exception>();
         try{paths.Add(SaveInvoiceDocument(eventId,issueId));}catch(Exception ex){failures.Add(ex);}
+        if(!CanUseBusinessDocuments(eventId,issueId)){if(failures.Count>0)throw new TicketException(failures[0].Message);return paths;}
         foreach(var kind in IssueDocumentKinds.All)try{paths.Add(SaveIssueDocumentWord(eventId,issueId,kind));}catch(Exception ex){failures.Add(ex);}
         try{paths.Add(SaveIssueSpecificationDocument(eventId,issueId));}catch(Exception ex){failures.Add(ex);}
         if(failures.Count>0)throw new TicketException("Выдача сохранена. Не удалось сохранить часть файлов Word: "+string.Join("; ",failures.Select(ex=>ex.Message)));return paths;

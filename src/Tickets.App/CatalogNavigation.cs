@@ -8,6 +8,18 @@ public partial class MainWindow
     private bool recipientUpdating;
     private bool recipientRefreshPending;
     private string RecipientName => ((RecipientBox.Template?.FindName("PART_EditableTextBox",RecipientBox) as TextBox)?.Text??RecipientBox.Text);
+    private void ClearIssuanceRecipient()
+    {
+        recipientUpdating=true;
+        try
+        {
+            RecipientBox.SelectedItem=null;RecipientBox.Text="";
+            if(RecipientBox.Template?.FindName("PART_EditableTextBox",RecipientBox) is TextBox box)box.Clear();
+            RecipientBox.IsDropDownOpen=false;
+        }
+        finally{recipientUpdating=false;}
+        if(ready)UpdateSelection();
+    }
     private IEnumerable<TreeViewItem> EventRows()
     {
         IEnumerable<TreeViewItem> Walk(ItemsControl parent)

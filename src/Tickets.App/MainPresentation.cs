@@ -6,6 +6,11 @@ using Tickets.Core;
 namespace Tickets.App;
 public partial class MainWindow
 {
+    private void WorkspaceTabChanged(object sender,SelectionChangedEventArgs e)
+    {
+        if(!ReferenceEquals(e.OriginalSource,WorkspaceTabs))return;
+        if(e.RemovedItems.Contains(JournalTab))ClearJournalSelection();
+    }
     private void UpdateCompactLayout()
     {
         EventSubtitle.Visibility=Workspace.ActualHeight>0&&Workspace.ActualHeight<550?Visibility.Collapsed:Visibility.Visible;

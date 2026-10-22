@@ -41,7 +41,7 @@
         </DockPanel>
       </Border>
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <StackPanel Margin="8,0,0,4"><DockPanel><TextBlock x:Name="EventDate" DockPanel.Dock="Right" FontSize="18" Margin="12,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></DockPanel>
+        <StackPanel Margin="8,0,0,4"><DockPanel><TextBlock x:Name="EventDate" Foreground="Red" DockPanel.Dock="Right" FontSize="18" Margin="12,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/></DockPanel>
           <TextBlock x:Name="EventSubtitle" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" MaxHeight="60" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
         <ScrollViewer Grid.Row="1" Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,5">
           <Grid x:Name="UpperActions" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -54,8 +54,8 @@
             </StackPanel>
           </Grid>
         </ScrollViewer>
-        <TabControl Grid.Row="2" BorderBrush="#CBD5E1" Background="White">
-          <TabItem Header="  Схема зала  ">
+        <TabControl x:Name="WorkspaceTabs" SelectionChanged="WorkspaceTabChanged" Grid.Row="2" BorderBrush="#CBD5E1" Background="White">
+          <TabItem><TabItem.Header><TextBlock Text="Схема зала" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>
             <Grid>
               <DockPanel>
                 <ScrollViewer DockPanel.Dock="Top" Margin="10,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
@@ -69,7 +69,7 @@
 
             </Grid>
           </TabItem>
-          <TabItem Header="  Журнал выдачи и возвратов  ">
+          <TabItem x:Name="JournalTab"><TabItem.Header><TextBlock Text="Журнал выдачи и возвратов" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>
             <DockPanel Margin="10">
               <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
                 <Grid Height="52"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Button x:Name="MergeInvoicesButton" Width="Auto" Padding="10,2" Content="Объединить накладные" Visibility="Collapsed" HorizontalAlignment="Left" Click="MergeInvoicesClick"/><TextBlock x:Name="JournalSelectionStatus" Grid.Column="1" VerticalAlignment="Center" TextWrapping="Wrap" Margin="10,0,0,0"/></Grid>
@@ -111,7 +111,7 @@
                       <Button Style="{StaticResource SeatActionStyle}" Content="Создать / изменить отправителя" Click="EditSenderClick"/>
                     </WrapPanel>
                     <TextBlock Text="От кого" Margin="0,6,0,4"/>
-                    <ComboBox x:Name="SenderBox" IsEditable="True" IsTextSearchEnabled="True" MinHeight="34" Padding="4"/>
+                    <ComboBox x:Name="SenderBox" PreviewMouseRightButtonUp="SenderContextRequested" IsEditable="True" IsTextSearchEnabled="True" MinHeight="34" Padding="4"/>
                     <Grid Margin="0,7,0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                       <StackPanel><TextBlock Text="Серия"/><TextBox x:Name="SeriesBox" Text="ТЕСТ" MaxLength="32" TextChanged="SeriesChanged"/></StackPanel>
                       <StackPanel Grid.Column="2"><TextBlock Text="Первый номер"/><TextBox x:Name="NumberBox" Text="1" TextChanged="InputChanged"/></StackPanel>

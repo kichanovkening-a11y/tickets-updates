@@ -36,6 +36,7 @@ public partial class MainWindow : Window
         Hall.SelectionChanged+=UpdateSelection;
         Hall.EmptySpaceClicked+=(_,_)=>SetPriceFocus(null);
         Hall.SeatContextRequested+=OpenSeatContext;
+        Hall.SeatSelectionRejected+=seat=>StatusText.Text=$"{seat.Label}: {seat.Status}. Место занято и не выбирается. Повторная печать — из исходной накладной.";
         Loaded+=(_,_)=>Run(()=> {
             ReadEventCatalog(); ready=true; ApplyFilter();RefreshRecipients();RefreshSenders();
             HomeSummary.Text=$"В базе мероприятий: {events.Count}. Старые выдачи не переносились.";
@@ -149,7 +150,7 @@ public partial class MainWindow : Window
         EventSubtitle.Text=$"{current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
         EventTitle.ToolTip=EventSubtitle.Text;UpdateCompactLayout();
         PriceBox.Clear();
-        if(fit){Hall.FocusPrice=null;recipientUpdating=true;try{RecipientBox.SelectedItem=null;RecipientBox.Text="";}finally{recipientUpdating=false;}}
+        if(fit){Hall.FocusPrice=null;ClearIssuanceRecipient();}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
         LoadJournal();RefreshRecipients();
         RenderHallLegend(seats);
@@ -178,23 +179,19 @@ public partial class MainWindow : Window
             !string.IsNullOrWhiteSpace(RecipientName) && !string.IsNullOrWhiteSpace(SeriesBox.Text) &&
             long.TryParse(NumberBox.Text,out var n) && n>0;
         ReserveButton.IsEnabled=IssueButton.IsEnabled;
-        var reservedInvoice=selected.Count>0&&selected.All(s=>s.IsReserved)&&selected.Select(s=>s.IssueId).Distinct().Count()==1;
-        if(reservedInvoice)IssueButton.IsEnabled=!archived;
-        IssueButton.Content=reservedInvoice?"Оформить накладную":"Выдать накладную";
-        ExtendInvoiceButton.IsEnabled=!archived&&selected.Count>0&&free==selected.Count&&!string.IsNullOrWhiteSpace(RecipientName);
-        PrintTicketsButton.IsEnabled=(selected.Count>0&&issued==selected.Count)||(!archived&&selected.Count>0&&selected.All(s=>s.Available||s.TicketId.HasValue)&&free>0&&!string.IsNullOrWhiteSpace(RecipientName)&&!string.IsNullOrWhiteSpace(SeriesBox.Text)&&long.TryParse(NumberBox.Text,out var printNumber)&&printNumber>0);
-        PrintTicketsButton.Content=selected.Count>0&&selected.All(s=>s.IsPrinted)?"Повторная печать":"Печать билетов";
+        IssueButton.Content="Выдать накладную";
+        ExtendInvoiceButton.IsEnabled=!archived&&selected.Count>0&&free==selected.Count;
+        PrintTicketsButton.IsEnabled=IssueButton.IsEnabled&&selected.All(SeatSelection.CanSelect);
+        PrintTicketsButton.Content="Печать билетов";
         var allBlocked=selected.Count>0&&selected.All(x=>x.IsBlocked);
         SaleStateButton.Content=allBlocked?"Вернуть в продажу":"Удалить из продажи";
         SaleStateButton.IsEnabled=!archived&&selected.Count>0&&issued==0&&(allBlocked||selected.All(x=>!x.IsBlocked));
         ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
         UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
         ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
-        SelectionHint.Text=archived?"Показ удалён из рабочих списков. Доступны просмотр накладных и возврат мест на схеме.":selected.Count==0?"Клик добавляет место, повторный клик снимает его. Рамка добавляет места; начните на выбранном месте, чтобы снять группу.":
-            free==selected.Count?(string.IsNullOrWhiteSpace(RecipientName)?"Выберите или создайте получателя для выдачи и печати.":"Все выбранные места доступны для выдачи и печати."):
-            issued==selected.Count?"Печать сохранит привязку к исходной накладной. Серии и номера останутся прежними.":
-            selected.Any(x=>x.IsBlocked)?"Есть снятые с продажи места. Для выдачи или печати верните их в продажу.":
-            "Можно печатать свободные и ранее выданные билеты вместе. Ранее выданные останутся в своих накладных.";
+        SelectionHint.Text=archived?"Показ удалён из рабочих списков. Накладные доступны в журнале.":selected.Count==0?"Клик и рамка выбирают свободные места. Занятые и снятые с продажи места не выбираются. Повторная печать — из исходной накладной.":
+            free==selected.Count?(string.IsNullOrWhiteSpace(RecipientName)?"Выберите или создайте получателя для каждой новой выдачи и печати.":"Все выбранные места доступны для выдачи и печати."):
+            "Назначьте цену выбранным местам для выдачи и печати.";
     }
     private void InputChanged(object sender,TextChangedEventArgs e) { if(ready) UpdateSelection(); }
     private void SeriesChanged(object sender,TextChangedEventArgs e) { if(ready) Run(()=>{if(!string.IsNullOrWhiteSpace(SeriesBox.Text))store.RememberIssueSeries(SeriesBox.Text);UpdateNumber();}); }
@@ -254,20 +251,13 @@ public partial class MainWindow : Window
     private void PrintTicketsClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(current is null)return;var selected=Hall.SelectedSeats;if(selected.Count==0)throw new TicketException("Выберите места для печати.");
         var ids=selected.Select(x=>x.Id).ToArray();
-        if(selected.Any(x=>x.IsPrinted)&&MessageBox.Show(this,$"В выборе есть уже распечатанные билеты. Распечатать выбранные {ids.Length} билетов ещё раз? Номера и накладные сохранятся.","Повторная печать",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
-        TicketPrintWindow window;
-        if(selected.All(x=>x.TicketId.HasValue))
-        {
-            window=new TicketPrintWindow(store,current.Id,ids);
-        }
-        else
-        {
-            if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Укажите первый номер билета.");
-            PersistSelectedSender();window=new TicketPrintWindow(store,current.Id,ids,RecipientName,SeriesBox.Text,first);
-        }
+        if(selected.Any(x=>!x.Available))throw new TicketException("Для печати выберите только свободные места с ценой. Ранее выданные билеты печатайте из исходной накладной.");
+        if(string.IsNullOrWhiteSpace(RecipientName))throw new TicketException("Выберите получателя для новой выдачи.");
+        if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Укажите первый номер билета.");
+        PersistSelectedSender();var window=new TicketPrintWindow(store,current.Id,ids,RecipientName,SeriesBox.Text,first);
         window.ShowDialog();
         if(window.Printed||window.IssueId>0){LoadEvent(false);if(!window.Printed)Hall.SetSelection(ids);}
-        if(window.IssueId>0){try{store.SaveAllDocuments(current.Id,window.IssueId);}catch(Exception ex){StatusText.Text="Выдача сохранена. Не удалось обновить документы: "+ex.Message;}}
+        if(window.IssueId>0){ClearIssuanceRecipient();try{store.SaveAllDocuments(current.Id,window.IssueId);}catch(Exception ex){StatusText.Text="Выдача сохранена. Не удалось обновить документы: "+ex.Message;}}
     });
     private void ReadEventCatalog()
     {
@@ -283,12 +273,12 @@ public partial class MainWindow : Window
     {
         if(current is null)return;
         var eventId=current.Id;var selected=Hall.SelectedSeats;
-        if(selected.Count>0&&selected.All(s=>s.IsReserved)&&selected.Select(s=>s.IssueId).Distinct().Count()==1)
-        {var reservedId=selected[0].IssueId!.Value;store.ConfirmReservation(eventId,reservedId);LoadEvent(false);Hall.Clear();SaveIssuedDocuments(eventId,reservedId);OpenInvoice(reservedId);return;}
+        if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите только свободные места с ценой. Занятые места доступны в исходной накладной.");
+        if(string.IsNullOrWhiteSpace(RecipientName))throw new TicketException("Выберите получателя для новой выдачи.");
         PersistSelectedSender();
         if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
         var issueId=store.Issue(eventId,selected.Select(s=>s.Id).ToArray(),RecipientName,SeriesBox.Text,first);
-        LoadEvent(false);Hall.Clear();StatusText.Text=$"Выдано билетов: {selected.Count}. Накладная № {issueId}.";
+        LoadEvent(false);Hall.Clear();ClearIssuanceRecipient();StatusText.Text=$"Выдано билетов: {selected.Count}. Накладная № {issueId}.";
         SaveIssuedDocuments(eventId,issueId);OpenInvoice(issueId,print);
     }
     private void ReturnClick(object sender,RoutedEventArgs e)=>Run(()=>ReturnTickets(

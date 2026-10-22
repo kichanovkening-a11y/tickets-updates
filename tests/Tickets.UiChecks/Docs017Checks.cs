@@ -12,6 +12,7 @@ internal static class Docs017Checks
     {
         var show=store.Events().First(e=>store.Seats(e.Id).Any(s=>s.Available));
         var seat=store.Seats(show.Id).First(s=>s.Available);
+        store.SaveOrganizationDetails("UI017 получатель",false,new(Name:"UI017 получатель",Inn:"017"));
         var issue=store.Issue(show.Id,[seat.Id],"UI017 получатель","UI017",1);
         store.SaveAllDocuments(show.Id,issue);
         var assembly=typeof(Tickets.App.App).Assembly;

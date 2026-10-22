@@ -12,6 +12,7 @@ internal sealed class InvoiceWindow : EditorWindow
     private readonly ComboBox senderBox=new(){IsEditable=true,IsTextSearchEnabled=true,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
     private readonly TextBlock savedStatus=new(){TextTrimming=TextTrimming.CharacterEllipsis,Margin=new Thickness(0,3,0,3),FontSize=12};
     private string persistedSender="";
+    private ScrollViewer? documentNavigation;
     private readonly FlowDocumentScrollViewer reader=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     public InvoiceWindow(Store store,long eventId,long issueId,bool print=false):base(store,$"Накладная № {issueId}",1030,850)
     {
@@ -19,7 +20,7 @@ internal sealed class InvoiceWindow : EditorWindow
         var root=new Grid{Margin=new Thickness(10)};Content=root;
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
-        header.Children.Add(IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
+        header.Children.Add(documentNavigation=IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
             PersistSender();
             IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
             Refresh();
@@ -30,11 +31,23 @@ internal sealed class InvoiceWindow : EditorWindow
                 var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{PersistSender();InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});
                 if(path is not null){savedStatus.Text="Сохранено: "+path;Refresh();}
             }),()=>Try(Print)));
+        var invoiceTools=new WrapPanel();header.Children.Add(invoiceTools);
+        var ticketsButton=Button(invoiceTools,"Печать билетов накладной",()=>Try(PrintInvoiceTickets));ticketsButton.ContentTemplate=null;ticketsButton.Width=double.NaN;ticketsButton.Padding=new Thickness(10,2,10,2);ticketsButton.Margin=new Thickness(0,0,0,4);
         var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});header.Children.Add(senderRow);
         senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
         var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
         Button(senderActions,"+ Отправитель",()=>Try(()=>EditSender(false)));
-        Button(senderActions,"Реквизиты",()=>Try(EditRecipient)).ToolTip="Реквизиты получателя";
+        Button(senderActions,"Реквизиты",()=>Try(()=>EditSender(true))).ToolTip="Реквизиты выбранного отправителя";
+        Button(senderActions,"Реквизиты получателя",()=>Try(EditRecipient)).ToolTip="Реквизиты получателя этой накладной";
+        var removeSender=new MenuItem{Header="Удалить отправителя из списка"};
+        senderBox.ContextMenu=new ContextMenu();senderBox.ContextMenu.Items.Add(removeSender);
+        senderBox.ContextMenuOpening+=(_,e)=>{if(senderBox.SelectedItem is not string)e.Handled=true;};
+        removeSender.Click+=(_,_)=>Try(()=>{
+            if(senderBox.SelectedItem is not string selected)return;
+            if(MessageBox.Show(DialogOwner,$"Удалить отправителя «{selected}» из списка?\nРанее оформленные документы сохранятся.","Удаление отправителя",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
+            Store.RemoveSenderChoice(selected);
+            var current=senderBox.Text;senderBox.ItemsSource=Store.Senders();senderBox.Text=current;
+        });
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
         Grid.SetRow(reader,1);root.Children.Add(reader);reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Document(Store.Invoice(eventId,issueId),reader.ActualWidth-20);};Refresh();
@@ -50,7 +63,7 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private void Refresh()
     {
-        var invoice=Store.Invoice(eventId,issueId);reader.Document=Document(invoice,reader.ActualWidth>100?reader.ActualWidth-20:794);
+        var invoice=Store.Invoice(eventId,issueId);if(documentNavigation is not null)IssueDocumentNavigation.SetBusinessEnabled(documentNavigation,Store.CanUseBusinessDocuments(eventId,issueId));reader.Document=Document(invoice,reader.ActualWidth>100?reader.ActualWidth-20:794);
     }
     private void SaveFiles()
     {
@@ -62,7 +75,7 @@ internal sealed class InvoiceWindow : EditorWindow
     {
         var editor=new SenderEditorWindow(Store,existing?senderBox.Text:"",existing);
         if(editor.ShowDialog()!=true)return;
-        senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;PersistSender();Store.RefreshInvoiceOrganizations(eventId,issueId);SaveFiles();Refresh();
+        senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;PersistSender();Store.RefreshInvoiceSender(eventId,issueId);SaveFiles();Refresh();
     }
     private void EditRecipient()
     {
@@ -79,6 +92,13 @@ internal sealed class InvoiceWindow : EditorWindow
         if(senderBox.Text==persistedSender)return;
         Store.UpdateInvoiceSender(eventId,issueId,senderBox.Text);persistedSender=senderBox.Text;
         SaveFiles();
+    }
+    private void PrintInvoiceTickets()
+    {
+        PersistSender();var invoice=Store.Invoice(eventId,issueId);
+        var seats=invoice.Tickets.Where(t=>t.ReturnedAt is null&&!t.IsReserved).Select(t=>t.SeatId).ToArray();
+        if(seats.Length==0)throw new TicketException("В этой накладной нет выданных билетов для печати.");
+        new TicketPrintWindow(Store,eventId,seats).ShowDialog();Refresh();
     }
     private void Print()
     {

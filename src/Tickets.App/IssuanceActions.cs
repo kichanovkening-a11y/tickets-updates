@@ -8,8 +8,21 @@ public partial class MainWindow
     private void RefreshSenders(string? selected=null)
     {
         var value=selected??SenderBox.Text;
-        SenderBox.ItemsSource=store.Senders();SenderBox.SelectedItem=null;
-        SenderBox.Text=string.IsNullOrWhiteSpace(value)?store.Sender:value;
+        var senders=store.Senders();SenderBox.ItemsSource=senders;SenderBox.SelectedItem=null;
+        var preferred=string.IsNullOrWhiteSpace(value)?store.Sender:value;
+        SenderBox.Text=senders.Contains(preferred)?preferred:"";
+    }
+    private void SenderContextRequested(object sender,System.Windows.Input.MouseButtonEventArgs e)
+    {
+        var name=SenderBox.SelectedItem as string??SenderBox.Text;
+        if(string.IsNullOrWhiteSpace(name)||!store.Senders().Contains(name))return;
+        var menu=new System.Windows.Controls.ContextMenu();
+        var remove=new System.Windows.Controls.MenuItem{Header="Удалить отправителя из списка"};
+        remove.Click+=(_,_)=>Run(()=>{
+            if(MessageBox.Show(this,$"Удалить отправителя «{name}» из списка? Существующие накладные сохранятся.","Отправители",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+            store.RemoveSenderChoice(name);SenderBox.SelectedItem=null;SenderBox.Text="";RefreshSenders();
+        });
+        menu.Items.Add(remove);SenderBox.ContextMenu=menu;menu.IsOpen=true;e.Handled=true;
     }
     private void PersistSelectedSender()
     {
@@ -28,14 +41,17 @@ public partial class MainWindow
     private void ReserveClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(current is null)return;
         if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
-        PersistSelectedSender();var selected=Hall.SelectedSeats;
+        var selected=Hall.SelectedSeats;
+        if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Для брони выберите только свободные места с ценой.");
+        if(string.IsNullOrWhiteSpace(RecipientName))throw new TicketException("Выберите получателя для новой брони.");
+        PersistSelectedSender();
         var id=store.Reserve(current.Id,selected.Select(s=>s.Id).ToArray(),RecipientName,SeriesBox.Text,first);
-        LoadEvent(false);Hall.Clear();StatusText.Text=$"Забронировано мест: {selected.Count}. Бронь № {id}. Для накладной выберите места и нажмите «Оформить накладную».";
+        LoadEvent(false);Hall.Clear();ClearIssuanceRecipient();StatusText.Text=$"Забронировано мест: {selected.Count}. Бронь № {id}. Для оформления откройте исходную накладную из журнала.";
     });
     private void ExtendInvoiceClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(current is null)return;var selected=Hall.SelectedSeats;
         if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите дополнительные свободные места с ценой.");
-        var choice=new InvoiceChoiceWindow(store,current.Id,RecipientName);
+        var choice=new InvoiceChoiceWindow(store,current.Id);
         if(choice.ShowDialog()!=true)return;
         var invoice=store.Invoice(current.Id,choice.SelectedIssueId);
         if(MessageBox.Show(this,$"Добавить {selected.Count} мест в накладную № {invoice.Id} для {invoice.Recipient}?\nОт кого: {invoice.Sender}","Дополнение накладной",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;

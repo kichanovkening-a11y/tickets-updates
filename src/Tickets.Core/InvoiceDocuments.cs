@@ -50,6 +50,13 @@ public static class InvoiceDocuments
     }
     public static void SaveIssueDocumentWord(IssueDocumentInfo document,string destination)
     {
+        if(document.SourceDocument is {} custom)
+        {
+            SourceBusinessForms.CheckExternalEdits(destination);
+            var temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
+            try{File.WriteAllBytes(temporary,custom);using(var z=ZipFile.Open(temporary,ZipArchiveMode.Update))if(z.GetEntry("[Content_Types].xml") is not null)SourceBusinessForms.Stamp(z);File.Move(temporary,destination,true);}
+            finally{if(File.Exists(temporary))File.Delete(temporary);}return;
+        }
         if(SourceBusinessForms.TrySave(document,destination))return;
         var body=new XElement(W+"body");
         var total=DocumentTotals.Total(document.Invoice.Tickets.Count,document.Invoice.Total);
@@ -82,7 +89,7 @@ public static class InvoiceDocuments
         }
         SaveDocument(body,destination,document.Kind==IssueDocumentKinds.Waybill,document.Kind==IssueDocumentKinds.Contract);
     }
-    public static bool UsesSourceForm(IssueDocumentInfo document)=>SourceBusinessForms.CanUseSource(document.Kind,document.Template);
+    public static bool UsesSourceForm(IssueDocumentInfo document)=>document.SourceDocument is not null||SourceBusinessForms.CanUseSource(document.Kind,document.Template);
     public static XDocument IssueDocumentXml(IssueDocumentInfo document)
     {
         var path=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"Tickets-preview-"+Guid.NewGuid().ToString("N")+".docx");

@@ -164,8 +164,7 @@ public sealed class HallView : FrameworkElement
                     if(collisions.Length==0)break;
                     caption.X=collisions.Min(rect=>rect.Left)-glyph.Width-8;
                 }
-                ink.Transform=new TranslateTransform(caption.X-glyph.X,caption.Y-glyph.Y);
-                dc.DrawGeometry(Brushes.Black,null,ink);rowCaptions.Add(caption);
+                dc.DrawText(label,new Point(caption.X-glyph.X,caption.Y-glyph.Y));rowCaptions.Add(caption);
             }
         }
         group.Freeze(); drawing=group;

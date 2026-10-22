@@ -14,6 +14,7 @@ using EventInfo=Tickets.Core.EventInfo;
 internal static class Program
 {
     private static bool expectedSaveDialog;
+    internal static string? ExpectedConfirmationTitle;
     [STAThread]
     private static int Main(string[] args)
     {
@@ -26,6 +27,7 @@ internal static class Program
             if(process!=(uint)Environment.ProcessId||name.ToString()!="#32770")return true;
             var dialogTitle=new System.Text.StringBuilder(256);GetWindowText(window,dialogTitle,dialogTitle.Capacity);
             if(expectedSaveDialog&&dialogTitle.ToString()=="Сохранить документ")return true;
+            if(ExpectedConfirmationTitle is not null&&dialogTitle.ToString()==ExpectedConfirmationTitle)return true;
             var messages=new List<string>();
             EnumChildWindows(window,(child,_)=>{var text=new System.Text.StringBuilder(2048);GetWindowText(child,text,text.Capacity);if(text.Length>0)messages.Add(text.ToString());return true;},IntPtr.Zero);
             Console.Error.WriteLine("Unexpected modal dialog: "+string.Join(" | ",messages));Environment.Exit(1);return false;

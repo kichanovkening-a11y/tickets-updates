@@ -66,7 +66,8 @@ internal static class Journal017Checks
                 confirmed=true;timer.Stop();PostMessage(window,0x111,new IntPtr(accept?6:7),IntPtr.Zero);return false;
             },IntPtr.Zero);
         };
-        timer.Start();try{click();}finally{timer.Stop();}
+        Program.ExpectedConfirmationTitle="Объединение накладных";
+        timer.Start();try{click();}finally{timer.Stop();Program.ExpectedConfirmationTitle=null;}
         Check(confirmed&&!extraWindow,"Inline merge goes directly to the confirmation dialog");
     }
     private delegate bool EnumWindowProc(IntPtr window,IntPtr parameter);

@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Documents;
 using Tickets.App;
 using Tickets.Core;
 
@@ -20,8 +21,9 @@ internal static class Pricing021UiChecks
         Check(editor.CreatedId!=0&&editor.CreatedId!=source,"identical prices with new name create a separate plan");
         Check(store.Plans(venue).Any(p=>p.Id==editor.CreatedId&&p.Name=="Другая UI021"),"new plan name persists");
         Check(store.PlanPrices(source).SequenceEqual(store.PlanPrices(editor.CreatedId)),"identical prices remain identical");
-        var totals=Logical(editor.Content as DependencyObject).OfType<TextBlock>().FirstOrDefault(t=>t.Text.StartsWith("Всего мест:"));
-        Check(totals is not null&&!totals.Text.Contains('\n')&&!totals.Text.Contains("Без цены")&&totals.Text.Contains("Заблокировано:"),"pricing totals remain one concise row");
+        var totals=Logical(editor.Content as DependencyObject).OfType<TextBlock>().FirstOrDefault(t=>string.Concat(t.Inlines.OfType<Run>().Select(r=>r.Text)).StartsWith("Всего мест:"));
+        var renderedText=totals is null?"":string.Concat(totals.Inlines.OfType<Run>().Select(r=>r.Text));
+        Check(totals is not null&&totals.TextWrapping==TextWrapping.NoWrap&&!totals.Inlines.OfType<LineBreak>().Any()&&!renderedText.Contains('\n')&&!renderedText.Contains("Без цены")&&renderedText.Contains("Заблокировано:"),"pricing totals remain one concise row: "+renderedText);
     }
     private static IEnumerable<DependencyObject> Logical(DependencyObject? parent)
     {if(parent is null)yield break;yield return parent;foreach(var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())foreach(var descendant in Logical(child))yield return descendant;}

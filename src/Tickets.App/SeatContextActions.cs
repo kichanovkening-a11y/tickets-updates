@@ -25,6 +25,11 @@ public partial class MainWindow
             StatusText.Text=$"{seat.Label}: {seat.Status}. Место не выбирается.";
             menu.Items.Add(new MenuItem{Header=seat.Status,IsEnabled=false});
             if(seat.IssueId.HasValue)Action("Открыть исходную накладную",true,()=>Run(()=>OpenInvoice(seat.IssueId.Value)));
+            Action("Выдать накладную по брони",seat.IsReserved&&!currentArchived&&seat.IssueId.HasValue,()=>Run(()=>{
+                if(MessageBox.Show(this,$"Оформить накладную по брони № {seat.IssueId} для {seat.Recipient}?","Оформление брони",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+                store.ConfirmReservation(current.Id,seat.IssueId!.Value);SaveIssuedDocuments(current.Id,seat.IssueId.Value);LoadEvent(false);OpenInvoice(seat.IssueId.Value);
+            }));
+            Action("Вернуть место",seat.TicketId.HasValue,()=>Run(()=>ReturnTickets([seat.TicketId!.Value])));
             Action("Вернуть в продажу",seat.IsBlocked&&!currentArchived,()=>Run(()=>{
                 if(MessageBox.Show(this,$"Вернуть в продажу: {seat.Label}?","Возврат в продажу",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
                 store.SetSeatsBlocked(current.Id,[seat.Id],false);LoadEvent(false);

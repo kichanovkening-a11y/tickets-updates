@@ -24,6 +24,8 @@ internal static class Issuance018Checks
         typeof(MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,[false]);
         hall.SetSelection([seats[1].Id]);Pump();
         Check(hall.SelectedSeats.Count==0&&!((Button)main.FindName("PrintTicketsButton")).IsEnabled,"issued seats cannot be selected for generic printing");
+        typeof(MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,[seats[1].Id,new Point(10,10)]);
+        Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(m=>Equals(m.Header,"Вернуть место")),"occupied seat retains explicit return action without selection");hall.ContextMenu.IsOpen=false;
         var original=store.Invoice(show.Id,id);Check(store.TicketReprint(show.Id,[seats[1].Id]).Tickets.Single().Id==original.Tickets.Single().Id,"original invoice reprint keeps ticket");
         var choiceType=typeof(MainWindow).Assembly.GetType("Tickets.App.InvoiceChoiceWindow")!;
         var choice=(Window)Activator.CreateInstance(choiceType,BindingFlags.Instance|BindingFlags.NonPublic,null,[store,show.Id],null)!;

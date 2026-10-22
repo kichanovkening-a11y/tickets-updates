@@ -51,9 +51,11 @@ internal static class Journal016Checks
             var reopened=new Tickets.App.MainWindow(new Store(store.Path));
             try{var columns=((DataGrid)reopened.FindName("HistoryGrid")).Columns;Check(Math.Abs(columns.Single(c=>Equals(c.Header,"Получатель")).Width.Value-237)<.1,"Column width survives opening another window");}finally{reopened.Close();}
             var choiceType=typeof(Tickets.App.MainWindow).Assembly.GetType("Tickets.App.InvoiceChoiceWindow")!;
-            var choice=(Window)Activator.CreateInstance(choiceType,Private,null,new object[]{store,show.Id,"Оля UI016"},null)!;
+            var choice=(Window)Activator.CreateInstance(choiceType,Private,null,new object[]{store,show.Id},null)!;
             try
             {
+                var picker=Logical(choice).OfType<ComboBox>().Single();
+                Check(picker.SelectedItem is null,"Extension chooser requires explicit recipient choice");picker.SelectedItem="Оля UI016";
                 var list=Logical(choice).OfType<ListBox>().Single();
                 var ids=list.Items.Cast<object>().Select(item=>(long)item.GetType().GetProperty("Id")!.GetValue(item)!).ToArray();
                 Check(ids.Contains(first)&&ids.Contains(second)&&!ids.Contains(unrelated),"Extension chooser offers only the exact selected recipient");

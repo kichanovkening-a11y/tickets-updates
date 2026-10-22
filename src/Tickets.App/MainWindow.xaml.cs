@@ -301,7 +301,7 @@ public partial class MainWindow : Window
     {
         if(ids.Length==0) throw new TicketException("Выберите билеты для возврата.");
         if(MessageBox.Show(this,$"Вернуть билеты: {ids.Length}? Места снова станут свободными.","Возврат",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes) return;
-        var eventId=current!.Id;var issueIds=store.History(eventId).Where(t=>ids.Contains(t.Id)).Select(t=>t.IssueId).Distinct().ToArray();
+        var eventId=current!.Id;var issueIds=store.History(eventId).Where(t=>ids.Contains(t.Id)).SelectMany(t=>new[]{t.IssueId,store.ResolveInvoiceId(t.IssueId)}).Distinct().ToArray();
         store.Return(ids); LoadEvent(false); StatusText.Text=$"Возвращено билетов: {ids.Length}. Записи сохранены в журнале.";
         foreach(var issue in issueIds)try{store.SaveAllDocuments(eventId,issue);}catch(Exception ex){StatusText.Text+=" Не удалось обновить Word: "+ex.Message;}
     }

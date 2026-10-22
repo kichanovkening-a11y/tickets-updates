@@ -82,6 +82,7 @@ public sealed class HallView : FrameworkElement
         using(var dc=group.Open())
         {
             var sectorSeats=seats.ToLookup(s=>s.Sector);
+            var captionBounds=new List<Rect>();
             foreach(var sector in sectors)
             {
                 var wrapped=sector.Name.StartsWith("Ложа партера (",StringComparison.Ordinal)||sector.Name.StartsWith("Балкон №",StringComparison.Ordinal);
@@ -100,10 +101,10 @@ public sealed class HallView : FrameworkElement
                         x=sector.Name.Contains("левая сторона",StringComparison.Ordinal)
                             ?places.Min(s=>s.X)-12-label.Width/2
                             :places.Max(s=>s.X)+16+12+label.Width/2;
-                        y=(places.Min(s=>s.Y)+places.Max(s=>s.Y)+16-label.Height)/2;
+                        y=places.Min(s=>s.Y)-label.Height-6;
                     }
                 }
-                dc.DrawText(label,new Point(x,y));
+                dc.DrawText(label,new Point(x,y));captionBounds.Add(label.BuildGeometry(new Point(x,y)).Bounds);
             }
             foreach(var s in seats)
             {
@@ -147,11 +148,24 @@ public sealed class HallView : FrameworkElement
             }
             // A logical row can curve through many Y coordinates. Draw its caption once,
             // at the leftmost seat, rather than repeating it beside every curved seat.
+            var rowCaptions=captionBounds;
+            var seatBounds=seats.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
             foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)))
             {
                 var first=row.MinBy(s=>s.X)!;
-                var label=Text(first.Row,11.7,Brushes.SlateGray);
-                dc.DrawText(label,new Point(first.X-label.Width-6,first.Y+1));
+                var label=Text(first.Row,14.3,Brushes.Black);
+                var ink=label.BuildGeometry(new Point());var glyph=ink.Bounds;
+                if(glyph.IsEmpty)continue;
+                var caption=new Rect(first.X-glyph.Width-8,first.Y+(16-glyph.Height)/2,glyph.Width,glyph.Height);
+                // Keep row numbers as plain text, clear of both real seats and other captions.
+                for(var attempt=0;attempt<seats.Count+rowCaptions.Count;attempt++)
+                {
+                    var collisions=seatBounds.Concat(rowCaptions).Where(rect=>rect.IntersectsWith(caption)).ToArray();
+                    if(collisions.Length==0)break;
+                    caption.X=collisions.Min(rect=>rect.Left)-glyph.Width-8;
+                }
+                ink.Transform=new TranslateTransform(caption.X-glyph.X,caption.Y-glyph.Y);
+                dc.DrawGeometry(Brushes.Black,null,ink);rowCaptions.Add(caption);
             }
         }
         group.Freeze(); drawing=group;

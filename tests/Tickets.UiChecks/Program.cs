@@ -52,13 +52,17 @@ internal static class Program
             var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.EventEditorWindow")!;
             var editor=(Window)Activator.CreateInstance(type,store)!;editor.Show();Pump();
             var combos=Logical(editor).OfType<ComboBox>().ToList();
+            Check(combos.All(c=>c.SelectedIndex==-1&&string.IsNullOrEmpty(c.Text))&&Logical(editor).OfType<DatePicker>().Single().SelectedDate is null,"new show opens with every selection date and time empty");
+            var fromPerformance=(Window)Activator.CreateInstance(type,store,(long?)store.Performances().First().Id)!;
+            try{Check(Logical(fromPerformance).OfType<ComboBox>().All(c=>c.SelectedIndex==-1&&string.IsNullOrEmpty(c.Text)),"new show opened from a performance also requires explicit choices");}finally{fromPerformance.Close();}
             Check(combos[0].IsEditable,"performance selection allows typed search");
             combos[0].ApplyTemplate();var performanceEdit=(TextBox)combos[0].Template.FindName("PART_EditableTextBox",combos[0]);performanceEdit.Focus();performanceEdit.Text="поиск";Pump();
             Check(combos[0].Items.Cast<PerformanceInfo>().Any(p=>p.Title=="ТЕАТР Поисковый спектакль UI")&&combos[0].Items.Cast<PerformanceInfo>().All(p=>SearchText.Matches(p.Title,"поиск")),"performance search uses beginning of significant word");
             combos[0].SelectedItem=combos[0].Items.Cast<PerformanceInfo>().Single(p=>p.Title=="ТЕАТР Поисковый спектакль UI");combos[0].IsDropDownOpen=false;
             Check(combos.Count==6,"performance, venue, pricing, hours minutes and seconds selectors");
             Check(combos[3].Items.Count==24&&combos[4].Items.Count==60&&combos[5].Items.Count==60,"complete hours and minutes ranges");
-            Check(combos[3].SelectedItem?.ToString()=="19"&&combos[4].SelectedItem?.ToString()=="00","default time is 19:00");
+            Check(combos.Skip(3).All(c=>c.SelectedIndex==-1&&string.IsNullOrEmpty(c.Text)),"time has no preset hours minutes or seconds");
+            combos[1].SelectedIndex=0;Check(combos[2].Items.Count>0&&combos[2].SelectedIndex==-1,"choosing a venue loads available pricing without choosing one");
             Check(Math.Abs(editor.FontSize-16.9)<.01&&editor.FontWeight==FontWeights.Bold,"event form typography is larger and heavier");
             Check(combos.Skip(3).All(c=>c.IsEditable),"hours minutes and seconds accept manual input");
             var date=Logical(editor).OfType<DatePicker>().Single();Check(date.FontSize==26,"date text is doubled");Click(editor,"Календарь");Pump();
@@ -80,7 +84,7 @@ internal static class Program
             }));
             Click(editor,"Создать");Pump();if(nestedError is not null)throw nestedError;
             Check(combos[2].SelectedItem is PlanInfo plan&&plan.Name=="UI test pricing","new pricing selected after nested editor saves");
-            Click(editor,"Добавить дату");date.SelectedDate=date.SelectedDate!.Value.AddDays(1);combos[3].Text="20";combos[4].Text="45";combos[5].Text="12";Click(editor,"Добавить дату");
+            date.SelectedDate=DateTime.Today.AddDays(3);combos[3].Text="19";combos[4].Text="00";combos[5].Text="00";Click(editor,"Добавить дату");date.SelectedDate=date.SelectedDate!.Value.AddDays(1);combos[3].Text="20";combos[4].Text="45";combos[5].Text="12";Click(editor,"Добавить дату");
             var dateList=Logical(editor).OfType<ListBox>().Single();Check(dateList.Items.Count==2,"multiple showing dates accumulate in one editor");
             Check(dateList.Items.Cast<DateTime>().Any(d=>d.Hour==20&&d.Minute==45&&d.Second==12),"each added date retains its own hours minutes and seconds");editor.Close();
             var hallType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.HallEditorWindow")!;
@@ -473,7 +477,7 @@ internal static class Program
                 {
                     var content=Inline("EventEditorWindow");formWindow=(Window)content.Tag;
                     Check(app.Windows.Cast<Window>().Count(w=>w.IsVisible)==1,"event form is hosted inside main window");
-                    var boxes=Logical(content).OfType<ComboBox>().ToList();boxes[1].SelectedItem=boxes[1].Items.Cast<VenueInfo>().Single(v=>v.Id==venueId);
+                    var boxes=Logical(content).OfType<ComboBox>().ToList();Check(boxes.All(b=>b.SelectedIndex==-1&&string.IsNullOrEmpty(b.Text)),"embedded new show starts empty too");boxes[0].SelectedIndex=0;boxes[1].SelectedItem=boxes[1].Items.Cast<VenueInfo>().Single(v=>v.Id==venueId);
                     Exception? priceError=null;
                     app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                         Window? priceWindow=null;

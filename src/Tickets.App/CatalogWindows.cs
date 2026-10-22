@@ -255,7 +255,7 @@ internal sealed class EventEditorWindow : EditorWindow
         var form=new StackPanel{Margin=new Thickness(25)};Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         var performances=store.Performances();
         var performance=Combo(form,"Спектакль — введите начало значимого слова",performances,"Title");
-        if(performanceId.HasValue)performance.SelectedItem=performances.FirstOrDefault(p=>p.Id==performanceId.Value);
+        performance.SelectedIndex=-1;performance.Text="";
         performance.FontWeight=FontWeights.SemiBold;performance.IsEditable=true;performance.IsTextSearchEnabled=false;performance.StaysOpenOnEdit=true;
         var filtering=false;
         performance.AddHandler(TextBox.TextChangedEvent,new TextChangedEventHandler((_,e)=>{
@@ -275,14 +275,14 @@ internal sealed class EventEditorWindow : EditorWindow
             }
             finally{filtering=false;}
         }));
-        var venue=Combo(form,"Площадка / зал",store.Venues(),"Name");
+        var venue=Combo(form,"Площадка / зал",store.Venues(),"Name");venue.SelectedIndex=-1;
         var plan=Combo(form,"Расценовка",Array.Empty<PlanInfo>(),"");
         var planText=new FrameworkElementFactory(typeof(TextBlock));planText.SetBinding(TextBlock.TextProperty,new Binding{Converter=new PlanCaptionConverter(store)});plan.ItemTemplate=new DataTemplate{VisualTree=planText};
         form.Children.Remove(plan);
         var planRow=new Grid();planRow.ColumnDefinitions.Add(new ColumnDefinition());planRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         plan.Margin=new Thickness(0,0,10,0);plan.VerticalAlignment=VerticalAlignment.Center;planRow.Children.Add(plan);
         var createPlan=new Button{Content="Создать",Margin=new Thickness(0)};Grid.SetColumn(createPlan,1);planRow.Children.Add(createPlan);form.Children.Add(planRow);
-        void LoadPlans(){if(venue.SelectedItem is VenueInfo v){plan.ItemsSource=store.Plans(v.Id);if(plan.Items.Count>0)plan.SelectedIndex=0;}}
+        void LoadPlans(){plan.ItemsSource=venue.SelectedItem is VenueInfo v?store.Plans(v.Id):Array.Empty<PlanInfo>();plan.SelectedIndex=-1;}
         createPlan.Click+=(_,_)=>Try(()=>{
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
             var editor=new PriceEditorWindow(store,v.Id);
@@ -291,17 +291,17 @@ internal sealed class EventEditorWindow : EditorWindow
         venue.SelectionChanged+=(_,_)=>Try(LoadPlans);LoadPlans();
         form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});
         var dateRow=new Grid();dateRow.ColumnDefinitions.Add(new ColumnDefinition());dateRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});form.Children.Add(dateRow);
-        var date=new DatePicker{SelectedDate=DateTime.Today,CalendarStyle=new Style(typeof(Calendar),(Style)Application.Current.FindResource(typeof(Calendar))){Setters={new Setter(FrameworkElement.LayoutTransformProperty,new ScaleTransform(1.3,1.3))}},FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
+        var date=new DatePicker{SelectedDate=null,CalendarStyle=new Style(typeof(Calendar),(Style)Application.Current.FindResource(typeof(Calendar))){Setters={new Setter(FrameworkElement.LayoutTransformProperty,new ScaleTransform(1.3,1.3))}},FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
         date.Loaded+=(_,_)=>{date.ApplyTemplate();if(date.Template.FindName("PART_Button",date) is UIElement button)button.Visibility=Visibility.Collapsed;};dateRow.Children.Add(date);
         var calendarButton=new Button{Content="Календарь",Margin=new Thickness(0)};Grid.SetColumn(calendarButton,1);dateRow.Children.Add(calendarButton);calendarButton.Click+=(_,_)=>date.IsDropDownOpen=!date.IsDropDownOpen;
         form.Children.Add(new TextBlock{Text="Время",Margin=new Thickness(0,12,0,5)});
         var timeRow=new WrapPanel();form.Children.Add(timeRow);
-        ComboBox Part(string title,int count,int selected)
+        ComboBox Part(string title,int count)
         {
             var group=new StackPanel{Margin=new Thickness(0,0,15,0)};timeRow.Children.Add(group);
-            var box=Combo(group,title,Enumerable.Range(0,count).Select(n=>n.ToString("00")),"");box.IsEditable=true;box.IsTextSearchEnabled=false;box.Width=100;box.SelectedIndex=selected;return box;
+            var box=Combo(group,title,Enumerable.Range(0,count).Select(n=>n.ToString("00")),"");box.IsEditable=true;box.IsTextSearchEnabled=false;box.Width=100;box.SelectedIndex=-1;box.Text="";return box;
         }
-        var hours=Part("Часы",24,19);var minutes=Part("Минуты",60,0);var seconds=Part("Секунды",60,0);
+        var hours=Part("Часы",24);var minutes=Part("Минуты",60);var seconds=Part("Секунды",60);
         var dates=new System.Collections.ObjectModel.ObservableCollection<DateTime>();
         var dateList=new ListBox{ItemsSource=dates,Height=100,Margin=new Thickness(0,10,0,0),ItemStringFormat="dd.MM.yyyy HH:mm:ss"};
         Button(form,"Добавить дату",()=>Try(()=>{

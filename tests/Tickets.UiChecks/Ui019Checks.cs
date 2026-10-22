@@ -35,6 +35,13 @@ internal static class Ui019Checks
         Invoke(main,"ClearJournalSelection");Pump();
         var merge=(Grid)main.FindName("JournalMergeActions");
         Check(merge.Visibility==Visibility.Collapsed&&merge.ActualHeight==0,"journal merge row reserves no blank height when hidden");
+        var history=(DataGrid)main.FindName("HistoryGrid");
+        var journalPosition=history.TranslatePoint(new Point(),main);
+        var selectionIds=(HashSet<long>)typeof(MainWindow).GetField("journalSelection",Private)!.GetValue(main)!;
+        selectionIds.UnionWith([long.MaxValue,long.MaxValue-1]);Invoke(main,"UpdateJournalSelection");Pump();
+        Check(history.TranslatePoint(new Point(),main)==journalPosition&&((Grid)main.FindName("JournalHeader")).ActualHeight==44,"compact journal header swaps instructions for merge actions without shifting rows");
+        Check(((TextBlock)main.FindName("JournalInstructions")).Visibility==Visibility.Collapsed&&merge.Visibility==Visibility.Visible,"merge actions replace instructions in their existing header space");
+        Invoke(main,"ClearJournalSelection");Pump();
         ((TabControl)main.FindName("WorkspaceTabs")).SelectedIndex=0;Pump();
         var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
         var header=(StackPanel)title.Parent;var original=title.Text;

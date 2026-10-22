@@ -94,6 +94,7 @@ public partial class MainWindow
     {
         JournalMergeActions.Visibility=journalSelection.Count>=2?Visibility.Visible:Visibility.Collapsed;
         MergeInvoicesButton.Visibility=JournalMergeActions.Visibility;
+        JournalInstructions.Visibility=journalSelection.Count>=2?Visibility.Collapsed:Visibility.Visible;
         var selected=SelectedJournalInvoices(out var error);
         MergeInvoicesButton.IsEnabled=journalSelection.Count>=2&&error.Length==0;
         MergeInvoicesButton.Content="Объединить накладные";

@@ -25,6 +25,7 @@ public partial class MainWindow : Window
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         PriceColorBox.ItemTemplate=ColorChoices.Template();
+        RecipientTypography.Apply(RecipientBox);
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
         var appVersion=System.Reflection.Assembly.GetExecutingAssembly().GetName().Version!.ToString(3);
         Title="Билеты · "+appVersion;AppBrand.Text="БИЛЕТЫ · "+appVersion;

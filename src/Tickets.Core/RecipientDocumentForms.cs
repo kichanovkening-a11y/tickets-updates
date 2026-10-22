@@ -152,8 +152,9 @@ public static class CustomDocumentForms
     }
     public static byte[] Fill(byte[] content,InvoiceInfo invoice,string kind,DateTime contractDate)
     {
+        content=StandardDocumentForms.Resolve(kind,content)??content;
         var standard=StandardDocumentForms.IsStandard(content);
-        var values=SourceBusinessForms.Values(invoice);
+        var values=SourceBusinessForms.Values(invoice,kind);
         values["items"]=BusinessDocumentTemplates.Items(invoice,kind);values["title"]=invoice.Title;
         if(standard&&kind=="ttn"){values["senderDetails"]=values["senderDetails"].Replace("\n",", ");values["recipientDetails"]=values["recipientDetails"].Replace("\n",", ");}
         var calendar=SourceBusinessForms.EventCalendarDate(invoice);
@@ -162,16 +163,18 @@ public static class CustomDocumentForms
         var seatGroups=InvoiceDocuments.Lines(invoice);
         var priceGroups=invoice.Tickets.GroupBy(t=>t.Amount).OrderByDescending(g=>g.Key).Select(g=>new InvoiceLine("","","",g.Count(),g.Key,g.Sum(t=>(decimal)t.Amount),"")).ToArray();
         values["date"]=kind=="act"?calendar:kind=="contract"?values["contractDate"]:DateTimeOffset.Parse(invoice.IssuedAt).ToString("dd.MM.yyyy");
-        values["lineCountWords"]=RussianWords.Number(priceGroups.Length);
+        values["lineCountWords"]=RussianWords.Number(kind=="bill"?1:priceGroups.Length);
         return Rewrite(content,xml=>{
+            DocumentFormCorrections.UpgradeVenueFields(xml,kind);
+            if(kind is "invoice" or "specification")DocumentFormCorrections.RestoreInvoiceBorders(xml);
             foreach(var row in xml.Descendants(W+"tr").Where(r=>Regex.IsMatch(string.Concat(r.Descendants(W+"t").Select(t=>t.Value)),@"\{item(Section|DescriptionShort|Description|Row|Count)\}")).ToArray())
             {
                 var rowText=string.Concat(row.Descendants(W+"t").Select(t=>t.Value));
-                var groups=rowText.Contains("{itemRow}")||rowText.Contains("{itemSection}")||rowText.Contains("{itemSeat}")?seatGroups:priceGroups;
+                var groups=kind=="bill"?new[]{new InvoiceLine("","","",invoice.Tickets.Count,invoice.Tickets.Select(t=>t.Amount).Distinct().Count()==1?invoice.Tickets[0].Amount:0,invoice.Total,"")}:rowText.Contains("{itemRow}")||rowText.Contains("{itemSection}")||rowText.Contains("{itemSeat}")?seatGroups:priceGroups;
                 var index=0;
                 foreach(var line in groups)
                 {
-                    var copy=new XElement(row);copy.Element(W+"trPr")?.Elements(W+"trHeight").Remove();if(standard&&kind=="ttn"){var props=copy.Element(W+"trPr");if(props is null){props=new XElement(W+"trPr");copy.AddFirst(props);}props.Add(new XElement(W+"cantSplit"));}var rowValues=new Dictionary<string,string>(values){["itemNumber"]=(++index).ToString(),["itemSection"]=line.Sector,["itemRow"]=line.Row,["itemSeat"]=line.Seats,["itemCount"]=line.Count.ToString(),["itemPrice"]=DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total),["itemDescriptionShort"]="Театральные билеты",["itemDescription"]=standard&&kind=="ttn"?"Театральные билеты":$"Театральные билеты на мероприятие «{invoice.Title}». {invoice.Venue}. {invoice.EventDate}."};
+                    var copy=new XElement(row);copy.Element(W+"trPr")?.Elements(W+"trHeight").Remove();if(standard&&kind=="ttn"){var props=copy.Element(W+"trPr");if(props is null){props=new XElement(W+"trPr");copy.AddFirst(props);}props.Add(new XElement(W+"cantSplit"));}var rowValues=new Dictionary<string,string>(values){["itemNumber"]=(++index).ToString(),["itemSection"]=line.Sector,["itemRow"]=line.Row,["itemSeat"]=line.Seats,["itemCount"]=line.Count.ToString(),["itemPrice"]=kind=="bill"&&invoice.Tickets.Select(t=>t.Amount).Distinct().Count()>1?"—":DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total),["itemDescriptionShort"]="Театральные билеты",["itemDescription"]=standard&&kind=="ttn"?"Театральные билеты":$"Театральные билеты на мероприятие «{invoice.Title}». {invoice.VenueWithAddress}. {invoice.EventDate}."};
                     foreach(var p in copy.Descendants(W+"p"))Replace(p,rowValues);row.AddBeforeSelf(copy);
                 }
                 row.Remove();

@@ -38,6 +38,6 @@ public sealed partial class Store
         using var r=cmd.ExecuteReader();if(!r.Read())throw new TicketException("Выдача не найдена в этом мероприятии.");
         var values=Enumerable.Range(0,6).Select(r.GetString).ToArray();
         r.Close();
-        return ApplyContractMetadata(new(issueId,eventId,values[0],values[1],values[2],values[3],values[4],InvoiceTickets(eventId,issueId),values[5]){SenderDetails=GetIssueOrganizationDetails(issueId,true),RecipientDetails=GetIssueOrganizationDetails(issueId,false)});
+        return ApplyContractMetadata(new(issueId,eventId,values[0],values[1],values[2],values[3],values[4],InvoiceTickets(eventId,issueId),values[5]){VenueAddress=TicketVenueAddress(eventId),SenderDetails=GetIssueOrganizationDetails(issueId,true),RecipientDetails=GetIssueOrganizationDetails(issueId,false)});
     }
 }

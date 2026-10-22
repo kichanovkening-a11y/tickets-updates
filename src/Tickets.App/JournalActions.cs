@@ -28,8 +28,11 @@ public partial class MainWindow
         var pendingSave=new DispatcherTimer(DispatcherPriority.Background,Dispatcher){Interval=TimeSpan.FromMilliseconds(250)};
         void Save()
         {
-            pendingSave.Stop();if(layoutEventId==0)return;
-            layouts[layoutEventId]=Capture();
+            pendingSave.Stop();
+            var existing=store.Events(true).Select(e=>e.Id).ToHashSet();
+            foreach(var deleted in layouts.Keys.Where(id=>!existing.Contains(id)).ToArray())layouts.Remove(deleted);
+            if(!existing.Contains(layoutEventId))layoutEventId=0;
+            if(layoutEventId!=0)layouts[layoutEventId]=Capture();
             try{System.IO.File.WriteAllText(path+".tmp",JsonSerializer.Serialize(layouts));System.IO.File.Move(path+".tmp",path,true);}
             catch(System.IO.IOException){}catch(UnauthorizedAccessException){}
         }
@@ -40,7 +43,7 @@ public partial class MainWindow
             {
                 foreach(var saved in (layouts.GetValueOrDefault(eventId)??defaults).OrderBy(x=>x.Order))
                 {
-                    var column=HistoryGrid.Columns.FirstOrDefault(c=>Equals(c.Header?.ToString(),saved.Header));
+                    var column=HistoryGrid.Columns.FirstOrDefault(c=>Equals(c.Header?.ToString(),saved.Header=="Накладная №"?"№":saved.Header));
                     if(column is null||saved.Order<0||saved.Order>=HistoryGrid.Columns.Count||!double.IsFinite(saved.Width)||saved.Width<0||!Enum.IsDefined(saved.Unit)||!Enum.IsDefined(saved.Visibility))continue;
                     column.Width=new DataGridLength(saved.Width,saved.Unit);column.DisplayIndex=saved.Order;column.Visibility=saved.Visibility;
                 }

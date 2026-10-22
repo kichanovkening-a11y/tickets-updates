@@ -8,8 +8,10 @@ internal static class StandardDocumentForms
         {
             // Only replace byte-identical built-in starters. A user's edited upload wins.
             using var original=typeof(Store).Assembly.GetManifestResourceStream($"Tickets.Core.Resources.SberForms.{kind}.docx");
-            if(original is null)return custom;
-            using var ms=new MemoryStream();original.CopyTo(ms);if(!custom.AsSpan().SequenceEqual(ms.ToArray()))return custom;
+            using var ms=new MemoryStream();original?.CopyTo(ms);
+            using var previous=typeof(Store).Assembly.GetManifestResourceStream($"Tickets.Core.Resources.UniversalForms.{kind}-v021.docx");
+            using var old=new MemoryStream();previous?.CopyTo(old);
+            if(!custom.AsSpan().SequenceEqual(ms.ToArray())&&!custom.AsSpan().SequenceEqual(old.ToArray()))return custom;
         }
         using var source=typeof(Store).Assembly.GetManifestResourceStream($"Tickets.Core.Resources.UniversalForms.{kind}.docx");
         if(source is null)return custom;

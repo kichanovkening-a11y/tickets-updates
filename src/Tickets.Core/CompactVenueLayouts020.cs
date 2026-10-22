@@ -61,17 +61,17 @@ internal static class CompactVenueLayouts020
         foreach(var name in names){Move(groups[name],floorX,floorY);floorX+=Width(groups[name])+Gap;}
         Normalize(seats);return seats;
     }
-    internal static IReadOnlyList<DraftSeat> Estrada(List<DraftSeat> seats)
+    internal static IReadOnlyList<DraftSeat> Estrada(List<DraftSeat> seats,bool contiguousRow17=true)
     {
         static double Curve(double x)=>0.00015*x*x;
         foreach(var name in new[]{"Партер","Бельэтаж"})
         {
-            foreach(var row in seats.Where(s=>s.Sector==name&&!(name=="Партер"&&s.Row=="17")).GroupBy(s=>s.Row))
+            foreach(var row in seats.Where(s=>s.Sector==name&&!(name=="Партер"&&s.Row=="17"&&!contiguousRow17)).GroupBy(s=>s.Row))
             {
-                var sorted=row.OrderBy(s=>s.X).ToArray();
+                var sorted=(name=="Партер"&&row.Key=="17"&&contiguousRow17?row.OrderBy(s=>int.Parse(s.Number)):row.OrderBy(s=>s.X)).ToArray();
                 // The source gaps distinguish halves reliably even in rows with omitted labels.
                 var gaps=sorted.Zip(sorted.Skip(1),(a,b)=>b.X-a.X).ToArray();
-                var middle=Array.IndexOf(gaps,gaps.Max())+1;
+                var middle=name=="Партер"&&row.Key=="17"&&contiguousRow17?20:Array.IndexOf(gaps,gaps.Max())+1;
                 var continuous=name=="Бельэтаж"&&row.Key=="6";
                 for(var i=0;i<sorted.Length;i++)
                 {
@@ -81,7 +81,7 @@ internal static class CompactVenueLayouts020
             }
         }
         var parter=seats.Where(s=>s.Sector=="Партер"&&s.Row!="17").ToArray();
-        foreach(var s in seats.Where(s=>s.Sector=="Партер"&&s.Row=="17"))
+        foreach(var s in seats.Where(s=>!contiguousRow17&&s.Sector=="Партер"&&s.Row=="17"))
         {
             var number=int.Parse(s.Number);var left=number<=20;var i=left?number-1:40-number;
             var row=parter.Where(p=>p.Row==(Math.Min(i,15)+1).ToString()).ToArray();

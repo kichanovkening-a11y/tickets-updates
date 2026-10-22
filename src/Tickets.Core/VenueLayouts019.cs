@@ -67,7 +67,7 @@ public static class VenueLayouts019
         return compact?CompactVenueLayouts020.Russian(seats):seats;
     }
 
-    public static IReadOnlyList<DraftSeat> EstradaSeats(bool compact=true)
+    public static IReadOnlyList<DraftSeat> EstradaSeats(bool compact=true,bool legacyPerimeter=false)
     {
         var seats=new List<DraftSeat>();
         // Preserve left-to-right place numbering from this plan. The two halves have an actual
@@ -124,6 +124,6 @@ public static class VenueLayouts019
         // Row17 outermost endpoints are allowed to extend left of zero before normalization.
         var minX=seats.Min(s=>s.X);var minY=seats.Min(s=>s.Y);
         foreach(var s in seats){s.X=Math.Round(s.X-minX+40,2);s.Y=Math.Round(s.Y-minY+40,2);}
-        return compact?CompactVenueLayouts020.Estrada(seats):seats;
+        return compact?CompactVenueLayouts020.Estrada(seats,!legacyPerimeter):seats;
     }
 }

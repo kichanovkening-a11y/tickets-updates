@@ -29,11 +29,11 @@ internal static class SourceBusinessForms
             ?date.ToString("dd.MM.yyyy",ru):System.Text.RegularExpressions.Regex.Replace(invoice.EventDate,@"\s+\d{1,2}:\d{2}.*$","");
     }
     internal static bool CanUseSource(string kind,string template)=>template.Replace("\r\n","\n").Replace('\r','\n').Split('\n').Length==DefaultText(kind).Split('\n').Length;
-    public static Dictionary<string,string> Values(InvoiceInfo invoice)
+    public static Dictionary<string,string> Values(InvoiceInfo invoice,string kind="")
     {
         var seller=DocumentParties.Sender(invoice);var buyer=invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient);
         string Representative(OrganizationDetails details)=>string.IsNullOrWhiteSpace(details.Signatory)?"":"в лице "+string.Join(" ",new[]{details.Position,details.Signatory}.Where(v=>!string.IsNullOrWhiteSpace(v)));
-        var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["contractNumber"]=string.IsNullOrWhiteSpace(invoice.ContractNumber)?invoice.Id.ToString():invoice.ContractNumber,["contractDate"]=(invoice.ContractDate??DateTimeOffset.Parse(invoice.IssuedAt).Date).ToString("dd.MM.yyyy"),["receivedBy"]=DocumentParties.ReceivedBy(invoice),["issueId"]=invoice.Id.ToString(),["date"]=invoice.Date,["sender"]=string.IsNullOrWhiteSpace(seller.LegalName)?invoice.Sender:seller.LegalName,["recipient"]=string.IsNullOrWhiteSpace(buyer.LegalName)?invoice.Recipient:buyer.LegalName,["event"]=invoice.Title,["venue"]=invoice.Venue,["eventDate"]=invoice.EventDate,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["amountWords"]=RussianWords.Money(invoice.Total),["countWords"]=RussianWords.Number(invoice.Tickets.Count),["summary"]=DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),["lineCountWords"]=RussianWords.Number(BusinessLines(invoice).Count),["sellerRepresentative"]=Representative(seller),["buyerRepresentative"]=Representative(buyer)};
+        var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["contractNumber"]=string.IsNullOrWhiteSpace(invoice.ContractNumber)?invoice.Id.ToString():invoice.ContractNumber,["contractDate"]=(invoice.ContractDate??DateTimeOffset.Parse(invoice.IssuedAt).Date).ToString("dd.MM.yyyy"),["receivedBy"]=DocumentParties.ReceivedBy(invoice),["issueId"]=invoice.Id.ToString(),["date"]=invoice.Date,["sender"]=string.IsNullOrWhiteSpace(seller.LegalName)?invoice.Sender:seller.LegalName,["recipient"]=string.IsNullOrWhiteSpace(buyer.LegalName)?invoice.Recipient:buyer.LegalName,["event"]=invoice.Title,["venue"]=invoice.VenueWithAddress,["venueAddress"]=invoice.VenueAddress,["eventDate"]=invoice.EventDate,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["amountWords"]=RussianWords.Money(invoice.Total),["countWords"]=RussianWords.Number(invoice.Tickets.Count),["summary"]=DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),["lineCountWords"]=RussianWords.Number(kind==IssueDocumentKinds.Bill?1:BusinessLines(invoice).Count),["sellerRepresentative"]=Representative(seller),["buyerRepresentative"]=Representative(buyer)};
         foreach(var (prefix,details) in new[]{("sender",seller),("recipient",buyer)})
         {
             values[prefix+"Details"]=BusinessDocumentTemplates.Requisites(details);values[prefix+"DetailsInline"]=values[prefix+"Details"].Replace("\n",", ");
@@ -42,9 +42,9 @@ internal static class SourceBusinessForms
             values[prefix+"InnKpp"]=string.Join(" / ",new[]{details.Inn,details.Kpp}.Where(v=>!string.IsNullOrWhiteSpace(v)));
             values[prefix+"Bank"]=details.Bank;values[prefix+"Bik"]=details.Bik;values[prefix+"Account"]=details.Account;values[prefix+"CorrespondentAccount"]=details.CorrespondentAccount;values[prefix+"Address"]=details.Address;
         }
-        var lines=BusinessLines(invoice);
-        values["itemDescription"]=string.Join("\n",lines.Select(line=>$"Театральные билеты на культурно-массовое мероприятие «{invoice.Title}». {invoice.Venue}. {invoice.EventDate}."));
-        values["itemDescriptionShort"]="Театральные билеты";values["itemNumber"]="1";values["itemCount"]=invoice.Tickets.Count.ToString();values["itemPrice"]=string.Join(" / ",lines.Select(line=>DocumentTotals.Amount(line.Price)).Distinct());values["itemTotal"]=DocumentTotals.Amount(invoice.Total);
+        var lines=kind==IssueDocumentKinds.Bill?new[]{new InvoiceLine("","","",invoice.Tickets.Count,invoice.Tickets.Select(t=>t.Amount).Distinct().Count()==1?invoice.Tickets[0].Amount:0,invoice.Total,"")}:BusinessLines(invoice);
+        values["itemDescription"]=string.Join("\n",lines.Select(line=>$"Театральные билеты на культурно-массовое мероприятие «{invoice.Title}». {invoice.VenueWithAddress}. {invoice.EventDate}."));
+        values["itemDescriptionShort"]="Театральные билеты";values["itemNumber"]="1";values["itemCount"]=invoice.Tickets.Count.ToString();values["itemPrice"]=kind==IssueDocumentKinds.Bill&&invoice.Tickets.Select(t=>t.Amount).Distinct().Count()>1?"—":string.Join(" / ",lines.Select(line=>DocumentTotals.Amount(line.Price)).Distinct());values["itemTotal"]=DocumentTotals.Amount(invoice.Total);
         return values;
     }
     private static IReadOnlyList<InvoiceLine> BusinessLines(InvoiceInfo invoice)=>invoice.Tickets.GroupBy(t=>t.Amount).OrderBy(g=>g.Key).Select(g=>new InvoiceLine("","","",g.Count(),g.Key,g.Sum(t=>(decimal)t.Amount),"")).ToArray();
@@ -71,7 +71,8 @@ internal static class SourceBusinessForms
             using(var source=Template(document.Kind))using(var target=File.Create(temporary))source.CopyTo(target);
             using(var zip=ZipFile.Open(temporary,ZipArchiveMode.Update))
             {
-                var xml=Xml(zip,"word/document.xml");var values=Values(document.Invoice);
+                var xml=Xml(zip,"word/document.xml");var values=Values(document.Invoice,document.Kind);
+                if(document.Kind==IssueDocumentKinds.Bill)values["lineCountWords"]=RussianWords.Number(1);
                 if(document.Kind==IssueDocumentKinds.Act)values["date"]=EventCalendarDate(document.Invoice);
                 if(document.Kind==IssueDocumentKinds.Waybill)
                 {values["senderDetails"]=values["senderDetails"].Replace("\n",", ");values["recipientDetails"]=values["recipientDetails"].Replace("\n",", ");}
@@ -109,9 +110,9 @@ internal static class SourceBusinessForms
                         }
                     }
                     var index=0;
-                    foreach(var line in BusinessLines(document.Invoice))
+                    foreach(var line in document.Kind==IssueDocumentKinds.Bill?new[]{new InvoiceLine("","","",document.Invoice.Tickets.Count,document.Invoice.Tickets.Count==0?0:document.Invoice.Total/document.Invoice.Tickets.Count,document.Invoice.Total,"")}:BusinessLines(document.Invoice))
                     {
-                        var row=new XElement(item);var rowProps=row.Element(W+"trPr");if(rowProps is null){rowProps=new XElement(W+"trPr");row.AddFirst(rowProps);}rowProps.Add(new XElement(W+"cantSplit"));var itemValues=new Dictionary<string,string>(values,StringComparer.OrdinalIgnoreCase){["itemNumber"]=(++index).ToString(),["itemDescription"]=$"Театральные билеты на культурно-массовое мероприятие «{document.Invoice.Title}». {document.Invoice.Venue}. {document.Invoice.EventDate}.",["itemCount"]=line.Count.ToString(),["itemPrice"]=DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total)};
+                        var row=new XElement(item);var rowProps=row.Element(W+"trPr");if(rowProps is null){rowProps=new XElement(W+"trPr");row.AddFirst(rowProps);}rowProps.Add(new XElement(W+"cantSplit"));var itemValues=new Dictionary<string,string>(values,StringComparer.OrdinalIgnoreCase){["itemNumber"]=(++index).ToString(),["itemDescription"]=$"Театральные билеты на культурно-массовое мероприятие «{document.Invoice.Title}». {document.Invoice.VenueWithAddress}. {document.Invoice.EventDate}.",["itemCount"]=line.Count.ToString(),["itemPrice"]=document.Kind==IssueDocumentKinds.Bill&&document.Invoice.Tickets.Select(t=>t.Amount).Distinct().Count()>1?"—":DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total)};
                         foreach(var p in row.Descendants(W+"p").ToArray()){var text=string.Concat(p.Descendants(W+"t").Select(t=>t.Value));if(text.Contains('{'))SetParagraph(p,Replace(text,itemValues));}
                         // The source description spans several blank Excel rows. Each generated item has its own expandable row.
                         foreach(var merge in row.Descendants(W+"vMerge").ToArray())merge.Remove();

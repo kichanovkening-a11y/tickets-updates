@@ -121,10 +121,10 @@ public sealed partial class Store
             }
             long target;
             using(var create=Command(c,"""
-                INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date,sender)
-                SELECT event_id,recipient,issued_at,series,title,venue,event_date,sender FROM issue_batch WHERE id=$source;
+                INSERT INTO issue_batch(id,event_id,recipient,issued_at,series,title,venue,event_date,sender)
+                SELECT $next,event_id,recipient,issued_at,series,title,venue,event_date,sender FROM issue_batch WHERE id=$source;
                 SELECT last_insert_rowid();
-                ""","$source",issueIds[0]))
+                ""","$source",issueIds[0],"$next",AllocateIssueId(c,tx)))
             {create.Transaction=tx;target=Convert.ToInt64(create.ExecuteScalar());}
             using(var snapshot=Command(c,"""
                 INSERT INTO issue_organization_details(issue_id,role,details)

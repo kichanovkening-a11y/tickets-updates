@@ -27,7 +27,7 @@ public static class InvoiceDocuments
             Paragraph($"НАКЛАДНАЯ № {invoice.Id}",true,32),
             Paragraph("на передачу билетов",false,24),Paragraph("Дата выдачи: "+invoice.Date),
             Paragraph("Мероприятие: "+invoice.Title,true),Paragraph("Дата и время: "+invoice.EventDate),
-            Paragraph("Площадка: "+invoice.Venue),Paragraph("Отправитель: "+invoice.Sender),
+            Paragraph("Площадка: "+invoice.VenueWithAddress),Paragraph("Отправитель: "+invoice.Sender),
             Paragraph("Получатель: "+invoice.Recipient),Paragraph(""));
 
         var widths=new[]{1500,800,2700,1000,1300,1300};

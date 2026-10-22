@@ -97,7 +97,7 @@ internal sealed class HallEditorWindow : EditorWindow
             if(!CommitEdits())return;
             if(!double.TryParse(rowGap.Text,out var gap)||!double.IsFinite(gap)||gap<0||gap>1000)throw new TicketException("Промежуток после ряда: от 0 до 1000.");
             Remember();foreach(var row in rowLayouts.Concat(spareRows.Values))row.RowGapAfter=gap;
-            rowTable.Items.Refresh();showLiveRows?.Invoke();
+            RefreshRows();showLiveRows?.Invoke();
         }));
         advanced.Children.Add(new TextBlock{Text="Задайте подпись, число мест и проход для каждого ряда. В колонке «Начало мест» можно указать А, 1 — сначала А, затем 1, 2… В колонке «Проход» выберите пару существующих подписей мест. «Промежуток после ряда» добавляет проход между этим и следующим рядом (0 — нет). Пустое начало мест использует общую настройку выше.",TextWrapping=TextWrapping.Wrap});
         foreach(var (header,path,width) in new[]{("Ряд","Label",85),("Мест","SeatCount",85),("Начало мест","FirstSeat",155),("Промежуток после ряда","RowGapAfter",170)})
@@ -119,14 +119,14 @@ internal sealed class HallEditorWindow : EditorWindow
         void SyncRows(bool relabel=false)
         {
             if(!int.TryParse(rows.Text,out var count)||count is <1 or >200)return;
-            if(!rowTable.CommitEdit(DataGridEditingUnit.Cell,true)||!rowTable.CommitEdit(DataGridEditingUnit.Row,true))return;
+            if(!rowTable.CommitEdit(DataGridEditingUnit.Cell,true)||!rowTable.CommitEdit(DataGridEditingUnit.Row,true)||IsEditing(rowTable)||IsEditing(table))return;
             try
             {
                 var labels=Enumerable.Range(0,count).Select(i=>HallLayout.Label(firstRow.Text,i)).ToArray();
                 while(rowLayouts.Count>count){var index=rowLayouts.Count-1;spareRows[index]=CloneRow(rowLayouts[index]);rowLayouts.RemoveAt(index);}
                 while(rowLayouts.Count<count)rowLayouts.Add(spareRows.TryGetValue(rowLayouts.Count,out var cached)?CloneRow(cached):new HallRowLayout{Label=labels[rowLayouts.Count],SeatCount=int.TryParse(places.Text,out var n)&&n is >=1 and <=300?n:1,AisleAfter=int.TryParse(aisle.Text,out var g)&&g>=0?g:0,RowGapAfter=double.TryParse(rowGap.Text,out var rowSpace)&&double.IsFinite(rowSpace)&&rowSpace is >=0 and <=1000?rowSpace:0});
                 if(relabel){for(var i=0;i<count;i++)rowLayouts[i].Label=labels[i];foreach(var pair in spareRows)pair.Value.Label=HallLayout.Label(firstRow.Text,pair.Key);}
-                rowTable.Items.Refresh();showLiveRows?.Invoke();
+                RefreshRows();showLiveRows?.Invoke();
             }
             catch(TicketException) { /* An incomplete first label is validated when adding the sector. */ }
         }
@@ -140,13 +140,13 @@ internal sealed class HallEditorWindow : EditorWindow
             if(inheritedRows.Length==0)return;
             Remember(Capture() with{PlacesText=previous.ToString()});
             foreach(var row in inheritedRows)row.SeatCount=count;
-            rowTable.Items.Refresh();showLiveRows?.Invoke();
+            RefreshRows();showLiveRows?.Invoke();
         };
         var applyPlaces=Button(rowHeader,"Применить места ко всем рядам",()=>Try(()=>{
             if(!CommitEdits())return;
             var count=Number(places,1,300);
             Remember();foreach(var row in rowLayouts.Concat(spareRows.Values))row.SeatCount=count;
-            rowTable.Items.Refresh();showLiveRows?.Invoke();
+            RefreshRows();showLiveRows?.Invoke();
         }));
         rowHeader.Children.Remove(applyPlaces);rowHeader.Children.Insert(1,applyPlaces);
         Button(advanced,"Применить общий проход ко всем рядам",()=>Try(()=>{
@@ -154,7 +154,7 @@ internal sealed class HallEditorWindow : EditorWindow
             var gap=Number(aisle,0,300);
             if(rowLayouts.Any(row=>gap>row.SeatCount))throw new TicketException("Проход не может быть дальше последнего места ряда.");
             Remember();foreach(var row in rowLayouts)row.AisleAfter=gap;
-            rowTable.Items.Refresh();showLiveRows?.Invoke();
+            RefreshRows();showLiveRows?.Invoke();
         }));
         showLiveRows=()=>
         {
@@ -212,6 +212,15 @@ internal sealed class HallEditorWindow : EditorWindow
             Remember();foreach(var mark in review.Result){mark.Y+=y;seats.Add(mark);}
             showingDraft=false;builtSector=true;Refresh();tabs.SelectedIndex=0;
         }));
+        Button(toolbar,"Сетка как в старой программе",()=>Try(()=>{
+            if(!CommitEdits())return;
+            var editor=new LegacyHallGridWindow(store,sector.Text);
+            if(editor.ShowDialog()!=true)return;
+            if(seats.Count+editor.Result.Count>50000)throw new TicketException("Максимум 50 000 мест в одном зале.");
+            var y=seats.Count==0?26:seats.Max(s=>s.Y)+80;
+            Remember();foreach(var mark in editor.Result){mark.Y+=y;seats.Add(mark);}
+            showingDraft=false;builtSector=true;Refresh();tabs.SelectedIndex=0;
+        }));
         Button(toolbar,"Весь зал",()=>preview.Fit()); Button(toolbar,"Обновить схему",()=>Try(()=>Refresh()));
         Button(toolbar,"Удалить выбранные (Del)",()=>Try(DeleteSelected));
         preview.KeyDown+=(_,e)=>{if(e.Key==Key.Delete){Try(DeleteSelected);e.Handled=true;}};
@@ -232,7 +241,7 @@ internal sealed class HallEditorWindow : EditorWindow
                 Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle,new Action(()=>{
                     if(restoring||refreshing)return;
                     var active=CollectionViewSource.GetDefaultView(editable.ItemsSource) is IEditableCollectionView view&&(view.IsAddingNew||view.IsEditingItem);
-                    if(editable==rowTable){if(!active)rowTable.Items.Refresh();showLiveRows?.Invoke();}
+                    if(editable==rowTable){if(!active)RefreshRows();showLiveRows?.Invoke();}
                     else Refresh(false,false);
                 }));
             };
@@ -275,10 +284,19 @@ internal sealed class HallEditorWindow : EditorWindow
         }
         finally{refreshing=false;}
     }
+    private static bool IsEditing(DataGrid grid)=>grid.ItemsSource is not null&&CollectionViewSource.GetDefaultView(grid.ItemsSource) is IEditableCollectionView view&&(view.IsAddingNew||view.IsEditingItem);
+    private void RefreshRows()
+    {
+        // Focus changes can request a refresh from inside a DataGrid commit callback.
+        // A successful CommitEdit call alone does not guarantee both views are idle.
+        if(IsEditing(rowTable)||IsEditing(table))return;
+        rowTable.Items.Refresh();
+    }
     private bool CommitEdits()
     {
         if(table.CommitEdit(DataGridEditingUnit.Cell,true)&&table.CommitEdit(DataGridEditingUnit.Row,true)&&
-            rowTable.CommitEdit(DataGridEditingUnit.Cell,true)&&rowTable.CommitEdit(DataGridEditingUnit.Row,true))return true;
+            rowTable.CommitEdit(DataGridEditingUnit.Cell,true)&&rowTable.CommitEdit(DataGridEditingUnit.Row,true))
+        {if(IsEditing(rowTable)||IsEditing(table))return false;return true;}
         MessageBox.Show(DialogOwner,"Исправьте ошибку в таблице: координаты X и Y, количество мест, проход и промежуток после ряда должны быть числами.","Зал");return false;
     }
 }

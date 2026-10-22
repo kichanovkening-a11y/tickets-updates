@@ -65,12 +65,98 @@ public sealed partial class Store
         cmd.Transaction=tx;cmd.ExecuteNonQuery();
     }
 
+    public sealed record PerformanceDeletionInfo(int Shows,int Issues,int Tickets);
+    public PerformanceDeletionInfo PerformanceDeletionSummary(long id)
+    {
+        using var c=Open();
+        using var title=Command(c,"SELECT title FROM performance WHERE id=$i","$i",id);
+        var name=title.ExecuteScalar() as string??throw new TicketException("Спектакль не найден.");
+        var key=CatalogText.Key(name);
+        var events=new List<long>();using(var q=Command(c,"SELECT id,title FROM event")){using var r=q.ExecuteReader();while(r.Read())if(CatalogText.Key(r.GetString(1))==key)events.Add(r.GetInt64(0));}
+        var issues=0;var tickets=0;
+        foreach(var e in events)
+        {
+            using var q=Command(c,"SELECT (SELECT count(*) FROM issue_batch WHERE event_id=$e),(SELECT count(*) FROM ticket WHERE event_id=$e)","$e",e);
+            using var r=q.ExecuteReader();r.Read();issues+=r.GetInt32(0);tickets+=r.GetInt32(1);
+        }
+        return new(events.Count,issues,tickets);
+    }
+
+    // The watermark is persisted separately because issue_batch uses INTEGER PRIMARY KEY
+    // without AUTOINCREMENT. Deleting the last issue must never reuse its document number.
+    private static long AllocateIssueId(SqliteConnection c,SqliteTransaction tx,bool allocate=true)
+    {
+        using var q=Command(c,"SELECT max(coalesce((SELECT max(id) FROM issue_batch),0),coalesce((SELECT CAST(value AS INTEGER) FROM document_setting WHERE name='invoice-last-id'),0))");q.Transaction=tx;
+        var last=Convert.ToInt64(q.ExecuteScalar());
+        if(allocate&&last==long.MaxValue)throw new TicketException("Номера накладных закончились.");
+        var value=allocate?last+1:last;
+        using var save=Command(c,"INSERT INTO document_setting(name,value) VALUES('invoice-last-id',$v) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$v",value.ToString(CultureInfo.InvariantCulture));save.Transaction=tx;save.ExecuteNonQuery();return value;
+    }
+
     public void DeletePerformance(long id)
     {
-        using var c=Open();using var tx=c.BeginTransaction(deferred:false);
-        using var cmd=Command(c,"SELECT title FROM performance WHERE id=$i","$i",id);cmd.Transaction=tx;
-        var title=cmd.ExecuteScalar() as string??throw new TicketException("Спектакль не найден.");
-        HideCatalogEntry(c,tx,"performance",CatalogText.Key(title));tx.Commit();
+        // A complete recoverable copy is made before deleting any linked records/files.
+        PerformanceDeletionSummary(id);
+        var backupDirectory=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"Backups","delete-performance-"+id+"-"+DateTime.Now.ToString("yyyyMMdd-HHmmss")+"-"+Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(backupDirectory);Backup(System.IO.Path.Combine(backupDirectory,"tickets.db"));
+        var moved=new List<(string Source,string Backup)>();
+        using var c=Open();EnsureInvoiceMergeTable(c);using var tx=c.BeginTransaction(deferred:false);
+        EnsureEventPlanSources(c,tx);
+        try
+        {
+            using var title=Command(c,"SELECT title FROM performance WHERE id=$i","$i",id);title.Transaction=tx;
+            var name=title.ExecuteScalar() as string??throw new TicketException("Спектакль не найден.");var key=CatalogText.Key(name);
+            using(var create=Command(c,"CREATE TEMP TABLE deleting_events(id INTEGER PRIMARY KEY); CREATE TEMP TABLE deleting_issues(id INTEGER PRIMARY KEY)")){create.Transaction=tx;create.ExecuteNonQuery();}
+            var events=new List<long>();using(var q=Command(c,"SELECT id,title FROM event")){q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(CatalogText.Key(r.GetString(1))==key)events.Add(r.GetInt64(0));}
+            foreach(var e in events){using var add=Command(c,"INSERT INTO deleting_events VALUES($e)","$e",e);add.Transaction=tx;add.ExecuteNonQuery();}
+            using(var add=Command(c,"INSERT INTO deleting_issues SELECT id FROM issue_batch WHERE event_id IN(SELECT id FROM deleting_events)")){add.Transaction=tx;add.ExecuteNonQuery();}
+            var journalPath=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"journal-columns-by-event.json");
+            if(File.Exists(journalPath))
+            {
+                System.Text.Json.Nodes.JsonObject? layouts=null;
+                try{layouts=System.Text.Json.Nodes.JsonNode.Parse(File.ReadAllText(journalPath)) as System.Text.Json.Nodes.JsonObject;}catch(System.Text.Json.JsonException){}
+                if(layouts is not null&&events.Any(e=>layouts.ContainsKey(e.ToString(CultureInfo.InvariantCulture))))
+                {
+                    foreach(var e in events)layouts.Remove(e.ToString(CultureInfo.InvariantCulture));
+                    var saved=System.IO.Path.Combine(backupDirectory,"journal-columns-by-event.json");File.Move(journalPath,saved);moved.Add((journalPath,saved));
+                    File.WriteAllText(journalPath+".tmp",layouts.ToJsonString());File.Move(journalPath+".tmp",journalPath,true);
+                }
+            }
+            AllocateIssueId(c,tx,false);
+            var issues=new List<long>();using(var q=Command(c,"SELECT id FROM deleting_issues")){q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())issues.Add(r.GetInt64(0));}
+            foreach(var issue in issues)
+            {
+                var paths=new[]{InvoiceDocumentPath(issue),IssueSpecificationDocumentPath(issue)}.Concat(IssueDocumentKinds.All.Select(kind=>IssueDocumentPath(issue,kind)));
+                foreach(var path in paths.Where(File.Exists))
+                {
+                    var copy=System.IO.Path.Combine(backupDirectory,"Documents",System.IO.Path.GetFileName(System.IO.Path.GetDirectoryName(path))!,System.IO.Path.GetFileName(path));
+                    Directory.CreateDirectory(System.IO.Path.GetDirectoryName(copy)!);File.Move(path,copy);moved.Add((path,copy));
+                }
+            }
+            using(var delete=Command(c,"""
+                DELETE FROM invoice_merge WHERE source_issue_id IN(SELECT id FROM deleting_issues) OR target_issue_id IN(SELECT id FROM deleting_issues);
+                DELETE FROM ticket_state WHERE ticket_id IN(SELECT id FROM ticket WHERE event_id IN(SELECT id FROM deleting_events));
+                DELETE FROM ticket WHERE event_id IN(SELECT id FROM deleting_events);
+                DELETE FROM issue_custom_form WHERE issue_id IN(SELECT id FROM deleting_issues);
+                DELETE FROM issue_contract_number WHERE issue_id IN(SELECT id FROM deleting_issues);
+                DELETE FROM issue_contract_date WHERE issue_id IN(SELECT id FROM deleting_issues);
+                DELETE FROM issue_organization_details WHERE issue_id IN(SELECT id FROM deleting_issues);
+                DELETE FROM issue_document WHERE event_id IN(SELECT id FROM deleting_events) OR issue_id IN(SELECT id FROM deleting_issues);
+                DELETE FROM issue_batch WHERE id IN(SELECT id FROM deleting_issues);
+                DELETE FROM event_plan_source WHERE event_id IN(SELECT id FROM deleting_events);
+                DELETE FROM event_seat_block WHERE event_id IN(SELECT id FROM deleting_events);
+                DELETE FROM event_price WHERE event_id IN(SELECT id FROM deleting_events);
+                DELETE FROM event WHERE id IN(SELECT id FROM deleting_events);
+                DELETE FROM performance WHERE id=$i;
+                ""","$i",id)){delete.Transaction=tx;delete.ExecuteNonQuery();}
+            // Keep a tombstone to prevent seed/import routines from silently restoring it.
+            HideCatalogEntry(c,tx,"performance",key);tx.Commit();
+        }
+        catch
+        {
+            tx.Rollback();foreach(var item in moved.AsEnumerable().Reverse()){Directory.CreateDirectory(System.IO.Path.GetDirectoryName(item.Source)!);File.Move(item.Backup,item.Source,true);}
+            throw;
+        }
     }
 
     public void DeleteVenue(long id)=>DeleteCatalogId("venue",id,"Зал не найден.");

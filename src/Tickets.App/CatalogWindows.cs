@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
 using Tickets.Core;
@@ -66,7 +67,7 @@ internal sealed class PriceEditorWindow : EditorWindow
     private List<SeatInfo> seats=[];
     private readonly Dictionary<long,PriceValue> prices=[];
     private readonly HashSet<long> withdrawn=[];
-    private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.NoWrap,Margin=new Thickness(0,4,0,10),FontSize=15};
+    private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.NoWrap,Margin=new Thickness(0,4,0,10),FontSize=18,FontWeight=FontWeights.Bold};
     private readonly Grid priceSummary=new(){Margin=new Thickness(0,0,0,6),HorizontalAlignment=HorizontalAlignment.Left};
     private sealed record SourcePlan(long Id,PriceValue[] Prices,long[] Withdrawn);
     private sealed record PriceState(Dictionary<long,PriceValue> Prices,long[] Withdrawn,long[] Selected,string Name,SourcePlan? Source);
@@ -235,7 +236,10 @@ internal sealed class PriceEditorWindow : EditorWindow
     {
         var sellable=seats.Where(s=>!withdrawn.Contains(s.Id)).ToList();
         var assigned=sellable.Where(s=>prices.ContainsKey(s.Id)).Select(s=>prices[s.Id]).ToArray();
-        hallTotals.Text=$"Всего мест: {seats.Count} · Общая сумма: {assigned.Sum(p=>(decimal)p.Amount):N0} ₽ · Заблокировано: {withdrawn.Count}";
+        hallTotals.Inlines.Clear();
+        hallTotals.Inlines.Add(new Run("Всего мест: "));hallTotals.Inlines.Add(new Run(seats.Count.ToString()){Foreground=Brushes.Red});
+        hallTotals.Inlines.Add(new Run(" · Общая сумма: "));hallTotals.Inlines.Add(new Run($"{assigned.Sum(p=>(decimal)p.Amount):N0}"){Foreground=Brushes.Red});
+        hallTotals.Inlines.Add(new Run(" ₽ · Заблокировано: "));hallTotals.Inlines.Add(new Run(withdrawn.Count.ToString()){Foreground=Brushes.Red});
         priceSummary.Children.Clear();priceSummary.RowDefinitions.Clear();priceSummary.ColumnDefinitions.Clear();
         var summaries=Pricing012Presentation.Summaries(assigned);
         foreach(var item in summaries)

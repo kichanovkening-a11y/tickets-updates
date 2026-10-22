@@ -4,9 +4,11 @@
     <UseWPF>true</UseWPF><EnableWindowsTargeting>true</EnableWindowsTargeting>
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
     <AssemblyName>Tickets</AssemblyName><Version>0.18.0</Version>
+    <ApplicationIcon>Assets/Tickets.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets/Tickets.ico" />
     <ProjectReference Include="../Tickets.Core/Tickets.Core.csproj" /><ProjectReference Include="../Tickets.Update/Tickets.Update.csproj" />
     <Content Condition="Exists('../../data/seed.db')" Include="../../data/seed.db" Link="Data/seed.db" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

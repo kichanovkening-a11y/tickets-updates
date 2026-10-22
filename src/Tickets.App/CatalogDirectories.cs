@@ -60,7 +60,8 @@ internal sealed class PerformanceWindow : EditorWindow
                 dates.Click+=(_,_)=>Try(()=>{var editor=new EventEditorWindow(store,performance.Id);if(editor.ShowDialog()==true)Refresh();});
                 var delete=new MenuItem{Header="Удалить"};menu.Items.Add(delete);
                 delete.Click+=(_,_)=>Try(()=>{
-                    if(MessageBox.Show(DialogOwner,$"Удалить спектакль «{performance.Title}»?\n\nПоказы переместятся в архив удалённых. Выдачи, документы и возвраты сохранятся.","Удаление спектакля",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+                    var linked=store.PerformanceDeletionSummary(performance.Id);
+                    if(MessageBox.Show(DialogOwner,$"Полностью удалить спектакль «{performance.Title}»?\n\nПоказы: {linked.Shows}. Накладные: {linked.Issues}. Билеты (включая возвраты): {linked.Tickets}.\nСвязанные выдачи и документы будут удалены. Перед удалением сохранится резервная копия.","Удаление спектакля",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
                     store.DeletePerformance(performance.Id);Refresh();
                 });
                 node.PreviewMouseRightButtonDown+=(_,e)=>{e.Handled=true;if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),node)){node.IsSelected=true;menu.IsOpen=true;}};

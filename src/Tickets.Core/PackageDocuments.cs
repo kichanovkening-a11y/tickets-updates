@@ -83,13 +83,13 @@ public sealed partial class Store
     private static IssueDocumentInfo RenderIssueDocument(string kind,InvoiceInfo invoice,string template)
     {
         // A single replacement pass prevents recipient or sender text from becoming template instructions.
-        var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["issueId"]=invoice.Id.ToString(),["recipient"]=invoice.Recipient,["sender"]=invoice.Sender,["event"]=invoice.Title,["title"]=invoice.Title,["date"]=invoice.Date,["eventDate"]=invoice.EventDate,["venue"]=invoice.Venue,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["summary"]=DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),
+        var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["issueId"]=invoice.Id.ToString(),["recipient"]=invoice.Recipient,["sender"]=invoice.Sender,["event"]=invoice.Title,["title"]=invoice.Title,["date"]=invoice.Date,["eventDate"]=invoice.EventDate,["venue"]=invoice.VenueWithAddress,["venueAddress"]=invoice.VenueAddress,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["summary"]=DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),
             ["items"]=BusinessDocumentTemplates.Items(invoice,kind),["amountWords"]=RussianWords.Money(invoice.Total),["countWords"]=RussianWords.Quantity(invoice.Tickets.Count),
             ["senderDetails"]=BusinessDocumentTemplates.Requisites(invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender)),
             ["recipientDetails"]=BusinessDocumentTemplates.Requisites(invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)),
             ["senderPosition"]=BusinessDocumentTemplates.Missing(invoice.SenderDetails?.Position??""),["senderSignatory"]=BusinessDocumentTemplates.Missing(invoice.SenderDetails?.Signatory??""),
             ["recipientPosition"]=BusinessDocumentTemplates.Missing(invoice.RecipientDetails?.Position??""),["recipientSignatory"]=BusinessDocumentTemplates.Missing(invoice.RecipientDetails?.Signatory??"")};
-        foreach(var value in SourceBusinessForms.Values(invoice))values[value.Key]=value.Value;
+        foreach(var value in SourceBusinessForms.Values(invoice,kind))values[value.Key]=value.Value;
         if(kind==IssueDocumentKinds.Act)values["date"]=SourceBusinessForms.EventCalendarDate(invoice);
         var body=System.Text.RegularExpressions.Regex.Replace(template,@"\{\{?(\w+)\}\}?",match=>values.TryGetValue(match.Groups[1].Value,out var value)?value:match.Value);
         if(!SourceBusinessForms.CanUseSource(kind,template)&&!template.Contains("{summary}",StringComparison.OrdinalIgnoreCase)&&!template.Contains("{{summary}}",StringComparison.OrdinalIgnoreCase))body+="\n\n"+DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total);

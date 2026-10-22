@@ -297,6 +297,8 @@ internal static class Program
             Isolated("docs021",Docs021UiChecks.Run);
             Isolated("pricing021",Pricing021UiChecks.Run);
             Isolated("hall021",HallEditor021Checks.Run);
+            Isolated("ui022",Ui022Checks.Run);
+            Isolated("legacygrid022",LegacyHallGrid022Checks.Run);
             Isolated("documents018",RecipientDocuments018Checks.Run);
             Isolated("journal017",Journal017Checks.Run);
             Isolated("issuance018",s=>{

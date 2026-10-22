@@ -43,9 +43,9 @@ static class Docs013Checks
         test("act heading uses event calendar date without time",s=>{
             var doc=Document(s,IssueDocumentKinds.Act);
             var expected=DateTime.Parse(doc.Invoice.EventDate,System.Globalization.CultureInfo.GetCultureInfo("ru-RU")).ToString("dd.MM.yyyy");
-            var heading=InvoiceDocuments.IssueDocumentXml(doc).Descendants(W+"p").Select(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value))).First(t=>t.StartsWith("АКТ №"));
-            Require(heading=="АКТ № "+doc.Invoice.Id+" от "+expected,"act heading uses issue date or includes time: "+heading);
-            Require(doc.Body.Contains("АКТ № "+doc.Invoice.Id+" от "+expected),"act text preview date differs");
+            var heading=InvoiceDocuments.IssueDocumentXml(doc).Descendants(W+"tr").Select(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value))).First(t=>t.StartsWith("г. Москва"));
+            Require(heading=="г. Москва"+expected,"act heading uses issue date or includes time: "+heading);
+            Require(doc.Body.Contains("г. Москва\n"+expected),"act text preview date differs");
         });
         test("explicit requisites refresh updates both parties and generated supporting documents",s=>{
             var doc=Document(s,IssueDocumentKinds.Bill);var invoice=doc.Invoice;

@@ -19,6 +19,7 @@ internal static class WordDocumentStructure
     };
     public static void Normalize(XDocument document)
     {
+        foreach(var table in document.Descendants(W+"tbl").ToArray())WordTableGrid.Compact(table);
         foreach(var group in document.Descendants().Where(e=>e.Name.Namespace==W&&Orders.ContainsKey(e.Name.LocalName)).ToArray())
         {
             var order=Orders[group.Name.LocalName];
@@ -56,6 +57,8 @@ internal static class WordDocumentStructure
     }
     public static void Validate(XDocument document)
     {
+        foreach(var table in document.Descendants(W+"tbl"))
+            if(table.Element(W+"tblGrid")?.Elements(W+"gridCol").Count()>63)throw new TicketException("Таблица превышает ограничение Microsoft Word: 63 столбца.");
         foreach(var table in document.Descendants(W+"tbl"))
             if(table.Elements().Any(e=>e.Name.Namespace==W&&e.Name.LocalName is not ("tblPr" or "tblGrid" or "tr" or "customXml" or "sdt" or "bookmarkStart" or "bookmarkEnd")))throw new TicketException("Некорректная структура таблицы Word.");
         foreach(var cell in document.Descendants(W+"tc"))if(cell.Elements().LastOrDefault()?.Name!=W+"p")throw new TicketException("Некорректная структура ячейки Word.");

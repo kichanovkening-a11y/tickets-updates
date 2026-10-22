@@ -5,13 +5,13 @@ internal static class ArchivePricingChecks
 {
     public static void Register(Action<string,Action<Store>> test)
     {
-        test("archived imported show pricing remains reusable without changing history",s=>{
+        test("deleted imported show pricing remains reusable after source removal",s=>{
             var source=s.Events().First(e=>s.Seats(e.Id).Count(x=>x.Amount.HasValue)>=2);
             var before=s.Seats(source.Id).Where(x=>x.Amount.HasValue).Select(x=>new PriceValue(x.Id,x.Amount!.Value,x.Color)).OrderBy(x=>x.SeatId).ToArray();
             var performance=s.Performances().First(p=>CatalogText.Key(p.Title)==CatalogText.Key(source.Title));
-            s.DeletePerformance(performance.Id);
-            Require(s.IsEventArchived(source.Id),"source show was not archived");
             var template=s.GetOrCreateEventPlan(source.Id);
+            s.DeletePerformance(performance.Id);
+            Require(!s.Events(true).Any(e=>e.Id==source.Id),"deleted source show remains");
             Require(s.Plans(source.VenueId).Any(p=>p.Id==template),"archived source template not offered");
             var copied=s.CopyPlanPrices(template,source.VenueId).OrderBy(x=>x.SeatId).ToArray();
             Require(copied.SequenceEqual(before),"archived prices or category colors changed");
@@ -20,7 +20,7 @@ internal static class ArchivePricingChecks
             Require(s.Seats(created).Where(x=>x.Amount.HasValue).OrderBy(x=>x.Id).Select(x=>x.Amount).SequenceEqual(before.Select(x=>(long?)x.Amount)),"new showing did not copy archive prices");
             var edited=copied.Select((p,i)=>i==0?p with{Amount=123456789,Color="#123456"}:p).ToArray();
             s.SavePlan(source.VenueId,"Изменённая копия архивных цен",edited);
-            Require(s.Seats(source.Id).Where(x=>x.Amount.HasValue).Select(x=>new PriceValue(x.Id,x.Amount!.Value,x.Color)).OrderBy(x=>x.SeatId).SequenceEqual(before),"saving edited copy changed prior showing");
+            Require(!s.Events(true).Any(e=>e.Id==source.Id),"deleted showing was resurrected by copying prices");
             Require(s.PlanPrices(template).OrderBy(x=>x.SeatId).SequenceEqual(before),"saving edited copy changed source template");
         });
         test("event templates deduplicate exact seat patterns and respect deletion across reopen",s=>{

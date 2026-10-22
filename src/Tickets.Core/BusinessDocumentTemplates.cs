@@ -184,10 +184,10 @@ public static class BusinessDocumentTemplates
             _=>"№ | Билеты и места | Ед. | Кол-во | Цена, ₽ | Сумма, ₽"
         }};
         var index=0;
-        foreach(var line in InvoiceDocuments.Lines(invoice))
+        foreach(var line in kind==IssueDocumentKinds.Bill?new[]{new InvoiceLine("","","",invoice.Tickets.Count,invoice.Tickets.Count==0?0:invoice.Total/invoice.Tickets.Count,invoice.Total,"")}:InvoiceDocuments.Lines(invoice))
         {
-            var description=$"Театральные билеты: {Cell(invoice.Title)}. {Cell(invoice.Venue)}. {Cell(invoice.EventDate)}. {Cell(line.Sector)}, ряд {Cell(line.Row)}, места {Cell(line.Seats)}";
-            var total=DocumentTotals.Amount(line.Total);var price=DocumentTotals.Amount(line.Price);
+            var description=kind==IssueDocumentKinds.Bill?$"Услуги по организации и проведению культурно-массового мероприятия спектакля «{Cell(invoice.Title)}». {Cell(invoice.VenueWithAddress)}. {Cell(invoice.EventDate)}.":$"Театральные билеты: {Cell(invoice.Title)}. {Cell(invoice.VenueWithAddress)}. {Cell(invoice.EventDate)}. {Cell(line.Sector)}, ряд {Cell(line.Row)}, места {Cell(line.Seats)}";
+            var total=DocumentTotals.Amount(line.Total);var price=kind==IssueDocumentKinds.Bill&&invoice.Tickets.Select(t=>t.Amount).Distinct().Count()>1?"—":DocumentTotals.Amount(line.Price);
             rows.Add(kind switch
             {
                 IssueDocumentKinds.Waybill=>$"{++index} | {description} | — | шт. | 796 | — | — | {line.Count} | — | {line.Count} | {price} | {total} | — | — | {total}",

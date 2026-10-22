@@ -39,7 +39,7 @@ internal sealed class InvoiceChoiceWindow:EditorWindow
         var root=new DockPanel{Margin=new Thickness(16)};Content=root;
         var heading=new TextBlock{Text="Сначала выберите получателя, затем его накладную текущего показа.",TextWrapping=TextWrapping.Wrap};DockPanel.SetDock(heading,Dock.Top);root.Children.Add(heading);
         var issues=store.Issues(eventId).Where(i=>i.Count>i.ReturnedCount&&i.ReservedCount==0).ToArray();
-        var recipients=new ComboBox{Margin=new Thickness(0,8,0,8),MinHeight=36,ItemsSource=issues.Select(i=>i.Recipient).Distinct().OrderBy(x=>x).ToArray(),ToolTip="Получатель накладной"};DockPanel.SetDock(recipients,Dock.Top);root.Children.Add(recipients);
+        var recipients=new ComboBox{Margin=new Thickness(0,8,0,8),MinHeight=36,ItemsSource=issues.Select(i=>i.Recipient).Distinct().OrderBy(x=>x).ToArray(),ToolTip="Получатель накладной"};RecipientTypography.Apply(recipients);DockPanel.SetDock(recipients,Dock.Top);root.Children.Add(recipients);
         var search=new TextBox{Margin=new Thickness(0,0,0,8),ToolTip="Поиск по номеру накладной"};DockPanel.SetDock(search,Dock.Top);root.Children.Add(search);
         var select=new Button{Content="Выбрать",Margin=new Thickness(0,8,0,0),IsEnabled=false};DockPanel.SetDock(select,Dock.Bottom);root.Children.Add(select);
         var list=new ListBox{DisplayMemberPath="Caption"};root.Children.Add(list);

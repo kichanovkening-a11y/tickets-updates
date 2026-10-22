@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); }
 
     private SqliteConnection Open()
     {
@@ -122,9 +122,9 @@ public sealed partial class Store
             RequireActiveEvent(c,tx,eventId);
             var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
             using var batch=Command(c,"""
-                INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date,sender)
-                SELECT e.id,$r,$time,$series,e.title,v.name,e.legacy_date,$sender FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
-                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series,"$sender",selectedSender);batch.Transaction=tx;
+                INSERT INTO issue_batch(id,event_id,recipient,issued_at,series,title,venue,event_date,sender)
+                SELECT $issueId,e.id,$r,$time,$series,e.title,v.name,e.legacy_date,$sender FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
+                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series,"$sender",selectedSender,"$issueId",AllocateIssueId(c,tx));batch.Transaction=tx;
             var result=batch.ExecuteScalar();if(result is null)throw new TicketException("Показ не найден.");
             var issueId=Convert.ToInt64(result);
             using(var senderQuery=Command(c,"SELECT sender FROM issue_batch WHERE id=$i","$i",issueId))

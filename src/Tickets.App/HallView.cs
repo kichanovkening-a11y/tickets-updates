@@ -84,10 +84,26 @@ public sealed class HallView : FrameworkElement
             var sectorSeats=seats.ToLookup(s=>s.Sector);
             foreach(var sector in sectors)
             {
-                var label=Text(sector.Name,15.6,Brushes.SlateGray);
+                var wrapped=sector.Name.StartsWith("Ложа партера (",StringComparison.Ordinal)||sector.Name.StartsWith("Балкон №",StringComparison.Ordinal);
+                var label=Text(wrapped?sector.Name.Replace(" (","\n("):sector.Name,15.6,Brushes.SlateGray);
+                label.TextAlignment=TextAlignment.Center;
                 var places=sectorSeats[sector.Name];
-                var x=places.Any()?(places.Min(s=>s.X)+places.Max(s=>s.X)+16-label.Width)/2:sector.X;
-                dc.DrawText(label,new Point(x,sector.Y));
+                var x=places.Any()?(places.Min(s=>s.X)+places.Max(s=>s.X)+16)/2:sector.X+label.Width/2;
+                var y=places.Any()?Math.Min(sector.Y,places.Min(s=>s.Y)-label.Height-6):sector.Y;
+                if(wrapped&&places.Any())
+                {
+                    var labelBounds=label.BuildGeometry(new Point(x,y)).Bounds;
+                    if(seats.Any(s=>labelBounds.IntersectsWith(new Rect(s.X,s.Y,16,16))))
+                    {
+                        // Deep side balconies can share a vertical band with central
+                        // rows. Put only a colliding side heading outside its block.
+                        x=sector.Name.Contains("левая сторона",StringComparison.Ordinal)
+                            ?places.Min(s=>s.X)-12-label.Width/2
+                            :places.Max(s=>s.X)+16+12+label.Width/2;
+                        y=(places.Min(s=>s.Y)+places.Max(s=>s.Y)+16-label.Height)/2;
+                    }
+                }
+                dc.DrawText(label,new Point(x,y));
             }
             foreach(var s in seats)
             {

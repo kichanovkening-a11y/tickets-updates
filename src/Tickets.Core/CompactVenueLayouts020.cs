@@ -43,7 +43,7 @@ internal static class CompactVenueLayouts020
             var left=side=="левая сторона";var lodge=groups[$"Ложа партера ({side})"];
             foreach(var s in lodge){s.X=(left?int.Parse(s.Row)-1:4-int.Parse(s.Row))*Pitch;s.Y=(int.Parse(s.Number)-1)*Pitch;}
             var lodgeX=left?parter.Min(s=>s.X)-Gap-Width(lodge):parter.Max(s=>s.X)+16+Gap;
-            Move(lodge,lodgeX,Math.Max(0,Bottom(parter)-Bottom(lodge)));
+            Move(lodge,lodgeX,Math.Max(0,Bottom(parter)-Bottom(lodge))+Pitch);
             var sideY=amph.Min(s=>s.Y);
             foreach(var number in new[]{1,2,3})
             {

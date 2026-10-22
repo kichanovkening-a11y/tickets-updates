@@ -9,7 +9,7 @@ public partial class MainWindow
     private void WorkspaceTabChanged(object sender,SelectionChangedEventArgs e)
     {
         if(!ReferenceEquals(e.OriginalSource,WorkspaceTabs))return;
-        if(e.RemovedItems.Contains(JournalTab))ClearJournalSelection();
+        if(e.RemovedItems.Contains(JournalTab)){saveJournalLayout?.Invoke();ClearJournalSelection();}
     }
     private void UpdateCompactLayout()
     {
@@ -61,6 +61,6 @@ public partial class MainWindow
             LegendPanel.Children.Add(button);
         }
         PriceSummaryLayout.Arrange(LegendPanel);
-        AddLegend("Бронь / накладная",Brushes.Black);AddLegend("Распечатаны",Brushes.Red);AddLegend("× Снято с продажи",Brushes.Gray);AddLegend("Нет цены",Brushes.Gainsboro);
+        AddLegend("Бронь / накладная",Brushes.Black);AddLegend("Распечатаны",Brushes.Red);AddLegend("× Заблокировано",Brushes.Gray);AddLegend("Нет цены",Brushes.Gainsboro);
     }
 }

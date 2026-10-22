@@ -124,6 +124,25 @@ public sealed partial class Store
         details=new(Name:name,LegalName:Clean(details.LegalName),Authority:Clean(details.Authority),Inn:Clean(details.Inn),Kpp:Clean(details.Kpp),Ogrn:Clean(details.Ogrn),Address:Clean(details.Address),Bank:Clean(details.Bank),Account:Clean(details.Account),CorrespondentAccount:Clean(details.CorrespondentAccount),Bik:Clean(details.Bik),Signatory:Clean(details.Signatory),Position:Clean(details.Position),Phone:Clean(details.Phone),Okpo:Clean(details.Okpo),Okved:Clean(details.Okved),Okato:Clean(details.Okato),ExtraFields:extras);
         name=sender?SaveSender(name):SaveRecipient(name);details=details with{Name=name};
         using var c=Open();EnsureOrganizationTable(c);
-        using var cmd=Command(c,"INSERT INTO organization_details(role,name_key,details) VALUES($r,$k,$d) ON CONFLICT(role,name_key) DO UPDATE SET details=excluded.details","$r",sender?"sender":"recipient","$k",CatalogText.Key(name),"$d",JsonSerializer.Serialize(details));cmd.ExecuteNonQuery();
+        using var tx=c.BeginTransaction(deferred:false);
+        var role=sender?"sender":"recipient";
+        using(var cmd=Command(c,"INSERT INTO organization_details(role,name_key,details) VALUES($r,$k,$d) ON CONFLICT(role,name_key) DO UPDATE SET details=excluded.details","$r",role,"$k",CatalogText.Key(name),"$d",JsonSerializer.Serialize(details))){cmd.Transaction=tx;cmd.ExecuteNonQuery();}
+        // The representative belongs to the organization. Keep all its existing
+        // document packages current while retaining their other historical requisites.
+        var snapshots=new List<(long Issue,OrganizationDetails Details)>();
+        using(var read=Command(c,$"SELECT i.id,i.{role},d.details FROM issue_batch i JOIN issue_organization_details d ON d.issue_id=i.id AND d.role=$r","$r",role))
+        {
+            read.Transaction=tx;using var rows=read.ExecuteReader();
+            while(rows.Read())if(CatalogText.Key(rows.GetString(1))==CatalogText.Key(name))
+            {
+                var snapshot=JsonSerializer.Deserialize<OrganizationDetails>(rows.GetString(2))??new(Name:name);
+                snapshots.Add((rows.GetInt64(0),snapshot with{Signatory=details.Signatory,Position=details.Position}));
+            }
+        }
+        foreach(var snapshot in snapshots)
+        {
+            using var write=Command(c,"UPDATE issue_organization_details SET details=$d WHERE issue_id=$i AND role=$r","$d",JsonSerializer.Serialize(snapshot.Details),"$i",snapshot.Issue,"$r",role);write.Transaction=tx;write.ExecuteNonQuery();
+        }
+        tx.Commit();
     }
 }

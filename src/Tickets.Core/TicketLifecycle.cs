@@ -87,11 +87,12 @@ public sealed partial class Store
                     SELECT p.amount FROM event_price p JOIN event e ON e.id=p.event_id
                     JOIN seat s ON s.id=p.seat_id AND s.venue_id=e.venue_id
                     WHERE p.event_id=$e AND p.seat_id=$s
+                    AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))
                     AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=$e AND t.seat_id=$s AND t.returned_at IS NULL)
                     AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=$s)
                     ""","$e",eventId,"$s",sid);check.Transaction=tx;
                 var amount=check.ExecuteScalar();
-                if(amount is null)throw new TicketException("Место уже занято, снято с продажи, не имеет цены или не относится к этому показу. Дополнение отменено целиком.");
+                if(amount is null)throw new TicketException("Место уже занято, заблокировано, не имеет цены или не относится к этому показу. Дополнение отменено целиком.");
                 using var insert=Command(c,"""
                     INSERT INTO ticket(event_id,seat_id,recipient,series,number,amount,issued_at,issue_id)
                     VALUES($e,$s,$r,$series,$n,$a,$time,$issue)

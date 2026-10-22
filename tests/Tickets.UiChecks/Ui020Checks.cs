@@ -18,8 +18,10 @@ internal static class Ui020Checks
         Check(hall.Selected.Count==2&&((Button)main.FindName("ReturnButton")).IsEnabled,"occupied-only group can be selected for return");
         Check(!((Button)main.FindName("IssueButton")).IsEnabled&&!((Button)main.FindName("PrintTicketsButton")).IsEnabled,"occupied-only group never enables generic issuance or printing");
         var click=(ValueTuple<SeatInfo?,SeatInfo?>)typeof(HallView).GetMethod("ClickSeat",Private)!.Invoke(hall,[hall.SelectedSeats.First()])!;
-        Check(click.Item1?.Id==seats[0].Id&&click.Item2 is null&&hall.Selected.SetEquals([seats[0].Id,seats[1].Id]),"left click on an occupied selected group requests its menu without removing a seat or warning");
-        typeof(MainWindow).GetMethod("OpenSeatContext",Private)!.Invoke(main,[click.Item1!.Id,new Point(10,10)]);
+        Check(click.Item1 is null&&click.Item2 is null&&hall.Selected.SetEquals([seats[1].Id]),"left click toggles an occupied seat without opening menu or warning");
+        typeof(HallView).GetMethod("ClickSeat",Private)!.Invoke(hall,[store.Seats(show.Id).First(s=>s.Id==seats[0].Id)]);
+        Check(hall.Selected.SetEquals([seats[0].Id,seats[1].Id]),"left click adds occupied seat back to occupied-only group");
+        typeof(MainWindow).GetMethod("OpenSeatContext",Private)!.Invoke(main,[seats[0].Id,new Point(10,10)]);
         var entries=hall.ContextMenu!.Items.OfType<MenuItem>().ToArray();
         Check(entries.Any(m=>Equals(m.Header,"Вернуть выбранные"))&&entries.Any(m=>Equals(m.Header,"Открыть исходную накладную")),"occupied group menu preserves invoice access and group return");hall.ContextMenu.IsOpen=false;
         hall.SetSelection([seats[0].Id,seats[2].Id]);Pump();

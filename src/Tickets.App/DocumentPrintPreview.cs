@@ -12,6 +12,18 @@ namespace Tickets.App;
 /// <summary>Printer settings select the real paper; only confirmation submits the previewed pages.</summary>
 internal static class DocumentPrintPreview
 {
+    internal static void Route(UIElement target,Action print)
+    {
+        // FlowDocumentScrollViewer handles Ctrl+P with its own native print dialog.
+        // Intercept the routed command before that class handler can run.
+        CommandManager.AddPreviewExecutedHandler(target,(_,e)=>{
+            if(e.Command!=ApplicationCommands.Print)return;e.Handled=true;print();
+        });
+        target.PreviewKeyDown+=(_,e)=>{
+            if(e.Key!=Key.P||Keyboard.Modifiers!=ModifierKeys.Control)return;
+            e.Handled=true;print();
+        };
+    }
     internal static void Show(Window owner,string title,Func<double,FlowDocument> create,bool landscape=false,bool numbered=false)
     {
         var margin=new TextBox{Text="8,5",Width=60,Margin=new Thickness(6)};

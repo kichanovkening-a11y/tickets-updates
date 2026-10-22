@@ -123,6 +123,7 @@ public sealed partial class Store
         {
             using var query=Command(c,"""
                 SELECT count(*) FROM event e JOIN seat s ON s.venue_id=e.venue_id WHERE e.id=$e AND s.id=$s
+                AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))
                 AND ($free=0 OR NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL))
                 ""","$e",eventId,"$s",id,"$free",requireFree?1:0);query.Transaction=tx;
             if(Convert.ToInt64(query.ExecuteScalar())!=1)throw new TicketException("Одно из мест выдано или не относится к показу. Изменения отменены целиком.");

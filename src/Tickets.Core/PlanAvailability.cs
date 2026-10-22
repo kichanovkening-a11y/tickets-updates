@@ -10,7 +10,7 @@ public sealed partial class Store
     }
     public List<long> PlanBlockedSeats(long planId)
     {
-        using var c=Open();using var cmd=Command(c,"SELECT seat_id FROM plan_seat_block WHERE plan_id=$p ORDER BY seat_id","$p",planId);
+        using var c=Open();using var cmd=Command(c,"SELECT b.seat_id FROM plan_seat_block b JOIN seat s ON s.id=b.seat_id WHERE plan_id=$p AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY b.seat_id","$p",planId);
         using var read=cmd.ExecuteReader();var result=new List<long>();while(read.Read())result.Add(read.GetInt64(0));return result;
     }
     public List<long> CopyPlanBlockedSeats(long planId,long targetVenueId)

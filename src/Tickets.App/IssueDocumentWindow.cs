@@ -17,7 +17,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
     public IssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,IssueDocumentKinds.Name(kind)+$" · выдача № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
-        var root=new Grid{Margin=new Thickness(10)};Content=root;
+        var root=new Grid{Margin=new Thickness(10)};Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         var info=Store.GetIssueDocument(eventId,issueId,kind);original=info.Template;template.Text=original;

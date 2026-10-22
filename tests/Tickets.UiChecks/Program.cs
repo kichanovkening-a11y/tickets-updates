@@ -93,9 +93,10 @@ internal static class Program
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
             var hallFields=Logical(hallEditor).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
             hallFields[0].Text="UI row hall";var rowCount=Field(hallEditor,"Количество рядов (1–200)");rowCount.Text="20";Field(hallEditor,"Ряды: начало или А, 1").Text="А";
-            var rowsTab=Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Ряды"));rowsTab.IsSelected=true;Pump();
+            Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Сектор")).IsSelected=true;
+            var rowsTab=Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Ряды и схема"));rowsTab.IsSelected=true;Pump();
             Check(rowCount.IsVisible&&Field(hallEditor,"Мест в каждом ряду (1–300)").IsVisible,"row and seat counts are visible above the editable row table");
-            Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Схема")).IsSelected=true;Pump();
+            Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Ряды и схема")).IsSelected=true;Pump();
             var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
             Check(!rowGrid.IsReadOnly,"per-row seats and aisles are editable");
             Check(rowGrid.Columns.OfType<DataGridTextColumn>().Any(column=>Equals(column.Header,"Промежуток после ряда")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="RowGapAfter"),"per-row extra aisle spacing is editable in the hall row table");
@@ -293,6 +294,9 @@ internal static class Program
             Isolated("journal016",Journal016Checks.Run);
             Isolated("blank017",Blank017Checks.Run);
             Isolated("docs017",Docs017Checks.Run);
+            Isolated("docs021",Docs021UiChecks.Run);
+            Isolated("pricing021",Pricing021UiChecks.Run);
+            Isolated("hall021",HallEditor021Checks.Run);
             Isolated("documents018",RecipientDocuments018Checks.Run);
             Isolated("journal017",Journal017Checks.Run);
             Isolated("issuance018",s=>{
@@ -341,7 +345,7 @@ internal static class Program
             typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});hall.SetSelection(new[]{seatIds[3]});
             Check(hall.Selected.Count==0&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot be selected issued or printed");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[3],new Point(20,20)});Pump();
-            Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Вернуть в продажу")),"withdrawn place context exposes restore action");hall.ContextMenu.IsOpen=false;
+            Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Разблокировать")),"withdrawn place context exposes restore action");hall.ContextMenu.IsOpen=false;
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},false);typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});
             var sample=store.TicketReprint(eventId,new[]{seatIds[0]});
             var many=sample with{Tickets=Enumerable.Range(0,25).Select(i=>sample.Tickets[0] with{Number=i+1,Seat=(i+1).ToString()}).ToArray()};

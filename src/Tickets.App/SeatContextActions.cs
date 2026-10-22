@@ -35,10 +35,12 @@ public partial class MainWindow
             if(occupiedGroup)
                 foreach(var issueId in Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().Where(id=>id!=seat.IssueId))
                     Action($"Открыть исходную накладную № {issueId}",true,()=>Run(()=>OpenInvoice(issueId)));
-            Action("Вернуть в продажу",seat.IsBlocked&&!currentArchived,()=>Run(()=>{
-                if(MessageBox.Show(this,$"Вернуть в продажу: {seat.Label}?","Возврат в продажу",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
-                store.SetSeatsBlocked(current.Id,[seat.Id],false);LoadEvent(false);
-            }));
+            if(seat.IsBlocked&&!currentArchived)
+            {
+                if(!Hall.Selected.Contains(seat.Id))Hall.SetSelection([seat.Id]);
+                Action("Изменить цену",true,()=>TogglePriceClick(this,new RoutedEventArgs()));
+                Action("Разблокировать",true,()=>SaleStateClick(this,new RoutedEventArgs()));
+            }
             Hall.ContextMenu=menu;menu.IsOpen=true;return;
         }
         if(!Hall.Selected.Contains(seatId))Hall.SetSelection(new[]{seatId});
@@ -49,7 +51,7 @@ public partial class MainWindow
         Action("Дополнить накладную",ExtendInvoiceButton.IsEnabled,()=>ExtendInvoiceClick(this,new RoutedEventArgs()));
         if(menu.Items.Count>0)menu.Items.Add(new Separator());
         Action("Изменить цену",ApplyPriceButton.IsEnabled,()=>TogglePriceClick(this,new RoutedEventArgs()));
-        Action(SaleStateButton.Content?.ToString()??"Снять с продажи",SaleStateButton.IsEnabled,()=>SaleStateClick(this,new RoutedEventArgs()));
+        Action(SaleStateButton.Content?.ToString()??"Заблокировать",SaleStateButton.IsEnabled,()=>SaleStateClick(this,new RoutedEventArgs()));
         Action("Вернуть выбранные",ReturnButton.IsEnabled,()=>ReturnClick(this,new RoutedEventArgs()));
         var invoiceIds=Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().ToArray();
         if(invoiceIds.Length==1)Action("Открыть накладную",true,()=>Run(()=>OpenInvoice(invoiceIds[0])));

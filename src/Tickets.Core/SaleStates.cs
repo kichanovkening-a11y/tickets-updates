@@ -23,9 +23,9 @@ public sealed partial class Store
         {
             using var check=Command(c,"""
                 SELECT count(*) FROM seat s JOIN event e ON e.venue_id=s.venue_id
-                WHERE e.id=$e AND s.id=$s AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL)
+                WHERE e.id=$e AND s.id=$s AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=e.id AND t.seat_id=s.id AND t.returned_at IS NULL)
                 ""","$e",eventId,"$s",id);check.Transaction=tx;
-            if(Convert.ToInt64(check.ExecuteScalar())!=1)throw new TicketException("Снять с продажи или вернуть в продажу можно только невыданные места этого показа. Изменения отменены целиком.");
+            if(Convert.ToInt64(check.ExecuteScalar())!=1)throw new TicketException("Заблокировать или вернуть в продажу можно только невыданные места этого показа. Изменения отменены целиком.");
             using var save=blocked?Command(c,"INSERT OR IGNORE INTO event_seat_block(event_id,seat_id,changed_at) VALUES($e,$s,$time)","$e",eventId,"$s",id,"$time",DateTimeOffset.Now.ToString("O")):
                 Command(c,"DELETE FROM event_seat_block WHERE event_id=$e AND seat_id=$s","$e",eventId,"$s",id);
             save.Transaction=tx;save.ExecuteNonQuery();

@@ -131,7 +131,10 @@ public partial class MainWindow : Window
         var list=new ListBox{ItemsSource=store.Venues(),DisplayMemberPath="Name"};
         var buttons=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,0,12)};DockPanel.SetDock(buttons,Dock.Top);panel.Children.Add(buttons);
         var add=new Button{Content="Создать зал"};add.Click+=(_,_)=>Run(()=>{new HallEditorWindow(store).ShowDialog();list.ItemsSource=store.Venues();});buttons.Children.Add(add);
-        var edit=new Button{Content="Открыть / изменить копию"};edit.Click+=(_,_)=>Run(()=>{if(list.SelectedItem is VenueInfo v){new HallEditorWindow(store,v).ShowDialog();list.ItemsSource=store.Venues();}});buttons.Children.Add(edit);
+        list.PreviewMouseLeftButtonUp+=(_,e)=>{
+            if(e.OriginalSource is not DependencyObject source||ItemsControl.ContainerFromElement(list,source) is not ListBoxItem {Content:VenueInfo venue})return;
+            e.Handled=true;Run(()=>{new HallEditorWindow(store,venue).ShowDialog();list.ItemsSource=store.Venues();});
+        };
         var delete=new MenuItem{Header="Удалить"};delete.Click+=(_,_)=>Run(()=>{
             if(list.SelectedItem is not VenueInfo selected)throw new TicketException("Выберите площадку.");
             if(MessageBox.Show(window.DialogOwnerForHost,$"Удалить «{selected.Name}» из справочника? Выдачи и документы сохранятся в истории.","Удаление площадки",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
@@ -153,7 +156,7 @@ public partial class MainWindow : Window
         PriceBox.Clear();
         if(fit){Hall.FocusPrice=null;ClearIssuanceRecipient();}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
-        LoadJournal();RefreshRecipients();
+        LoadJournal();RefreshRecipients();RefreshSenders();
         RenderHallLegend(seats);
         HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
         UpdateNumber();
@@ -185,7 +188,7 @@ public partial class MainWindow : Window
         PrintTicketsButton.IsEnabled=IssueButton.IsEnabled&&selected.All(SeatSelection.CanSelect);
         PrintTicketsButton.Content="Печать билетов";
         var allBlocked=selected.Count>0&&selected.All(x=>x.IsBlocked);
-        SaleStateButton.Content=allBlocked?"Вернуть в продажу":"Удалить из продажи";
+        SaleStateButton.Content=allBlocked?"Разблокировать":"Заблокировать";
         SaleStateButton.IsEnabled=!archived&&selected.Count>0&&issued==0&&(allBlocked||selected.All(x=>!x.IsBlocked));
         ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
         UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
@@ -244,10 +247,15 @@ public partial class MainWindow : Window
     private void SaleStateClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(current is null)return;var selected=Hall.SelectedSeats;if(selected.Count==0)return;
         var blocked=!selected.All(x=>x.IsBlocked);
-        var action=blocked?"Удалить из продажи":"Вернуть в продажу";
+        var action=blocked?"Заблокировать":"Разблокировать";
         if(MessageBox.Show(this,$"{action} выбранные места ({selected.Count})?",action,MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
-        store.SetSeatsBlocked(current.Id,selected.Select(x=>x.Id).ToArray(),blocked);LoadEvent(false);
-        StatusText.Text=blocked?$"Снято с продажи: {selected.Count} мест.":$"Возвращено в продажу: {selected.Count} мест.";
+        if(!blocked&&selected.Any(s=>!s.Amount.HasValue))
+        {
+            var price=new SeatPriceWindow(store,0,selected.Count);if(price.ShowDialog()!=true)return;
+            priceUndo.Push(store.SetEventPrices(current.Id,selected.Select(s=>s.Id).ToArray(),price.Amount,price.Color));
+        }
+        store.SetSeatsBlocked(current.Id,selected.Select(x=>x.Id).ToArray(),blocked);LoadEvent(false);Hall.Clear();
+        StatusText.Text=blocked?$"Заблокировано: {selected.Count} мест.":$"Разблокировано: {selected.Count} мест.";
     });
     private void PrintTicketsClick(object sender,RoutedEventArgs e)=>Run(()=>{
         if(current is null)return;var selected=Hall.SelectedSeats;if(selected.Count==0)throw new TicketException("Выберите места для печати.");

@@ -11,12 +11,8 @@ internal static class Senders020Checks
         var previous=senderBox.Text;
         const string removed="UI020 удалённый отправитель";
         store.SaveSender(removed);senderBox.Text=removed;store.RemoveSenderChoice(removed);
-        try
-        {
-            typeof(MainWindow).GetMethod("PersistSelectedSender",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);
-            throw new Exception("stale issuance input restored a removed sender");
-        }
-        catch(TargetInvocationException error) when(error.InnerException is TicketException){}
+        typeof(MainWindow).GetMethod("PersistSelectedSender",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);
+        if(senderBox.Text==removed||!store.Senders().Contains(senderBox.Text))throw new Exception("stale deleted sender blocks using an active sender");
         if(new Store(store.Path).Senders().Contains(removed))throw new Exception("ordinary issuance restored a removed sender");
         typeof(MainWindow).GetMethod("SenderDropDownOpened",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,[senderBox,EventArgs.Empty]);
         if(senderBox.Items.Cast<string>().Contains(removed)||senderBox.Text==removed)throw new Exception("reopened sender dropdown still offers a removed sender");

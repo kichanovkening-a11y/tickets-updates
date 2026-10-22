@@ -56,6 +56,9 @@ internal static class Senders020Checks
             var before=reopened.History(show.Id).Count;
             Reject(()=>reopened.Issue(show.Id,[reopened.Seats(show.Id).First(s=>s.Available).Id],"Получатель020 без отправителя","Б020",1));
             Require(reopened.History(show.Id).Count==before,"rejected issuance changed ticket history");
+            var created=reopened.SaveSender("ИП Новый021");reopened.SaveDocumentSettings(created,reopened.DocumentsDirectory);
+            var id=reopened.Issue(show.Id,[reopened.Seats(show.Id).First(s=>s.Available).Id],"Получатель021 новый","Б021",1);
+            Require(new Store(store.Path).Invoice(show.Id,id).Sender==created,"creating a sender after removing all choices cannot issue tickets");
         });
     }
     private static void Require(bool value,string message){if(!value)throw new Exception(message);}

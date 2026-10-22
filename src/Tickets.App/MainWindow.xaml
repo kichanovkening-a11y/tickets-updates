@@ -121,7 +121,7 @@
               </Expander>
               <UniformGrid x:Name="SelectionActions" Columns="3">
                 <Button Style="{StaticResource SeatActionStyle}" x:Name="ReserveButton" Content="Забронировать" Click="ReserveClick" IsEnabled="False"/>
-                <Button Style="{StaticResource SeatActionStyle}" x:Name="SaleStateButton" Content="Удалить из продажи" Click="SaleStateClick" IsEnabled="False"/>
+                <Button Style="{StaticResource SeatActionStyle}" x:Name="SaleStateButton" Content="Заблокировать" Click="SaleStateClick" IsEnabled="False"/>
                 <Button Style="{StaticResource SeatActionStyle}" x:Name="ReturnButton" Content="Вернуть выбранные" Click="ReturnClick" IsEnabled="False"/>
               </UniformGrid>
               <TextBlock x:Name="SelectionHint" Visibility="Collapsed" Foreground="#64748B" FontSize="12" TextWrapping="Wrap" MaxHeight="32" Margin="0,3,0,0"/>

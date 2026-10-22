@@ -22,7 +22,7 @@ internal sealed class RecipientEditorWindow:EditorWindow
             if(editExisting&&name.Text.Trim()!=initial)Store.RenameRecipient(initial,name.Text);
             Store.SaveOrganizationDetails(name.Text,false,details);CreatedName=Store.SaveRecipient(name.Text);Finish(true);
         }));save.IsDefault=true;
-        var cancel=Button(actions,"Отмена",()=>Finish(false));cancel.Margin=new Thickness(10,10,0,0);cancel.IsCancel=true;
+        var cancel=Button(actions,"Отмена",()=>Finish(false));cancel.Margin=new Thickness(10,0,0,0);cancel.IsCancel=true;
         OnShown(()=>{name.Focus();name.SelectAll();});
     }
 }

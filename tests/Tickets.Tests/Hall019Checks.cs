@@ -14,7 +14,7 @@ internal static class Hall019Checks
             Require(r.Id!=25&&e.Id!=14,"new halls have independent place identities");
             Require(s.VenueSeats(25).Count==1010&&s.VenueSeats(14).Count==1310,"original seats remain archived intact");
             Require(s.VenueSeats(22).Count==989,"unrelated old Russian-song stage remains unchanged");
-            Require(s.VenueSeats(r.Id).Count==1122&&s.VenueSeats(e.Id).Count==1002,"replacement seat totals");
+            Require(s.VenueSeats(r.Id).Count==1014&&s.VenueSeats(e.Id).Count==1002,"replacement seat totals");
             var count=s.Events(true).Count;var reopened=new Store(s.Path);
             Require(reopened.HallReplacements019.Count==0&&reopened.Events(true).Count==count,"reopening never clones halls or shows twice");
             using var c=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=s.Path}.ToString());c.Open();

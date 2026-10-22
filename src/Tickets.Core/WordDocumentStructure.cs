@@ -30,6 +30,29 @@ internal static class WordDocumentStructure
         foreach(var alignment in document.Descendants().Where(e=>e.Name==W+"lvlJc"||(e.Name==W+"jc"&&e.Parent?.Name==W+"tblPr")))
         {var value=(string?)alignment.Attribute(W+"val");if(value is "start" or "end")alignment.SetAttributeValue(W+"val",value=="start"?"left":"right");}
         foreach(var cell in document.Descendants(W+"tc"))if(cell.Elements().LastOrDefault()?.Name!=W+"p")cell.Add(new XElement(W+"p"));
+        // A continuation must match the previous row's exact grid interval.
+        // XML schema validation cannot detect orphaned or differently spanned merges.
+        foreach(var table in document.Descendants(W+"tbl"))
+        {
+            var previous=new Dictionary<int,int>();
+            foreach(var row in table.Elements(W+"tr"))
+            {
+                var current=new Dictionary<int,int>();
+                var column=(int?)row.Element(W+"trPr")?.Element(W+"gridBefore")?.Attribute(W+"val")??0;
+                foreach(var cell in row.Elements(W+"tc"))
+                {
+                    var span=(int?)cell.Element(W+"tcPr")?.Element(W+"gridSpan")?.Attribute(W+"val")??1;
+                    var merge=cell.Element(W+"tcPr")?.Element(W+"vMerge");
+                    if(merge is not null)
+                    {
+                        if((string?)merge.Attribute(W+"val")!="restart"&&(!previous.TryGetValue(column,out var prior)||prior!=span))merge.SetAttributeValue(W+"val","restart");
+                        current[column]=span;
+                    }
+                    column+=span;
+                }
+                previous=current;
+            }
+        }
     }
     public static void Validate(XDocument document)
     {

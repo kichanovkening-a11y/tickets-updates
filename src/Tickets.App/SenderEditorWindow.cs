@@ -20,7 +20,7 @@ internal sealed class SenderEditorWindow:EditorWindow
             if(editExisting&&!Store.Senders().Any(sender=>CatalogText.Key(sender)==CatalogText.Key(name.Text)))throw new TicketException("Отправитель удалён из списка. Создайте его заново, чтобы вернуть в список.");
             Store.SaveOrganizationDetails(name.Text,true,fields.Read(name.Text));CreatedName=Store.SaveSender(name.Text);Finish(true);
         }));save.IsDefault=true;
-        var cancel=Button(actions,"Отмена",()=>Finish(false));cancel.Margin=new Thickness(10,10,0,0);cancel.IsCancel=true;
+        var cancel=Button(actions,"Отмена",()=>Finish(false));cancel.Margin=new Thickness(10,0,0,0);cancel.IsCancel=true;
         OnShown(()=>{name.Focus();name.SelectAll();});
     }
 }

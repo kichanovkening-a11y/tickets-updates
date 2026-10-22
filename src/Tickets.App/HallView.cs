@@ -41,7 +41,7 @@ public sealed class HallView : FrameworkElement
     public HashSet<long> Selected { get; }=[];
     public bool AllowUnavailableSelection{get;set;}
     public bool AllowOccupiedSelection{get;set;}
-    private bool CanSelect(SeatInfo seat)=>AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&seat.TicketId.HasValue);
+    private bool CanSelect(SeatInfo seat)=>AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked));
     private void ExcludeOccupiedFromMixedSelection()
     {if(!AllowUnavailableSelection&&SelectedSeats.Any(SeatSelection.CanSelect))Selected.ExceptWith(seats.Where(s=>!SeatSelection.CanSelect(s)).Select(s=>s.Id));}
     public event Action? SelectionChanged;
@@ -284,18 +284,12 @@ public sealed class HallView : FrameworkElement
     }
     private (SeatInfo? Context,SeatInfo? Rejected) ClickSeat(SeatInfo seat)
     {
-        // A click inside an occupied selection opens its actions. Removal remains
-        // available through the existing removal drag gesture.
-        var openSelected=AllowOccupiedSelection&&seat.TicketId.HasValue&&Selected.Contains(seat.Id)&&SelectedSeats.All(s=>s.TicketId.HasValue);
-        if(!openSelected)
-        {
-            if(CanSelect(seat))SeatSelection.Toggle(Selected,seat.Id);else Selected.Remove(seat.Id);
-        }
+        // Left click always toggles a place; actions belong exclusively to right click.
+        if(CanSelect(seat))SeatSelection.Toggle(Selected,seat.Id);else Selected.Remove(seat.Id);
         var mixed=SelectedSeats.Any(SeatSelection.CanSelect)&&SelectedSeats.Any(s=>!SeatSelection.CanSelect(s));
         var rejected=mixed?SelectedSeats.First(s=>!SeatSelection.CanSelect(s)):!CanSelect(seat)?seat:null;
         ExcludeOccupiedFromMixedSelection();
-        var context=!mixed&&AllowOccupiedSelection&&seat.TicketId.HasValue&&Selected.Contains(seat.Id)?seat:null;
-        return (context,rejected);
+        return (null,rejected);
     }
 
     private void SelectRange(Point end)

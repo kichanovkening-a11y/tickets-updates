@@ -30,7 +30,27 @@ internal static class Journal016Checks
             var sender=grid.Columns.OfType<DataGridTextColumn>().Single(c=>Equals(c.Header,"От"));
             string Sender(long id){var row=grid.Items.Cast<object>().Single(item=>(long)item.GetType().GetProperty("Id")!.GetValue(item)! ==id);return (string)row.GetType().GetProperty("SenderKind")!.GetValue(row)!;}
             Check(Sender(first)=="ООО"&&Sender(second)=="ИП","Journal shows each historical sender's legal form only");
-            var recipient=grid.Columns.Single(c=>Equals(c.Header,"Получатель"));recipient.Width=new DataGridLength(237);
+            var recipient=grid.Columns.Single(c=>Equals(c.Header,"Получатель"));
+            // Exercise the header's resize event path while the column is still Star sized.
+            var header=Visual(grid).OfType<System.Windows.Controls.Primitives.DataGridColumnHeader>().First(h=>h.Column==recipient);
+            header.ApplyTemplate();
+            var grip=header.Template.FindName("PART_RightHeaderGripper",header) as System.Windows.Controls.Primitives.Thumb??throw new Exception("Missing column resize grip");
+            Check(grip is not null,"Journal header exposes the resize grip");
+            var originalWidth=recipient.ActualWidth;
+            grip.RaiseEvent(new System.Windows.Controls.Primitives.DragStartedEventArgs(0,0){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragStartedEvent});
+            grip.RaiseEvent(new System.Windows.Controls.Primitives.DragDeltaEventArgs(30,0){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragDeltaEvent});
+            grip.RaiseEvent(new System.Windows.Controls.Primitives.DragCompletedEventArgs(30,0,false){RoutedEvent=System.Windows.Controls.Primitives.Thumb.DragCompletedEvent});Pump();
+            Check(Math.Abs(recipient.ActualWidth-originalWidth)>1,"Dragging header boundary changes rendered width");
+            var draggedWidth=recipient.ActualWidth;
+            typeof(Tickets.App.MainWindow).GetMethod("LoadJournal",Private)!.Invoke(main,null);Pump();
+            var dragPath=Path.Combine(Path.GetDirectoryName(store.Path)!,"journal-columns-by-event.json");
+            Check(File.Exists(dragPath),"Header drag persists actual pixel width immediately");
+            using(var saved=System.Text.Json.JsonDocument.Parse(File.ReadAllText(dragPath)))
+            {
+                var entry=saved.RootElement.GetProperty(show.Id.ToString()).EnumerateArray().Single(x=>x.GetProperty("Header").GetString()=="Получатель");
+                Check(Math.Abs(entry.GetProperty("Width").GetDouble()-draggedWidth)<1,"Saved column width equals actual dragged width, not star weight");
+            }
+            recipient.Width=new DataGridLength(237);
             var before=grid.TransformToAncestor(main).Transform(new Point());
             var selection=(HashSet<long>)typeof(Tickets.App.MainWindow).GetField("journalSelection",Private)!.GetValue(main)!;
             selection.Add(first);selection.Add(second);typeof(Tickets.App.MainWindow).GetMethod("UpdateJournalSelection",Private)!.Invoke(main,null);Pump();
@@ -76,6 +96,8 @@ internal static class Journal016Checks
         }
         finally{main.Close();}
     }
+    private static IEnumerable<DependencyObject> Visual(DependencyObject parent)
+    {yield return parent;for(var i=0;i<System.Windows.Media.VisualTreeHelper.GetChildrenCount(parent);i++)foreach(var child in Visual(System.Windows.Media.VisualTreeHelper.GetChild(parent,i)))yield return child;}
     private static IEnumerable<DependencyObject> Ancestors(DependencyObject child){for(var node=LogicalTreeHelper.GetParent(child);node is not null;node=LogicalTreeHelper.GetParent(node))yield return node;}
     private static IEnumerable<DependencyObject> Logical(DependencyObject parent){yield return parent;foreach(var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())foreach(var descendant in Logical(child))yield return descendant;}
     private static void Pump(){var frame=new DispatcherFrame();Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>frame.Continue=false));Dispatcher.PushFrame(frame);}

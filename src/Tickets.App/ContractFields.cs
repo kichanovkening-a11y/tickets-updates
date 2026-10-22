@@ -13,14 +13,13 @@ internal static class ContractFields
         panel.Children.Add(new TextBlock{Text="Дата договора",VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,6,0)});
         var date=new DatePicker{SelectedDate=store.ContractDate(eventId,issueId),Width=140,Margin=new Thickness(0,0,12,0)};panel.Children.Add(date);
         date.SelectedDateChanged+=(_,_)=>{if(date.SelectedDate is DateTime value){store.SetContractDate(eventId,issueId,value);changed();}};
-        var representative=store.ContractRepresentative(eventId,issueId);
-        var signatory=Text("Представитель получателя",representative.Signatory,220);
-        var position=Text("Должность",representative.Position,180);
-        var save=new Button{Content="Применить к комплекту",Padding=new Thickness(8,3,8,3),MinHeight=30};panel.Children.Add(save);
-        save.Click+=(_,_)=>{
-            try{store.SetContractNumber(eventId,issueId,number.Text);if(date.SelectedDate is DateTime value)store.SetContractDate(eventId,issueId,value);store.SetContractRepresentative(eventId,issueId,signatory.Text,position.Text);changed();}
+        number.MaxLength=100;
+        number.TextChanged+=(_,_)=>{
+            if(string.IsNullOrWhiteSpace(number.Text)||number.Text.Any(char.IsControl))return;
+            try{store.SetContractNumber(eventId,issueId,number.Text);changed();}
             catch(Exception ex){MessageBox.Show(Window.GetWindow(panel),ex.Message,"Поля договора",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
+        number.LostKeyboardFocus+=(_,_)=>{if(string.IsNullOrWhiteSpace(number.Text))number.Text=store.ContractNumber(eventId,issueId);};
         return panel;
     }
 }

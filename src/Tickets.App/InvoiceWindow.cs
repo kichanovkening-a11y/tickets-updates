@@ -18,7 +18,7 @@ internal sealed class InvoiceWindow : EditorWindow
     public InvoiceWindow(Store store,long eventId,long issueId,bool print=false):base(store,$"Накладная № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;
-        var root=new Grid{Margin=new Thickness(10)};Content=root;
+        var root=new Grid{Margin=new Thickness(10)};Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(documentNavigation=IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{

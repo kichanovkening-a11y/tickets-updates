@@ -25,7 +25,7 @@ internal sealed class SpecificationWindow : EditorWindow
         this.fixedRecipient=fixedRecipient;
         var root=new Grid{Margin=new Thickness(20)};
         root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(280)});
-        root.ColumnDefinitions.Add(new ColumnDefinition());Content=root;
+        root.ColumnDefinitions.Add(new ColumnDefinition());Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
         var sidebar=new DockPanel{Margin=new Thickness(0,0,20,0)};root.Children.Add(sidebar);
         if(fixedRecipient){sidebar.Visibility=Visibility.Collapsed;root.ColumnDefinitions[0].Width=new GridLength(0);}
         var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Top);sidebar.Children.Add(tools);
@@ -70,7 +70,7 @@ internal sealed class SpecificationWindow : EditorWindow
     internal SpecificationWindow(Store store,long eventId,long issueId):base(store,$"Спецификация · выдача № {issueId}",1030,850)
     {
         fixedRecipient=true;sender=new TextBox();title=new TextBox();body=new TextBox();
-        var root=new Grid{Margin=new Thickness(10)};root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());Content=root;
+        var root=new Grid{Margin=new Thickness(10)};root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
         var header=new StackPanel();root.Children.Add(header);
         var reader=new FlowDocumentScrollViewer{IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetRow(reader,1);root.Children.Add(reader);
         FlowDocument Preview(double width=794)

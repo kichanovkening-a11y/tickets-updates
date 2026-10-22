@@ -43,7 +43,9 @@ internal class EditorWindow : Window
     }
     protected static Button Button(Panel panel,string label,Action action)
     {
-        var b=new Button{Content=label,Margin=new Thickness(0,10,0,0),HorizontalContentAlignment=HorizontalAlignment.Center};
+        var horizontal=panel is WrapPanel || panel is StackPanel {Orientation:Orientation.Horizontal};
+        var b=new Button{Content=label,Margin=horizontal?new Thickness(0,0,6,0):new Thickness(0,10,0,0),HorizontalContentAlignment=HorizontalAlignment.Center,VerticalContentAlignment=VerticalAlignment.Center};
+        if(horizontal){b.Width=double.NaN;b.ContentTemplate=null;b.Padding=new Thickness(10,2,10,2);b.VerticalAlignment=VerticalAlignment.Center;}
         b.Click+=(_,_)=>action(); panel.Children.Add(b); return b;
     }
     protected static ComboBox Combo(Panel panel,string label,System.Collections.IEnumerable items,string display)
@@ -64,7 +66,7 @@ internal sealed class PriceEditorWindow : EditorWindow
     private List<SeatInfo> seats=[];
     private readonly Dictionary<long,PriceValue> prices=[];
     private readonly HashSet<long> withdrawn=[];
-    private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,10),FontSize=15};
+    private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.NoWrap,Margin=new Thickness(0,4,0,10),FontSize=15};
     private readonly Grid priceSummary=new(){Margin=new Thickness(0,0,0,6),HorizontalAlignment=HorizontalAlignment.Left};
     private sealed record SourcePlan(long Id,PriceValue[] Prices,long[] Withdrawn);
     private sealed record PriceState(Dictionary<long,PriceValue> Prices,long[] Withdrawn,long[] Selected,string Name,SourcePlan? Source);
@@ -101,7 +103,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             var values=store.CopyPlanPrices(choice.Plan.Id,v.Id);var blocks=store.CopyPlanBlockedSeats(choice.Plan.Id,v.Id);
             Remember();prices.Clear();foreach(var item in values)prices[item.SeatId]=item;withdrawn.Clear();withdrawn.UnionWith(blocks);name.Text="";preview.FocusPrice=null;
             sourcePlan=new(choice.Plan.Id,values.ToArray(),blocks.ToArray());
-            copied.Text=$"Загружено цен: {values.Count}; снято с продажи: {blocks.Count}. Изменённая расценовка сохранится под новым названием.";Refresh();refreshCategory();
+            copied.Text=$"Загружено цен: {values.Count}; заблокировано: {blocks.Count}. Изменённая расценовка сохранится под новым названием.";Refresh();refreshCategory();
         }
         Button(form,"Загрузить выбранную расценовку",()=>Try(LoadSelectedPlan));form.Children.Add(copied);
         var category=new Grid();category.ColumnDefinitions.Add(new ColumnDefinition());category.ColumnDefinitions.Add(new ColumnDefinition());form.Children.Add(category);
@@ -136,7 +138,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             var input=Field(body,label,initial);var error=new TextBlock{Foreground=Brushes.Firebrick,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,0,0)};body.Children.Add(error);
             var buttons=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Right};body.Children.Add(buttons);
             var apply=Button(buttons,"Применить",()=>{var message=validate(input.Text);if(message is not null){error.Text=message;return;}dialog.DialogResult=true;});apply.IsDefault=true;apply.Width=140;apply.Padding=new Thickness(4,2,4,2);apply.ContentTemplate=null;
-            var cancel=Button(buttons,"Отмена",()=>dialog.DialogResult=false);cancel.IsCancel=true;cancel.Width=140;cancel.Padding=new Thickness(4,2,4,2);cancel.ContentTemplate=null;cancel.Margin=new Thickness(8,10,0,0);
+            var cancel=Button(buttons,"Отмена",()=>dialog.DialogResult=false);cancel.IsCancel=true;cancel.Width=140;cancel.Padding=new Thickness(4,2,4,2);cancel.ContentTemplate=null;cancel.Margin=new Thickness(8,0,0,0);
             void Validate(){var message=validate(input.Text);apply.IsEnabled=message is null;error.Text=message??"";}input.TextChanged+=(_,_)=>Validate();Validate();
             dialog.Loaded+=(_,_)=>{input.Focus();input.SelectAll();};
             return dialog.ShowDialog()==true?input.Text.Trim():null;
@@ -162,7 +164,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             if(preview.Selected.Count==0)throw new TicketException("Выберите места на схеме.");Remember();
             foreach(var id in preview.Selected){prices.Remove(id);withdrawn.Add(id);}Refresh();preview.Clear();SelectionSummary();
         });
-        var assignSelected=Button(form,"Назначить выбранным местам",()=>Assign(false));Button(form,"Назначить всему залу",()=>Assign(true));Button(form,"Убрать из продажи",Withdraw);
+        var assignSelected=Button(form,"Назначить выбранным местам",()=>Assign(false));Button(form,"Назначить всему залу",()=>Assign(true));Button(form,"Заблокировать",Withdraw);
         long? lastContextSeat=null;
         preview.SeatContextRequested+=(id,point)=>{
             if(lastContextSeat==id&&preview.Selected.Contains(id))
@@ -173,7 +175,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             lastContextSeat=id;
             var menu=new ContextMenu{PlacementTarget=preview,Placement=System.Windows.Controls.Primitives.PlacementMode.RelativePoint,HorizontalOffset=point.X,VerticalOffset=point.Y};
             var change=new MenuItem{Header="Сменить цену"};change.Click+=(_,_)=>ChangeSelectedPrice();menu.Items.Add(change);
-            var remove=new MenuItem{Header="Убрать из продажи"};remove.Click+=(_,_)=>Withdraw();menu.Items.Add(remove);menu.IsOpen=true;
+            var remove=new MenuItem{Header="Заблокировать"};remove.Click+=(_,_)=>Withdraw();menu.Items.Add(remove);menu.IsOpen=true;
         };
         // Hosted input can arrive already handled by an ancestor. Still invoke the
         // same validated action as the button, before TextBox/default-button processing.
@@ -187,17 +189,22 @@ internal sealed class PriceEditorWindow : EditorWindow
         void Save()
         {
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
+            var missing=seats.Where(s=>!withdrawn.Contains(s.Id)&&!prices.ContainsKey(s.Id)).ToArray();
+            if(missing.Length>0)throw new TicketException("Назначьте цену или заблокируйте следующие места:\n"+string.Join("\n",missing.Select(s=>s.Label)));
             if(sourcePlan is not null)
             {
-                if(Pricing012Presentation.SamePrices(sourcePlan.Prices,sourcePlan.Withdrawn,prices.Values,withdrawn))
+                if(string.IsNullOrWhiteSpace(name.Text)&&Pricing012Presentation.SamePrices(sourcePlan.Prices,sourcePlan.Withdrawn,prices.Values,withdrawn))
                 {
                     foreach(var category in prices.Values.GroupBy(p=>p.Amount))store.SetPriceColor(category.Key,category.First().Color);
                     CreatedId=sourcePlan.Id;Finish(true);return;
                 }
+                if(string.IsNullOrWhiteSpace(name.Text))
+                {
                 var existingNames=store.Plans(v.Id).Select(p=>CatalogText.Key(p.Name)).ToHashSet();
                 var entered=Prompt("Сохранить новую расценовку","Новое уникальное название","",text=>
                     string.IsNullOrWhiteSpace(text)?"Введите название расценовки.":existingNames.Contains(CatalogText.Key(text))?"Такое название уже есть. Введите новое название.":null);
                 if(entered is null)return;name.Text=entered;
+                }
             }
             CreatedId=store.SavePlan(v.Id,name.Text,prices.Values.ToArray(),withdrawn.ToArray());Finish(true);
         }
@@ -228,7 +235,7 @@ internal sealed class PriceEditorWindow : EditorWindow
     {
         var sellable=seats.Where(s=>!withdrawn.Contains(s.Id)).ToList();
         var assigned=sellable.Where(s=>prices.ContainsKey(s.Id)).Select(s=>prices[s.Id]).ToArray();
-        hallTotals.Text=$"Всего мест: {seats.Count} · В продаже: {sellable.Count} · Снято: {withdrawn.Count} · Без цены: {sellable.Count(s=>!prices.ContainsKey(s.Id))}\nОбщая сумма: {assigned.Sum(p=>(decimal)p.Amount):N0} ₽";
+        hallTotals.Text=$"Всего мест: {seats.Count} · Общая сумма: {assigned.Sum(p=>(decimal)p.Amount):N0} ₽ · Заблокировано: {withdrawn.Count}";
         priceSummary.Children.Clear();priceSummary.RowDefinitions.Clear();priceSummary.ColumnDefinitions.Clear();
         var summaries=Pricing012Presentation.Summaries(assigned);
         foreach(var item in summaries)

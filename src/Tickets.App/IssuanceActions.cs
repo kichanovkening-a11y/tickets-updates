@@ -9,7 +9,7 @@ public partial class MainWindow
     {
         var value=selected??SenderBox.Text;
         var senders=store.Senders();SenderBox.ItemsSource=senders;SenderBox.SelectedItem=null;
-        var preferred=string.IsNullOrWhiteSpace(value)?store.Sender:value;
+        var preferred=string.IsNullOrWhiteSpace(value)||!senders.Contains(value)?store.Sender:value;
         SenderBox.Text=senders.Contains(preferred)?preferred:"";
     }
     private void SenderDropDownOpened(object sender,EventArgs e)=>RefreshSenders();
@@ -27,6 +27,10 @@ public partial class MainWindow
     }
     private void PersistSelectedSender()
     {
+        // A sender may have been deleted in an invoice window while this field
+        // retained its old text. Refresh before validating a stale catalog choice.
+        if(!store.Senders().Contains(SenderBox.Text))RefreshSenders();
+        if(string.IsNullOrWhiteSpace(SenderBox.Text))throw new TicketException("Выберите отправителя или создайте нового в разделе «Организации и номера».");
         store.SaveDocumentSettings(SenderBox.Text,store.DocumentsDirectory);RefreshSenders(store.Sender);
     }
     private void EditSenderClick(object sender,RoutedEventArgs e)=>Run(()=>{

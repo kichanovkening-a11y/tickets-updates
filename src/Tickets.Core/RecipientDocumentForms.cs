@@ -176,6 +176,13 @@ public static class CustomDocumentForms
                 }
                 row.Remove();
             }
+            // Older built-in specifications omitted the event venue. Upgrade the
+            // canonical event line even in saved issue templates with ordinary edits.
+            if(kind=="specification")foreach(var paragraph in xml.Descendants(W+"p"))
+            {
+                var nodes=paragraph.Descendants(W+"t").ToArray();
+                if(string.Concat(nodes.Select(t=>t.Value))=="Спектакль «{event}» {eventDate}"&&nodes.Length>0)nodes[^1].Value+=". {venue}.";
+            }
             foreach(var p in xml.Descendants(W+"p"))Replace(p,values);
             foreach(var text in xml.Descendants(W+"t").Where(t=>t.Value.Contains('\n')).ToArray())
             {

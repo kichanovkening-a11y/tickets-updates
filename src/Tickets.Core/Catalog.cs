@@ -112,12 +112,12 @@ public sealed partial class Store
     }
     public List<PriceValue> PlanPrices(long planId)
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT p.seat_id,p.amount,coalesce(pc.color,p.color) FROM plan_price p LEFT JOIN price_color pc ON pc.amount=p.amount WHERE p.plan_id=$p","$p",planId);
+        using var c=Open(); using var cmd=Command(c,"SELECT p.seat_id,p.amount,coalesce(pc.color,p.color) FROM plan_price p JOIN seat s ON s.id=p.seat_id LEFT JOIN price_color pc ON pc.amount=p.amount WHERE p.plan_id=$p AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))","$p",planId);
         using var r=cmd.ExecuteReader(); var list=new List<PriceValue>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
     }
     public List<SeatInfo> VenueSeats(long venueId)
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT s.id,z.name,s.row_label,s.number,s.x,s.y FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE s.venue_id=$v ORDER BY z.y,z.x,s.y,s.x","$v",venueId);
+        using var c=Open(); using var cmd=Command(c,"SELECT s.id,z.name,s.row_label,s.number,s.x,s.y FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.y,s.x","$v",venueId);
         using var r=cmd.ExecuteReader(); var list=new List<SeatInfo>();
         while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetDouble(4),r.GetDouble(5),null,"#CBD5E1",null,"","",null)); return list;
     }
@@ -131,10 +131,10 @@ public sealed partial class Store
         if(withdrawnSeatIds is not null)
         {
             if(withdrawn.Count!=withdrawnSeatIds.Count||withdrawn.Any(id=>!ids.Contains(id))||prices.Any(p=>withdrawn.Contains(p.SeatId)))
-                throw new TicketException("Проверьте места, снятые с продажи.");
+                throw new TicketException("Проверьте места, заблокированные.");
             var assigned=prices.Select(p=>p.SeatId).ToHashSet();
             var missing=VenueSeats(venueId).Where(s=>!assigned.Contains(s.Id)&&!withdrawn.Contains(s.Id)).ToArray();
-            if(missing.Length>0)throw new TicketException("Назначьте цену или уберите из продажи следующие места:\n"+string.Join("\n",missing.Select(s=>s.Label)));
+            if(missing.Length>0)throw new TicketException("Назначьте цену или заблокируйте следующие места:\n"+string.Join("\n",missing.Select(s=>s.Label)));
         }
         if(prices.GroupBy(p=>p.Amount).Any(g=>g.Select(p=>NormalizePriceColor(p.Color)).Distinct().Count()!=1))
             throw new TicketException("Для одной цены выберите один общий цвет.");

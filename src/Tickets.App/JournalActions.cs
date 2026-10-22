@@ -4,6 +4,7 @@ using System.Text.RegularExpressions;
 using System.Windows.Threading;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using Tickets.Core;
 
 namespace Tickets.App;
@@ -12,6 +13,7 @@ public partial class MainWindow
 {
     private sealed record JournalColumn(string Header,int Order,double Width,DataGridLengthUnitType Unit,Visibility Visibility);
     private Action<long>? switchJournalLayout;
+    private Action? saveJournalLayout;
     private void InitializeJournalLayout()
     {
         var path=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(store.Path)!,"journal-columns-by-event.json");
@@ -21,7 +23,7 @@ public partial class MainWindow
         foreach(var column in HistoryGrid.Columns.Where(c=>c.Header?.ToString() is "Возвращено" or "Состояние"))column.Visibility=Visibility.Collapsed;
         var selector=HistoryGrid.Columns.OfType<DataGridTemplateColumn>().FirstOrDefault();
         if(selector is not null){selector.DisplayIndex=0;selector.Visibility=Visibility.Visible;selector.Width=new DataGridLength(38);selector.MinWidth=38;selector.CanUserReorder=false;}
-        JournalColumn[] Capture()=>HistoryGrid.Columns.Select(c=>new JournalColumn(c.Header?.ToString()??"",c.DisplayIndex,c.Width.Value,c.Width.UnitType,c.Visibility)).ToArray();
+        JournalColumn[] Capture()=>HistoryGrid.Columns.Select(c=>new JournalColumn(c.Header?.ToString()??"",c.DisplayIndex,c.Width.IsStar&&c.ActualWidth>0?c.ActualWidth:c.Width.Value,c.Width.IsStar&&c.ActualWidth>0?DataGridLengthUnitType.Pixel:c.Width.UnitType,c.Visibility)).ToArray();
         var defaults=Capture();long layoutEventId=0;bool restoring=false;
         var pendingSave=new DispatcherTimer(DispatcherPriority.Background,Dispatcher){Interval=TimeSpan.FromMilliseconds(250)};
         void Save()
@@ -51,6 +53,12 @@ public partial class MainWindow
         var visibility=DependencyPropertyDescriptor.FromProperty(DataGridColumn.VisibilityProperty,typeof(DataGridColumn));
         foreach(var column in HistoryGrid.Columns){width.AddValueChanged(column,Changed);visibility.AddValueChanged(column,Changed);}
         HistoryGrid.ColumnDisplayIndexChanged+=(_,_)=>Changed(null,EventArgs.Empty);
+        // Header dragging can keep a Star Value while changing DisplayValue/ActualWidth.
+        // Save the committed visual widths as pixels before leaving this event/tab.
+        HistoryGrid.AddHandler(Thumb.DragCompletedEvent,new DragCompletedEventHandler((_,_)=>{
+            if(!restoring&&layoutEventId!=0)Dispatcher.BeginInvoke(new Action(Save),DispatcherPriority.Loaded);
+        }),true);
+        saveJournalLayout=Save;
         Closing+=(_,_)=>Save();
         Closed+=(_,_)=>{pendingSave.Stop();foreach(var column in HistoryGrid.Columns){width.RemoveValueChanged(column,Changed);visibility.RemoveValueChanged(column,Changed);}};
     }

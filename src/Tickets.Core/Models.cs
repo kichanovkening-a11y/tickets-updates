@@ -10,7 +10,7 @@ public sealed record SeatInfo(long Id, string Sector, string Row, string Number,
 {
     public bool Available => Amount.HasValue && !TicketId.HasValue && !IsBlocked;
     public string Label => $"{Sector} · ряд {Row}, место {Number}";
-    public string Status => TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Снят с продажи" : Amount.HasValue ? "Свободно" : "Нет цены";
+    public string Status => TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";
 }
 public sealed record SectorInfo(string Name, double X, double Y);
 public sealed record TicketInfo(long Id, long SeatId, string Sector, string Row, string Seat,

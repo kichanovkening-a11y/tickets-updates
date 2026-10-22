@@ -343,7 +343,7 @@ internal static class Program
             extensionHall.SetSelection(new[]{seatIds[0],seatIds[3]});Check(extendButton.IsEnabled&&extensionHall.Selected.SetEquals(new[]{seatIds[3]}),"invoice extension filters occupied place and retains eligible free place");extension.Close();
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},true);
             typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});hall.SetSelection(new[]{seatIds[3]});
-            Check(hall.Selected.Count==0&&!issueButton.IsEnabled&&!printButton.IsEnabled,"withdrawn places cannot be selected issued or printed");
+            Check(hall.Selected.SetEquals(new[]{seatIds[3]})&&!issueButton.IsEnabled&&!printButton.IsEnabled&&((Button)main.FindName("SaleStateButton")).IsEnabled,"blocked place can be selected for unblocking but never issued or printed");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[3],new Point(20,20)});Pump();
             Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Разблокировать")),"withdrawn place context exposes restore action");hall.ContextMenu.IsOpen=false;
             store.SetSeatsBlocked(eventId,new[]{seatIds[3]},false);typeof(Tickets.App.MainWindow).GetMethod("LoadEvent",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{false});

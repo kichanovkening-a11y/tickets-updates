@@ -14,14 +14,14 @@ internal static class UnifiedPrintPreview
     internal static bool Show(Window owner,string title,Func<PrintDialog,bool,FixedDocument> build,Action<PrintDialog,FixedDocument> submit,bool landscape=false,FrameworkElement? options=null,Size? preferredMedia=null)
     {
         var settings=new PrintDialog{PrintQueue=null,PrintTicket=new PrintTicket()};
-        settings.PrintTicket.PageOrientation=landscape?PageOrientation.Landscape:PageOrientation.Portrait;
+        settings.PrintTicket.PageOrientation=PageOrientation.Portrait;
         settings.PrintTicket.PageMediaSize=A4Media();
         var window=new PrintPreviewWindow(owner,"Предварительный просмотр печати · "+title);
         var root=new DockPanel{Margin=new Thickness(8)};window.Content=root;
         var toolbar=new WrapPanel{Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(toolbar,Dock.Top);root.Children.Add(toolbar);
         var printers=new ComboBox{Width=270,DisplayMemberPath="FullName",Margin=new Thickness(4)};
         var paper=new ComboBox{Width=170,Margin=new Thickness(4)};
-        var orientation=new ComboBox{Width=120,Margin=new Thickness(4),ItemsSource=new[]{"Книжная","Альбомная"},SelectedIndex=landscape?1:0};
+        var orientation=new ComboBox{Width=120,Margin=new Thickness(4),ItemsSource=new[]{"Книжная","Альбомная"},SelectedIndex=0};
         var copies=new TextBox{Width=45,Text="1",Margin=new Thickness(4),VerticalContentAlignment=VerticalAlignment.Center};
         void Label(string text)=>toolbar.Children.Add(new TextBlock{Text=text,VerticalAlignment=VerticalAlignment.Center});
         Label("Принтер");toolbar.Children.Add(printers);Label("Бумага");toolbar.Children.Add(paper);toolbar.Children.Add(orientation);Label("Копий");toolbar.Children.Add(copies);

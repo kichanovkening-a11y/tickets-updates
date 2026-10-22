@@ -18,16 +18,16 @@ internal sealed class IssueDocumentWindow:EditorWindow
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
         var root=new Grid{Margin=new Thickness(10)};Content=root;
-        root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(152)});
+        root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         var info=Store.GetIssueDocument(eventId,issueId,kind);original=info.Template;template.Text=original;
-        header.Children.Add(new TextBlock{Text="Получатель: "+info.Invoice.Recipient,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap});header.Children.Add(status);
-        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);Grid.SetRowSpan(actions,2);root.Children.Add(actions);
-        InvoiceWindow.Square(actions,"Сохранить",()=>Try(()=>{
+        header.Children.Add(DocumentActions.Toolbar(
+            ()=>Try(()=>{SaveForNavigation();IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));}),
+            ()=>Try(()=>{
             var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx",destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});
             if(path is not null)status.Text="Сохранено: "+path;
-        }),Brushes.SteelBlue);InvoiceWindow.Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
-        InvoiceWindow.Square(actions,"Открыть",()=>Try(()=>{SaveForNavigation();IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));}),Brushes.SlateGray);
+        }),()=>Try(Print)));
+        header.Children.Add(new TextBlock{Text="Получатель: "+info.Invoice.Recipient,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap});header.Children.Add(status);
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
         var editing=new DockPanel{Margin=new Thickness(8)};var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Bottom);editing.Children.Add(tools);

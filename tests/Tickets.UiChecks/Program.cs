@@ -159,7 +159,7 @@ internal static class Program
             Check(hall.Selected.SetEquals(seatIds.Take(2)),"seat context preserves an existing selected group");
             var seatMenu=hall.ContextMenu;Check(seatMenu is not null&&seatMenu.IsOpen,"right click opens main seat actions");
             var contextItems=seatMenu!.Items.OfType<MenuItem>().ToArray();
-            Check(new[]{"IssueButton","PrintTicketsButton","ReserveButton","SaleStateButton","ReturnButton"}.All(name=>contextItems.Any(item=>Equals(item.Header,((Button)main.FindName(name)).Content)&&item.IsEnabled==((Button)main.FindName(name)).IsEnabled)),"context menu mirrors available issuance printing reservation sale and return actions without opening dialogs");
+            Check(new[]{"IssueButton","PrintTicketsButton","ReserveButton","SaleStateButton","ReturnButton"}.All(name=>contextItems.Any(item=>Equals(item.Header,((Button)main.FindName(name)).Content))==((Button)main.FindName(name)).IsEnabled)&&contextItems.All(item=>item.IsEnabled),"context menu shows only available issuance printing reservation sale and return actions");
             seatMenu.IsOpen=false;hall.Clear();((ComboBox)main.FindName("RecipientBox")).Text="";
             Gesture(hall,new Point(8,8),new Point(8,8));
             Gesture(hall,new Point(38,38),new Point(38,38));
@@ -205,11 +205,11 @@ internal static class Program
                     Check(!Logical(window).OfType<ListBox>().Any(),"invoice has no return-ticket list");
                     Check(!text.Contains("UI-REQUISITES-MUST-NOT-APPEAR")&&!text.Contains("Банковские реквизиты")&&!text.Contains("ИНН")&&!text.Contains("Состояние"),"invoice preview omits party requisites and ticket state");
                     Check(text.Contains("UI invoice signatory"),"invoice retains the actual recipient signatory");
-                    Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Открыть")),"invoice offers opening the saved Word document");
+                    Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Открыть в Word")),"invoice offers opening the saved Word document");
                     CheckDocumentTableLayout(Logical(window).OfType<FlowDocumentScrollViewer>().Single(),"invoice");
                     Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить как…")),"invoice has no duplicate Save As action");
-                    var squareSave=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить"));var squarePrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Распечатать"));
-                    Check(squareSave.Width==squareSave.Height&&squarePrint.Width==squarePrint.Height&&squareSave.Width==112,"save and print retain prominent square dimensions");
+                    var compactSave=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить"));var compactPrint=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Печать"));
+                    Check(ReferenceEquals(compactSave.Parent,compactPrint.Parent)&&compactSave.Parent is StackPanel {Orientation:Orientation.Horizontal}&&compactSave.FontSize==16.9&&compactPrint.FontSize==16.9,"document save and print share one compact row without shrinking type");
                     CheckDocumentActions(window);
                     CheckNativePrintPreview(app,window);
                     Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Печать билетов")||Equals(b.Content,"Дополнить накладную")),"invoice omits duplicate white ticket printing and extension actions");
@@ -230,7 +230,7 @@ internal static class Program
                             var rendered=Logical(form).OfType<FlowDocumentScrollViewer>().Single().Document;var contractText=new TextRange(rendered.ContentStart,rendered.ContentEnd).Text;
                             Check(contractText.Contains("UI recipient"),"contract preview substitutes actual recipient");
                             Check(!contractText.Contains("Билеты и места"),"contract omits the ticket item table");
-                            Check(Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Открыть")),"contract offers opening the saved Word document");
+                            Check(Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Открыть в Word")),"contract offers opening the saved Word document");
                             CheckDocumentTableLayout(Logical(form).OfType<FlowDocumentScrollViewer>().Single(),"contract");
                             Logical(form).OfType<TabControl>().Single().SelectedIndex=1;Logical(form).OfType<TextBox>().Single().Text="Договор для {recipient}. Отправитель: {sender}.";Click(form,"Сохранить шаблон");
                             Check(store.DocumentTemplate(IssueDocumentKinds.Contract).Contains("{recipient}"),"document template saves for later issuances");
@@ -275,6 +275,9 @@ internal static class Program
             Isolated("docs016",Docs016Checks.Run);
             Isolated("print016",Print016Checks.Run);
             Isolated("journal016",Journal016Checks.Run);
+            Isolated("blank017",Blank017Checks.Run);
+            Isolated("docs017",Docs017Checks.Run);
+            Isolated("journal017",Journal017Checks.Run);
             hall.SetSelection(new[]{seatIds[0],seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI mixed preview only";Pump();
             Check(printButton.IsEnabled,"mixed free and occupied selection permits printing preview");
             Exception? mixedPreviewError=null;
@@ -565,7 +568,7 @@ internal static class Program
             var properties=(StackPanel)blankType.GetField("properties",flags)!.GetValue(editor)!;
             var printField=properties.Children.OfType<CheckBox>().Single();
             Check(Equals(printField.Content,"Печатать поле")&&printField.GetBindingExpression(CheckBox.IsCheckedProperty)?.ParentBinding.Path.Path=="Enabled","selected blank field exposes its print checkbox");
-            var propertyBoxes=properties.Children.OfType<TextBox>().ToArray();
+            var propertyBoxes=Logical(properties).OfType<TextBox>().ToArray();
             Check(new[]{"X","Y","Width","Height","FontFamily","FontSize","Rotation"}.All(path=>propertyBoxes.Any(box=>box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path==path)),"selected blank field exposes geometry typography and rotation properties");
             var xBox=propertyBoxes.Single(box=>box.GetBindingExpression(TextBox.TextProperty)?.ParentBinding.Path.Path=="X");
             var field=(TicketBlankField)xBox.GetBindingExpression(TextBox.TextProperty)!.ParentBinding.Source;
@@ -683,7 +686,7 @@ internal static class Program
             catch(Exception ex){error=ex;}
             finally{preview?.Close();}
         }));
-        Click(documentWindow,"Распечатать");if(error is not null)throw error;
+        Click(documentWindow,"Печать");if(error is not null)throw error;
     }
     private static void CheckDocumentActions(Window window)
     {
@@ -694,7 +697,7 @@ internal static class Program
             foreach(var scale in new[]{1d,1.25,1.5})
             {
                 root.LayoutTransform=new ScaleTransform(scale,scale);Pump();window.UpdateLayout();Pump();
-                var actions=Logical(root).OfType<Button>().Where(button=>button.IsVisible&&new[]{"Сохранить","Распечатать","Открыть"}.Contains(button.Content?.ToString())).ToArray();
+                var actions=Logical(root).OfType<Button>().Where(button=>button.IsVisible&&new[]{"Сохранить","Печать","Открыть в Word"}.Contains(button.Content?.ToString())).ToArray();
                 Check(actions.Length==3,"document exposes save print and open at "+scale+" layout scale");
                 var rectangles=actions.Select(button=>button.TransformToAncestor(root).TransformBounds(new Rect(button.RenderSize))).ToArray();
                 Console.WriteLine($"Document actions scale={scale}; root={root.ActualWidth}x{root.ActualHeight}; buttons={string.Join("; ",rectangles.Select(rect=>rect.ToString()))}");

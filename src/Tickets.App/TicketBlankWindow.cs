@@ -52,24 +52,31 @@ internal sealed class TicketBlankWindow:EditorWindow
         AddLabel(settings,"Выберите поле или нажмите на текст на листе");settings.Children.Add(fieldChoice);fieldChoice.SelectionChanged+=(_,_)=>{if(!loading)ShowProperties((fieldChoice.SelectedItem as Choice)?.Value);};
         settings.Children.Add(selection);settings.Children.Add(properties);
         Button(settings,"Обновить лист",()=>Try(()=>{Read();Render();}));
-        Button(settings,"Сохранить шаблон",()=>Try(()=>{Read();Store.SaveTicketBlank(blank);Refresh(blank.Id);MessageBox.Show(DialogOwner,"Бланк сохранён и доступен при печати.","Бланки печати");}));
+        Button(settings,"Сохранить шаблон",()=>Try(()=>{Read();Store.SaveTicketBlank(blank);Refresh(blank.Id);notice.Text="Бланк сохранён и доступен при печати.";}));
         var preview=new StackPanel();preview.Children.Add(new TextBlock{Text="Лист в физических миллиметрах. Перетаскивайте текст; за синюю рамку — весь билет. Скан закреплён и по умолчанию служит только для настройки.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});preview.Children.Add(paper);
         var scroll=new ScrollViewer{Content=preview,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetColumn(scroll,1);root.Children.Add(scroll);
         Refresh();Load(templates.SelectedItem as TicketBlank??TicketBlankEditing.CreateA4From030879());
     }
     private static void AddLabel(Panel panel,string text)=>panel.Children.Add(new TextBlock{Text=text,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,6,4,3)});
-    private void Property(object model,string label,string path)
+    private void Property(object model,string label,string path)=>Property(properties,model,label,path);
+    private void Property(Panel panel,object model,string label,string path)
     {
-        AddLabel(properties,label);var box=new TextBox{MinWidth=100,HorizontalAlignment=HorizontalAlignment.Stretch};
-        box.SetBinding(TextBox.TextProperty,new Binding(path){Source=model,Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.LostFocus,ValidatesOnExceptions=true});box.LostFocus+=(_,_)=>{if(!draggingField&&!HasErrors(properties))Try(()=>{blank.Validate();Render();});};properties.Children.Add(box);
+        AddLabel(panel,label);var box=new TextBox{MinWidth=100,HorizontalAlignment=HorizontalAlignment.Stretch};
+        box.SetBinding(TextBox.TextProperty,new Binding(path){Source=model,Mode=BindingMode.TwoWay,UpdateSourceTrigger=UpdateSourceTrigger.LostFocus,ValidatesOnExceptions=true});box.LostFocus+=(_,_)=>{if(!draggingField&&!HasErrors(properties))Try(()=>{blank.Validate();Render();});};panel.Children.Add(box);
+    }
+    private void PreciseProperties(object model)
+    {
+        var geometry=new StackPanel();
+        Property(geometry,model,"Слева (X), мм","X");Property(geometry,model,"Сверху (Y), мм","Y");Property(geometry,model,"Ширина, мм","Width");Property(geometry,model,"Высота, мм","Height");
+        properties.Children.Add(new Expander{Header="Точная настройка",IsExpanded=false,Content=geometry,Margin=new Thickness(0,8,0,0)});
     }
     private void ShowProperties(object? model)
     {
-        properties.Children.Clear();selection.Text=model is null?"":"Свойства выбранного элемента";
+        properties.Children.Clear();selection.Text=model is null?"Выберите поле на листе или в списке, чтобы настроить текст.":"Свойства выбранного элемента";
         if(model is null)return;
         if(model is LegacyTicketBand band){selection.Text="Секция: "+band.Name;AddLabel(properties,"Перемещайте секцию за синюю рамку. Исходные секции и их высота сохраняются.");return;}
-        Property(model,"Слева (X), мм","X");Property(model,"Сверху (Y), мм","Y");Property(model,"Ширина, мм","Width");Property(model,"Высота, мм","Height");
-        if(model is TicketBlankPosition)return;
+        if(model is TicketBlankPosition){selection.Text="Билет целиком · перемещайте за синюю рамку";PreciseProperties(model);return;}
+        Property(model,"Семейство шрифта","FontFamily");Property(model,"Размер шрифта, пункты","FontSize");Property(model,"Поворот, градусы (0, 90, 180, 270)","Rotation");
         if(model is TicketBlankField field){selection.Text="Поле: "+field.DisplayName;var check=new CheckBox{Content="Печатать поле"};check.SetBinding(CheckBox.IsCheckedProperty,new Binding("Enabled"){Source=field,Mode=BindingMode.TwoWay});check.Click+=(_,_)=>Render();properties.Children.Add(check);}
         if(model is LegacyTicketElement element){selection.Text="Поле: "+ElementLabel(element);
             AddLabel(properties,"Содержимое");var bindings=new ComboBox{DisplayMemberPath="Label",SelectedValuePath="Value",ItemsSource=new[]{new Choice("Постоянный текст","")}.Concat(LegacyTicketTemplates.Bindings.Select(b=>new Choice(TicketBlankEditing.BindingName(b),b))).ToArray(),SelectedValue=element.Binding};
@@ -82,10 +89,10 @@ internal sealed class TicketBlankWindow:EditorWindow
                 catch{element.Suppressed=previous;enabled.IsChecked=!previous;throw;}
             });properties.Children.Add(enabled);
             foreach(var (label,path) in new[]{("Полужирный","Bold"),("Курсив","Italic"),("Подчёркнутый","Underline")}){var check=new CheckBox{Content=label};check.SetBinding(CheckBox.IsCheckedProperty,new Binding(path){Source=element,Mode=BindingMode.TwoWay});check.Click+=(_,_)=>Render();properties.Children.Add(check);}}
-        Property(model,"Семейство шрифта","FontFamily");Property(model,"Размер шрифта, пункты","FontSize");Property(model,"Поворот, градусы (0, 90, 180, 270)","Rotation");
+        PreciseProperties(model);
     }
     private static string ElementLabel(LegacyTicketElement element)=>TicketBlankEditing.BindingName(element.Binding)+(element.Binding.Length==0?" · "+element.Text:" · "+element.Name);
-    private void SelectBlock(bool render=true)
+    private void SelectBlock(bool render=true,bool showBlockProperties=true)
     {
         loading=true;var model=(blocks.SelectedItem as Choice)?.Value;fieldChoice.ItemsSource=model switch
         {
@@ -93,7 +100,7 @@ internal sealed class TicketBlankWindow:EditorWindow
             TicketBlankPosition p=>TicketBlankEditing.FieldsFor(blank,p).Select(f=>new Choice(f.DisplayName,f)).ToArray(),
             LegacyTicketBand b=>b.Elements.Select(f=>new Choice(ElementLabel(f),f)).ToArray(),
             _=>Array.Empty<Choice>()
-        };fieldChoice.SelectedIndex=-1;loading=false;ShowProperties(model);if(render)Render();
+        };fieldChoice.SelectedIndex=-1;loading=false;ShowProperties(showBlockProperties?model:null);if(render)Render();
     }
     private void Read()
     {
@@ -114,7 +121,7 @@ internal sealed class TicketBlankWindow:EditorWindow
         if(blank.Legacy is null)foreach(var p in blank.Positions)p.Fields??=blank.Fields.Select(f=>f with{}).ToList();
         settings.IsEnabled=Editable;notice.Text="А4 · 210 × 297 мм · 4 билета. "+(blank.Legacy is {} legacy?"Исходный RPT: "+legacy.SourceFile+". Координаты, шрифты, повороты и секции сохранены. Все поля и постоянные подписи можно редактировать отдельно для каждого билета.":"А4: 210 × 297 мм. Четыре билета можно настраивать отдельно.");
         name.Text=blank.Name;width.Text=blank.PageWidth.ToString(CultureInfo.InvariantCulture);height.Text=blank.PageHeight.ToString(CultureInfo.InvariantCulture);printScan.IsChecked=blank.PrintBackground;
-        loading=true;blocks.ItemsSource=blank.Positions.Select((p,i)=>new Choice("Билет "+(i+1),p)).ToArray();blocks.SelectedIndex=0;loading=false;SelectBlock();
+        loading=true;blocks.ItemsSource=blank.Positions.Select((p,i)=>new Choice("Билет "+(i+1),p)).ToArray();blocks.SelectedIndex=0;loading=false;SelectBlock(showBlockProperties:false);
     }
     private void Select(object block,object field)
     {

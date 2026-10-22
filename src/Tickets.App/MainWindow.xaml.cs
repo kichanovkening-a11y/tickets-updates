@@ -22,6 +22,7 @@ public partial class MainWindow : Window
     {
         this.store=store;
         InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);
+        SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
@@ -196,7 +197,7 @@ public partial class MainWindow : Window
             "Можно печатать свободные и ранее выданные билеты вместе. Ранее выданные останутся в своих накладных.";
     }
     private void InputChanged(object sender,TextChangedEventArgs e) { if(ready) UpdateSelection(); }
-    private void SeriesChanged(object sender,TextChangedEventArgs e) { if(ready) Run(UpdateNumber); }
+    private void SeriesChanged(object sender,TextChangedEventArgs e) { if(ready) Run(()=>{if(!string.IsNullOrWhiteSpace(SeriesBox.Text))store.RememberIssueSeries(SeriesBox.Text);UpdateNumber();}); }
     private void UpdateNumber()
     {
         if(!ready) return;

@@ -25,6 +25,7 @@ public partial class MainWindow
                 }
         }
         catch(System.IO.IOException){}catch(UnauthorizedAccessException){}catch(JsonException){}catch(ArgumentException){}
+        foreach(var column in HistoryGrid.Columns.Where(c=>c.Header?.ToString() is "Возвращено" or "Состояние"))column.Visibility=Visibility.Collapsed;
         var selector=HistoryGrid.Columns.OfType<DataGridTemplateColumn>().FirstOrDefault();
         if(selector is not null){selector.DisplayIndex=0;selector.Visibility=Visibility.Visible;selector.Width=new DataGridLength(38);selector.MinWidth=38;selector.CanUserReorder=false;}
         // Column sizes belong to the workstation, not to the currently displayed show.
@@ -86,11 +87,42 @@ public partial class MainWindow
     private void UpdateJournalSelection()
     {
         MergeInvoicesButton.Visibility=journalSelection.Count>=2?Visibility.Visible:Visibility.Collapsed;
+        var selected=SelectedJournalInvoices(out var error);
+        MergeInvoicesButton.IsEnabled=journalSelection.Count>=2&&error.Length==0;
+        MergeInvoicesButton.Content=selected.Length>=2?$"Объединить в № {selected[0].Id}":"Объединить накладные";
+        JournalSelectionStatus.Text=journalSelection.Count<2?"":error.Length>0?error:$"Выбрано: {selected.Length}. Номер и реквизиты № {selected[0].Id} сохранятся.";
     }
-    private void MergeInvoicesClick(object sender,RoutedEventArgs e)=>Run(()=>{
+    private IssueInfo[] SelectedJournalInvoices(out string error)
+    {
+        error="";
+        if(current is null||journalSelection.Count<2)return [];
+        // Choose the oldest selected invoice explicitly, independent of checkbox
+        // click order and the current sorting of the journal.
+        var selected=store.Issues(current.Id).Where(issue=>journalSelection.Contains(issue.Id)).OrderBy(issue=>issue.Id).ToArray();
+        if(selected.Length!=journalSelection.Count)error="Выберите накладные одного мероприятия. Обновите журнал.";
+        else if(selected.Select(issue=>CatalogText.Key(issue.Recipient)).Distinct().Count()>1)error="Объединение: выберите одного получателя.";
+        else if(selected.Select(issue=>CatalogText.Key(issue.Sender)).Distinct().Count()>1)error="Объединение: выберите одного отправителя.";
+        else if(selected.Any(issue=>issue.ReservedCount>0))error="Сначала подтвердите брони в выбранных накладных.";
+        else if(selected.Any(issue=>issue.Count<=issue.ReturnedCount))error="Выберите накладные с билетами на руках.";
+        return selected;
+    }
+    private void MergeInvoicesClick(object sender,RoutedEventArgs e)
+    {
         if(current is null||journalSelection.Count<2)return;
-        var window=new InvoiceMergeWindow(store,current.Id,journalSelection.ToArray());
-        window.ShowDialog();
-        if(window.MergedIssueId>0){journalSelection.Clear();LoadEvent(false);OpenInvoice(window.MergedIssueId);}
-    });
+        try
+        {
+            var selected=SelectedJournalInvoices(out var error);
+            if(error.Length>0){UpdateJournalSelection();return;}
+            var target=selected[0];
+            var message=$"Объединить накладные {string.Join(", ",selected.Select(issue=>"№ "+issue.Id))} в № {target.Id}?\nПолучатель: {target.Recipient}\nОтправитель: {target.Sender}\nНомер, дата и реквизиты № {target.Id} сохранятся. Исходные записи и возвраты останутся в истории.";
+            if(MessageBox.Show(this,message,"Объединение накладных",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
+            var eventId=current.Id;
+            var mergedId=store.MergeInvoices(eventId,selected.Select(issue=>issue.Id).ToArray());
+            string? documentError=null;
+            try{store.SaveAllDocuments(eventId,mergedId);}catch(Exception ex){documentError=ex.Message;}
+            journalSelection.Clear();LoadEvent(false);
+            JournalSelectionStatus.Text=documentError is null?$"Накладные объединены в № {mergedId}. Документы обновлены.":$"Накладные объединены в № {mergedId}. Не удалось обновить документы: {documentError}";
+        }
+        catch(Exception ex){JournalSelectionStatus.Text=ex.Message;}
+    }
 }

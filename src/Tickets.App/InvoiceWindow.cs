@@ -18,28 +18,25 @@ internal sealed class InvoiceWindow : EditorWindow
         this.eventId=eventId;this.issueId=issueId;
         var root=new Grid{Margin=new Thickness(10)};Content=root;
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
-        root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(152)});
         var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
             PersistSender();
             IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
             Refresh();
         })));
+        header.Children.Add(DocumentActions.Toolbar(
+            ()=>Try(()=>{PersistSender();IssueDocumentNavigation.OpenWord(Store.InvoiceDocumentPath(issueId),()=>Store.SaveInvoiceDocument(eventId,issueId));}),
+            ()=>Try(()=>{
+                var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{PersistSender();InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});
+                if(path is not null){savedStatus.Text="Сохранено: "+path;Refresh();}
+            }),()=>Try(Print)));
         var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});header.Children.Add(senderRow);
         senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
         var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
         Button(senderActions,"+ Отправитель",()=>Try(()=>EditSender(false)));
         Button(senderActions,"Реквизиты",()=>Try(EditRecipient)).ToolTip="Реквизиты получателя";
-        Button(header,"Обновить реквизиты",()=>Try(EditRecipient)).ToolTip="Реквизиты получателя";
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
-        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};var actionsScroll=new ScrollViewer{Content=actions,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};Grid.SetColumn(actionsScroll,1);Grid.SetRowSpan(actionsScroll,2);root.Children.Add(actionsScroll);
-        Square(actions,"Сохранить",()=>Try(()=>{
-            var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{PersistSender();InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});
-            if(path is not null){savedStatus.Text="Сохранено: "+path;Refresh();}
-        }),Brushes.SteelBlue);
-        Square(actions,"Распечатать",()=>Try(Print),Brushes.SeaGreen);
-        Square(actions,"Открыть",()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.InvoiceDocumentPath(issueId),()=>Store.SaveInvoiceDocument(eventId,issueId))),Brushes.SlateGray);
         Grid.SetRow(reader,1);root.Children.Add(reader);reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Document(Store.Invoice(eventId,issueId),reader.ActualWidth-20);};Refresh();
         Closing+=(_,e)=>{
             try{PersistSender();}

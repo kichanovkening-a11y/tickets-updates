@@ -18,17 +18,18 @@ public partial class MainWindow
         UpdateSelection();
         var menu=new ContextMenu{PlacementTarget=Hall,Placement=PlacementMode.RelativePoint,HorizontalOffset=position.X,VerticalOffset=position.Y};
         void Action(string label,bool enabled,System.Action perform)
-        {var item=new MenuItem{Header=label,IsEnabled=enabled};item.Click+=(_,_)=>perform();menu.Items.Add(item);}
+        {if(!enabled)return;var item=new MenuItem{Header=label};item.Click+=(_,_)=>perform();menu.Items.Add(item);}
         Action(IssueButton.Content?.ToString()??"Выдать накладную",IssueButton.IsEnabled,()=>IssueClick(this,new RoutedEventArgs()));
         Action(PrintTicketsButton.Content?.ToString()??"Печать билетов",PrintTicketsButton.IsEnabled,()=>PrintTicketsClick(this,new RoutedEventArgs()));
         Action("Забронировать",ReserveButton.IsEnabled,()=>ReserveClick(this,new RoutedEventArgs()));
         Action("Дополнить накладную",ExtendInvoiceButton.IsEnabled,()=>ExtendInvoiceClick(this,new RoutedEventArgs()));
-        menu.Items.Add(new Separator());
+        if(menu.Items.Count>0)menu.Items.Add(new Separator());
         Action("Изменить цену",ApplyPriceButton.IsEnabled,()=>TogglePriceClick(this,new RoutedEventArgs()));
         Action(SaleStateButton.Content?.ToString()??"Снять с продажи",SaleStateButton.IsEnabled,()=>SaleStateClick(this,new RoutedEventArgs()));
         Action("Вернуть выбранные",ReturnButton.IsEnabled,()=>ReturnClick(this,new RoutedEventArgs()));
         var invoiceIds=Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().ToArray();
         if(invoiceIds.Length==1)Action("Открыть накладную",true,()=>Run(()=>OpenInvoice(invoiceIds[0])));
-        Hall.ContextMenu=menu;menu.IsOpen=true;
+        if(menu.Items.Count>0&&menu.Items[menu.Items.Count-1] is Separator)menu.Items.RemoveAt(menu.Items.Count-1);
+        Hall.ContextMenu=menu;menu.IsOpen=menu.Items.Count>0;
     }
 }

@@ -52,7 +52,7 @@ internal static class IssueDocumentNavigation
             if(selected==Specification)editor.Title=$"Спецификация · выдача № {issueId}";
             var body=editor.Content as UIElement??throw new InvalidOperationException("Нет содержимого документа.");
             editor.Content=null;
-            var frame=new DockPanel{Margin=new Thickness(10,10,10,0)};
+            var frame=new DockPanel();
             var navigation=Toolbar(selected,target=>{
                 try
                 {
@@ -65,6 +65,8 @@ internal static class IssueDocumentNavigation
                 }
                 catch(Exception ex){MessageBox.Show(editor.DialogOwnerForHost,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
             });
+            navigation.Margin=new Thickness(10,10,10,0);
+            if(body is FrameworkElement content)content.Margin=new Thickness(10,0,10,10);
             DockPanel.SetDock(navigation,Dock.Top);frame.Children.Add(navigation);frame.Children.Add(body);editor.Content=frame;
             editor.ShowDialog();
             selected=next;

@@ -45,6 +45,7 @@ Journal016Checks.Register(Test);
 Docs016Checks.Register(Test);
 Print016Checks.Register(Test);
 Recipient016Checks.Register(Test);
+Issuance017Checks.Register(Test);
 Test("all ticket blanks support independent visual editing and new vertical tear-offs",Blank016Checks.Run);
 RecipientCreationChecks.Register(Test);
 ArchivePricingChecks.Register(Test);

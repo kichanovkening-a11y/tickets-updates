@@ -19,8 +19,9 @@ internal static class Docs016Checks
         try
         {
             CheckNavigation(window);
-            foreach(var caption in new[]{"Обновить реквизиты","Реквизиты"})
+            foreach(var saveEdit in new[]{true,false})
             {
+                const string caption="Реквизиты";
                 Exception? error=null;
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                     Window? editor=null;
@@ -31,7 +32,7 @@ internal static class Docs016Checks
                         Check(Logical(editor).OfType<TextBox>().First().Text==recipient,caption+": edits actual recipient");
                         foreach(var label in new[]{"ИНН","КПП (если есть)","ОГРН / ОГРНИП","Юридический адрес","Банк","Расчётный счёт","Корреспондентский счёт","БИК","Подписант (ФИО)","Должность подписанта","Телефон","ОКПО (если есть)","ОКВЭД (если есть)","ОКАТО (если есть)"})
                             Check(Field(editor,label) is not null,caption+": full recipient field "+label);
-                        if(caption=="Обновить реквизиты")
+                        if(saveEdit)
                         {
                             Field(editor,"ИНН").Text="016-recipient-new";Field(editor,"Подписант (ФИО)").Text="Получатель Новый 016";
                             Click(editor,"Сохранить");

@@ -70,8 +70,9 @@ internal sealed class SpecificationWindow : EditorWindow
     internal SpecificationWindow(Store store,long eventId,long issueId):base(store,$"Спецификация · выдача № {issueId}",1030,850)
     {
         fixedRecipient=true;sender=new TextBox();title=new TextBox();body=new TextBox();
-        var root=new Grid{Margin=new Thickness(10)};root.ColumnDefinitions.Add(new ColumnDefinition());root.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(152)});Content=root;
-        var reader=new FlowDocumentScrollViewer{IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};root.Children.Add(reader);
+        var root=new Grid{Margin=new Thickness(10)};root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());Content=root;
+        var header=new StackPanel();root.Children.Add(header);
+        var reader=new FlowDocumentScrollViewer{IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetRow(reader,1);root.Children.Add(reader);
         FlowDocument Preview(double width=794)
         {
             var invoice=Store.Invoice(eventId,issueId);var document=InvoiceWindow.Document(invoice,width);
@@ -79,16 +80,15 @@ internal sealed class SpecificationWindow : EditorWindow
             return document;
         }
         reader.Document=Preview();reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};
-        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};Grid.SetColumn(actions,1);root.Children.Add(actions);
-        InvoiceWindow.Square(actions,"Сохранить",()=>Try(()=>{
+        header.Children.Add(DocumentActions.Toolbar(
+            ()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.IssueSpecificationDocumentPath(issueId),()=>Store.SaveIssueSpecificationDocument(eventId,issueId))),
+            ()=>Try(()=>{
             var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Спецификация-выдача-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueSpecificationWord(Store.Invoice(eventId,issueId),destination));
             if(path is not null)status.Text="Сохранено: "+path;
-        }),Brushes.SteelBlue);
-        InvoiceWindow.Square(actions,"Распечатать",()=>Try(()=>{
+        }),()=>Try(()=>{
             DocumentPrintPreview.Show(DialogOwner,Title,width=>Preview(width));
-        }),Brushes.SeaGreen);
-        InvoiceWindow.Square(actions,"Открыть",()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.IssueSpecificationDocumentPath(issueId),()=>Store.SaveIssueSpecificationDocument(eventId,issueId))),Brushes.SlateGray);
-        actions.Children.Add(status);
+        })));
+        header.Children.Add(status);
     }
 
     private bool CanSwitch()=>!dirty||MessageBox.Show(DialogOwner,"Отбросить несохранённые изменения?","Спецификация",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes;

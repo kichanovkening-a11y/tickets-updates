@@ -48,11 +48,12 @@ internal sealed class InvoiceWindow : EditorWindow
             var current=senderBox.Text;senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Senders().Contains(current)?current:"";persistedSender=senderBox.Text;
         });
         senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Senders().Contains(Store.Invoice(eventId,issueId).Sender)?Store.Invoice(eventId,issueId).Sender:"";persistedSender=senderBox.Text;header.Children.Add(savedStatus);
+        senderBox.DropDownOpened+=(_,_)=>{var value=senderBox.Text;var choices=Store.Senders();senderBox.ItemsSource=choices;senderBox.Text=choices.Contains(value)?value:"";};
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);tabs.Items.Add(new TabItem{Header="Документ",Content=reader});
         var editing=new DockPanel();var saveRow=new WrapPanel{Margin=new Thickness(0,5,0,5)};DockPanel.SetDock(saveRow,Dock.Bottom);editing.Children.Add(saveRow);
         var saveText=Button(saveRow,"Сохранить текст накладной",()=>Try(SaveText));saveText.ContentTemplate=null;saveText.Width=double.NaN;saveText.Padding=new Thickness(10,3,10,3);
-        editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст / шаблон",Content=editing});
+        editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,"invoice")??throw new TicketException("Шаблон накладной не найден."),"invoice");
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveText);};
         reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};Refresh();

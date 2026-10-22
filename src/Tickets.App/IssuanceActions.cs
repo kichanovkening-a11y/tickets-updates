@@ -12,6 +12,7 @@ public partial class MainWindow
         var preferred=string.IsNullOrWhiteSpace(value)?store.Sender:value;
         SenderBox.Text=senders.Contains(preferred)?preferred:"";
     }
+    private void SenderDropDownOpened(object sender,EventArgs e)=>RefreshSenders();
     private void SenderContextRequested(object sender,System.Windows.Input.MouseButtonEventArgs e)
     {
         var name=SenderBox.SelectedItem as string??SenderBox.Text;
@@ -26,8 +27,7 @@ public partial class MainWindow
     }
     private void PersistSelectedSender()
     {
-        var name=store.SaveSender(SenderBox.Text);
-        store.SaveDocumentSettings(name,store.DocumentsDirectory);RefreshSenders(name);
+        store.SaveDocumentSettings(SenderBox.Text,store.DocumentsDirectory);RefreshSenders(store.Sender);
     }
     private void EditSenderClick(object sender,RoutedEventArgs e)=>Run(()=>{
         var editor=new SenderEditorWindow(store,SenderBox.Text,store.Senders().Contains(SenderBox.Text));

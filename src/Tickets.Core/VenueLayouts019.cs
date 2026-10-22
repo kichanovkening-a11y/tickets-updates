@@ -7,7 +7,7 @@ public static class VenueLayouts019
     public const string RussianSong = "Театр «Русская Песня»";
     public const string Estrada = "\"Московский государственный театр Эстрады\"";
 
-    public static IReadOnlyList<DraftSeat> RussianSongSeats()
+    public static IReadOnlyList<DraftSeat> RussianSongSeats(bool compact=true)
     {
         var seats=new List<DraftSeat>();
         void Run(string sector,int row,int first,int last,double x,double y,double step=15)
@@ -64,10 +64,10 @@ public static class VenueLayouts019
         Block("Балкон №4 (левая сторона)",[7,7,8,8,6,5],890,196,22);
         var minX=seats.Min(s=>s.X);
         foreach(var s in seats)s.X+=40-minX;
-        return seats;
+        return compact?CompactVenueLayouts020.Russian(seats):seats;
     }
 
-    public static IReadOnlyList<DraftSeat> EstradaSeats()
+    public static IReadOnlyList<DraftSeat> EstradaSeats(bool compact=true)
     {
         var seats=new List<DraftSeat>();
         // Preserve left-to-right place numbering from this plan. The two halves have an actual
@@ -124,6 +124,6 @@ public static class VenueLayouts019
         // Row17 outermost endpoints are allowed to extend left of zero before normalization.
         var minX=seats.Min(s=>s.X);var minY=seats.Min(s=>s.Y);
         foreach(var s in seats){s.X=Math.Round(s.X-minX+40,2);s.Y=Math.Round(s.Y-minY+40,2);}
-        return seats;
+        return compact?CompactVenueLayouts020.Estrada(seats):seats;
     }
 }

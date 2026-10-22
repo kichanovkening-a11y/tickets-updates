@@ -14,7 +14,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     private readonly FlowDocumentScrollViewer preview=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)};
     private readonly DocumentTextEditor textEditor=new();
-    private IssueDocumentInfo Info=>Store.CustomIssueDocument(eventId,issueId,kind)??throw new TicketException("Форма получателя не найдена.");
+    private IssueDocumentInfo Info=>Store.CustomIssueDocument(eventId,issueId,kind)??Store.GetIssueDocument(eventId,issueId,kind);
 
     internal CustomIssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,Tickets.Core.Store.RecipientDocumentName(kind)+$" · выдача № {issueId}",1030,850)
     {
@@ -29,7 +29,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
                 var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueDocumentWord(info,destination));
                 if(path is not null)status.Text="Сохранено: "+path;
             }),
-            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>SourceFormPreview.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);})));
+            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>IssueDocumentWindow.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);})));
         header.Children.Add(new TextBlock{Text="Получатель: "+Info.Invoice.Recipient,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold});
         header.Children.Add(ContractFields.Row(Store,eventId,issueId,()=>{Refresh();status.Text="Поля договора сохранены для всего комплекта.";}));
         header.Children.Add(status);
@@ -38,7 +38,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         var editing=new DockPanel();var saveRow=new WrapPanel{Margin=new Thickness(0,5,0,5)};DockPanel.SetDock(saveRow,Dock.Bottom);editing.Children.Add(saveRow);
         CompactButton(saveRow,"Сохранить текст документа",()=>Try(SaveForNavigation));
         CompactButton(saveRow,"Сохранить как форму получателя",()=>Try(()=>{SaveForNavigation();var bytes=Store.CustomIssueTemplate(eventId,issueId,kind)!;Store.SaveRecipientForm(Info.Invoice.Recipient,kind,bytes,Tickets.Core.Store.RecipientDocumentName(kind)+".docx");status.Text="Форма сохранена для следующих выдач.";}));
-        editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст / шаблон",Content=editing});
+        editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,kind)!,kind);
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveForNavigation);};
         Closing+=(_,e)=>{try{SaveForNavigation();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
@@ -49,7 +49,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     {
         var button=Button(parent,caption,action);button.Width=double.NaN;button.ContentTemplate=null;button.FontSize=16.9;button.Padding=new Thickness(10,2,10,2);button.Margin=new Thickness(0,4,6,0);button.MinHeight=34;
     }
-    private void Refresh()=>preview.Document=SourceFormPreview.Document(Info,preview.ActualWidth>100?preview.ActualWidth-20:null);
+    private void Refresh()=>preview.Document=IssueDocumentWindow.Document(Info,preview.ActualWidth>100?preview.ActualWidth-20:null);
     private string WorkingPath(byte[] content,bool template)
     {
         var database=Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Store.Path)))[..12];
@@ -59,7 +59,8 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     }
     private void OpenWord()
     {
-        SaveForNavigation();var bytes=Info.SourceDocument??throw new TicketException("Документ Word не подготовлен.");
+        SaveForNavigation();var info=Info;var bytes=info.SourceDocument;
+        if(bytes is null){IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));return;}
         var path=WorkingPath(bytes,false);
         IssueDocumentNavigation.OpenWord(path,()=>{File.WriteAllBytes(path,bytes);return path;});
         status.Text="Открыта отдельная копия документа: автоматические данные в ней можно изменять.";

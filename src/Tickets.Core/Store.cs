@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); }
 
     private SqliteConnection Open()
     {
@@ -114,6 +114,8 @@ public sealed partial class Store
             throw new TicketException("Изменённые цены должны относиться к выбранным местам и быть неотрицательными.");
         if(firstNumber<1 || firstNumber>long.MaxValue-seats.Count+1)
             throw new TicketException("Недопустимый диапазон номеров билетов.");
+        var selectedSender=Sender;
+        if(string.IsNullOrWhiteSpace(selectedSender))throw new TicketException("Выберите или создайте отправителя.");
         try
         {
             using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
@@ -121,8 +123,8 @@ public sealed partial class Store
             var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
             using var batch=Command(c,"""
                 INSERT INTO issue_batch(event_id,recipient,issued_at,series,title,venue,event_date,sender)
-                SELECT e.id,$r,$time,$series,e.title,v.name,e.legacy_date,coalesce((SELECT value FROM document_setting WHERE name='sender'),$sender) FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
-                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series,"$sender",DefaultSender);batch.Transaction=tx;
+                SELECT e.id,$r,$time,$series,e.title,v.name,e.legacy_date,$sender FROM event e JOIN venue v ON v.id=e.venue_id WHERE e.id=$e RETURNING id
+                ""","$e",eventId,"$r",recipient,"$time",timestamp,"$series",series,"$sender",selectedSender);batch.Transaction=tx;
             var result=batch.ExecuteScalar();if(result is null)throw new TicketException("Показ не найден.");
             var issueId=Convert.ToInt64(result);
             using(var senderQuery=Command(c,"SELECT sender FROM issue_batch WHERE id=$i","$i",issueId))

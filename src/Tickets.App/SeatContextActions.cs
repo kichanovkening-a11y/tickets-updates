@@ -22,14 +22,19 @@ public partial class MainWindow
         {if(!enabled)return;var item=new MenuItem{Header=label};item.Click+=(_,_)=>perform();menu.Items.Add(item);}
         if(!SeatSelection.CanSelect(seat))
         {
-            StatusText.Text=$"{seat.Label}: {seat.Status}. Место не выбирается.";
+            StatusText.Text=$"{seat.Label}: {seat.Status}. Получатель: {seat.Recipient}.";
             menu.Items.Add(new MenuItem{Header=seat.Status,IsEnabled=false});
             if(seat.IssueId.HasValue)Action("Открыть исходную накладную",true,()=>Run(()=>OpenInvoice(seat.IssueId.Value)));
             Action("Выдать накладную по брони",seat.IsReserved&&!currentArchived&&seat.IssueId.HasValue,()=>Run(()=>{
                 if(MessageBox.Show(this,$"Оформить накладную по брони № {seat.IssueId} для {seat.Recipient}?","Оформление брони",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
                 store.ConfirmReservation(current.Id,seat.IssueId!.Value);SaveIssuedDocuments(current.Id,seat.IssueId.Value);LoadEvent(false);OpenInvoice(seat.IssueId.Value);
             }));
-            Action("Вернуть место",seat.TicketId.HasValue,()=>Run(()=>ReturnTickets([seat.TicketId!.Value])));
+            var occupiedGroup=Hall.Selected.Contains(seatId)&&Hall.SelectedSeats.Count>1&&Hall.SelectedSeats.All(s=>s.TicketId.HasValue);
+            var returnIds=occupiedGroup?Hall.SelectedSeats.Select(s=>s.TicketId!.Value).ToArray():seat.TicketId.HasValue?[seat.TicketId.Value]:Array.Empty<long>();
+            Action(occupiedGroup?"Вернуть выбранные":"Вернуть место",seat.TicketId.HasValue,()=>Run(()=>ReturnTickets(returnIds)));
+            if(occupiedGroup)
+                foreach(var issueId in Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().Where(id=>id!=seat.IssueId))
+                    Action($"Открыть исходную накладную № {issueId}",true,()=>Run(()=>OpenInvoice(issueId)));
             Action("Вернуть в продажу",seat.IsBlocked&&!currentArchived,()=>Run(()=>{
                 if(MessageBox.Show(this,$"Вернуть в продажу: {seat.Label}?","Возврат в продажу",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
                 store.SetSeatsBlocked(current.Id,[seat.Id],false);LoadEvent(false);

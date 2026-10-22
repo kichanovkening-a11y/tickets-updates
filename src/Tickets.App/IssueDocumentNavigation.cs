@@ -55,7 +55,7 @@ internal static class IssueDocumentNavigation
         while(selected!=Invoice)
         {
             string next=Invoice;
-            EditorWindow editor=store.CustomIssueDocument(eventId,issueId,selected) is not null
+            EditorWindow editor=store.CustomIssueTemplate(eventId,issueId,selected) is not null
                 ?new CustomIssueDocumentWindow(store,eventId,issueId,selected)
                 :selected==Specification
                 ?new SpecificationWindow(store,eventId,issueId)

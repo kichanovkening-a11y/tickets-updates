@@ -259,7 +259,7 @@ internal static class Program
             var history=(DataGrid)main.FindName("HistoryGrid");Check(history.Items.Count==1,"one journal row for one issuance");
             Check(store.History(eventId).All(t=>t.Amount==123),"UI price overrides were persisted");
             hall.SetSelection(new[]{seatIds[0]});Pump();
-            Check(hall.SelectedSeats.Count==0,"issued place cannot enter generic selection");
+            Check(hall.Selected.SetEquals(new[]{seatIds[0]}),"occupied-only selection remains available for original invoice and return");
             var printButton=(Button)main.FindName("PrintTicketsButton");Check(!printButton.IsEnabled,"issued place cannot print from generic selection");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{seatIds[0],new Point(20,20)});Pump();
             Check(((TextBlock)main.FindName("StatusText")).Text.Contains("UI recipient"),"occupied place status identifies original recipient");
@@ -296,6 +296,11 @@ internal static class Program
                 try{Issuance018Checks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
             });
             Isolated("invoice-editor019",DocumentEditor019Checks.RunInvoice);
+            Isolated("document-editor020",DocumentEditor020Checks.Run);
+            Isolated("ui020",s=>{
+                var isolatedMain=new Tickets.App.MainWindow(s);isolatedMain.Show();Pump();
+                try{Ui020Checks.Run(s,isolatedMain);Senders020Checks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
+            });
             Isolated("ui019",s=>{
                 var isolatedMain=new Tickets.App.MainWindow(s);isolatedMain.Show();Pump();
                 try{Ui019Checks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
@@ -347,7 +352,7 @@ internal static class Program
             var reload=typeof(Tickets.App.MainWindow).GetMethod("RefreshCatalogNavigation",BindingFlags.Instance|BindingFlags.NonPublic)!;reload.Invoke(main,null);main.SelectEvent(archivedEvent);Pump();
             store.DeleteVenue(archivedVenue);store.DeleteRecipient("Архив UI организация");reload.Invoke(main,null);Pump();
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Удалённые из справочников")==true)&&((Grid)main.FindName("Workspace")).IsVisible,"deleted shows remain accessible in archive without losing selected context");
-            hall.SetSelection(new[]{archivedSeats[0]});Check(hall.Selected.Count==0&&!((Button)main.FindName("ReturnButton")).IsEnabled,"archived occupied place cannot enter generic selection");
+            hall.SetSelection(new[]{archivedSeats[0]});Check(hall.Selected.SetEquals(new[]{archivedSeats[0]})&&((Button)main.FindName("ReturnButton")).IsEnabled,"archived occupied place remains selectable for its return and invoice actions");
             typeof(Tickets.App.MainWindow).GetMethod("OpenSeatContext",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,new object[]{archivedSeats[0],new Point(20,20)});Pump();
             Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную")),"archived occupied place retains original invoice access");hall.ContextMenu.IsOpen=false;
             hall.SetSelection(new[]{archivedSeats[1]});((ComboBox)main.FindName("RecipientBox")).Text="Blocked archived issuance";

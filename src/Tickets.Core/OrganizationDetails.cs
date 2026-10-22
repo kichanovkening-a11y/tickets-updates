@@ -36,7 +36,7 @@ public sealed partial class Store
         }
         if(seeded){tx.Commit();return;}
         const string restored="ИП Баринов А.С.";
-        using(var unhide=Command(c,"DELETE FROM catalog_hidden WHERE kind='sender' AND (entity_key=$k OR entity_key='ИПБАРИНОВАС')","$k",SenderChoiceKey(restored))){unhide.Transaction=tx;unhide.ExecuteNonQuery();}
+        // Seeding can add missing defaults, but must never restore a user-deleted sender.
         HideCatalogEntry(c,tx,"sender",SenderChoiceKey("ИП Баринов А С"));
         RememberSender(c,tx,restored);
         var alliance=new OrganizationDetails(DefaultSender,"7729768795","772301001","1147746365062","109548, г. Москва, Вн. Тер. Г. Муниципальный округ Печатники, ул. Шоссейная, д. 20, кв. 75","ПАО «ПРОМСВЯЗЬБАНК» г. Москва","40702810500000272771","30101810400000000555","044525555","Заборский Л.Н.","Генеральный директор",Okved:"90.01",Okato:"45286580000");

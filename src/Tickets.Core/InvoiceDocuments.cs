@@ -181,6 +181,14 @@ public static class InvoiceDocuments
         body.Add(Paragraph(""),Paragraph("Отправитель: ____________________    Получатель: ____________________"));
         SaveDocument(body,destination);
     }
+    // Legacy authored text becomes a native package with its placeholders intact.
+    // The editor can therefore protect automatic fields without replacing wording.
+    internal static byte[] TextEditorTemplate(string kind,string text)
+    {
+        var path=Path.Combine(Path.GetTempPath(),"Tickets-editor-"+Guid.NewGuid().ToString("N")+".docx");
+        try{var body=new XElement(W+"body",text.Replace("\r\n","\n").Replace('\r','\n').Split('\n').Select(line=>Paragraph(line)));SaveDocument(body,path,kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);return File.ReadAllBytes(path);}
+        finally{if(File.Exists(path))File.Delete(path);}
+    }
     internal static void SaveDocument(XElement body,string destination,bool landscape=false,bool pageNumbers=false)
     {
         body.Add(new XElement(W+"sectPr",pageNumbers?new XElement(W+"footerReference",new XAttribute(W+"type","default"),new XAttribute(XNamespace.Get("http://schemas.openxmlformats.org/officeDocument/2006/relationships")+"id","footer1")):null,new XElement(W+"pgSz",new XAttribute(W+"w",landscape?16838:11906),new XAttribute(W+"h",landscape?11906:16838),landscape?new XAttribute(W+"orient","landscape"):null),

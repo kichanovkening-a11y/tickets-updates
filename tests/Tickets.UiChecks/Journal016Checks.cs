@@ -40,16 +40,28 @@ internal static class Journal016Checks
             selection.Remove(second);typeof(Tickets.App.MainWindow).GetMethod("UpdateJournalSelection",Private)!.Invoke(main,null);Pump();
             Check(((Button)main.FindName("MergeInvoicesButton")).Visibility!=Visibility.Visible,"Merge hides below two selected invoices");
             Check(Math.Abs(recipient.ActualWidth-237)<1,"Selection preserves user column width");
-            var path=Path.Combine(Path.GetDirectoryName(store.Path)!,"journal-columns.json");
+            var path=Path.Combine(Path.GetDirectoryName(store.Path)!,"journal-columns-by-event.json");
             var timeout=DateTime.UtcNow.AddSeconds(2);
             while((!File.Exists(path)||!File.ReadAllText(path).Contains("\"Width\":237"))&&DateTime.UtcNow<timeout){Pump();Thread.Sleep(10);}
             Check(File.Exists(path)&&File.ReadAllText(path).Contains("\"Width\":237"),"Column width is saved before closing the application");
             var otherShow=store.Events().First(e=>e.Id!=show.Id);
             typeof(Tickets.App.MainWindow).GetField("current",Private)!.SetValue(main,otherShow);
             typeof(Tickets.App.MainWindow).GetMethod("LoadJournal",Private)!.Invoke(main,null);Pump();
-            Check(Math.Abs(recipient.Width.Value-237)<.1,"Column width is shared across shows");
+            Check(Math.Abs(recipient.Width.Value-237)>.1,"A different event starts with its own column widths");
+            recipient.Width=new DataGridLength(181);
+            typeof(Tickets.App.MainWindow).GetField("current",Private)!.SetValue(main,show);
+            typeof(Tickets.App.MainWindow).GetMethod("LoadJournal",Private)!.Invoke(main,null);Pump();
+            Check(Math.Abs(recipient.Width.Value-237)<.1,"Returning to the first event restores its width even before the debounce timer fires");
             var reopened=new Tickets.App.MainWindow(new Store(store.Path));
-            try{var columns=((DataGrid)reopened.FindName("HistoryGrid")).Columns;Check(Math.Abs(columns.Single(c=>Equals(c.Header,"Получатель")).Width.Value-237)<.1,"Column width survives opening another window");}finally{reopened.Close();}
+            try{
+                typeof(Tickets.App.MainWindow).GetField("current",Private)!.SetValue(reopened,show);
+                typeof(Tickets.App.MainWindow).GetMethod("LoadJournal",Private)!.Invoke(reopened,null);
+                var columns=((DataGrid)reopened.FindName("HistoryGrid")).Columns;
+                Check(Math.Abs(columns.Single(c=>Equals(c.Header,"Получатель")).Width.Value-237)<.1,"First event width survives opening a fresh Store and window");
+                typeof(Tickets.App.MainWindow).GetField("current",Private)!.SetValue(reopened,otherShow);
+                typeof(Tickets.App.MainWindow).GetMethod("LoadJournal",Private)!.Invoke(reopened,null);
+                Check(Math.Abs(columns.Single(c=>Equals(c.Header,"Получатель")).Width.Value-181)<.1,"Second event keeps its independent width after restart");
+            }finally{reopened.Close();}
             var choiceType=typeof(Tickets.App.MainWindow).Assembly.GetType("Tickets.App.InvoiceChoiceWindow")!;
             var choice=(Window)Activator.CreateInstance(choiceType,Private,null,new object[]{store,show.Id},null)!;
             try

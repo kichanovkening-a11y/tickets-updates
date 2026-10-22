@@ -31,12 +31,12 @@ internal static class Hall019Checks
         foreach(var vip in new[]{"VIP №1","VIP №2","VIP №3"})Require(russian.Where(s=>s.Sector==vip).Select(s=>s.Row).Distinct().Order().SequenceEqual(new[]{"22","23","24"}),"VIP source rows 22–24");
         foreach(var side in new[]{"правая сторона","левая сторона"})Require(russian.Where(s=>s.Sector==$"Балкон №4 ({side})").Select(s=>s.Row).Distinct().Order().SequenceEqual(new[]{"22","23","24","25","26","27"}),"balcony4 source rows22–27");
         var rp=russian.Where(s=>s.Sector=="Партер"&&s.Row=="1").ToDictionary(s=>int.Parse(s.Number));
-        Require(rp[1].X>rp[25].X&&rp[6].X-rp[7].X>80&&rp[19].X-rp[20].X>80,"Russian right-to-left labels and two broad aisles");
+        Require(rp[1].X>rp[25].X&&rp[6].X-rp[7].X>18&&rp[19].X-rp[20].X>18,"Russian right-to-left labels and two compact aisles");
         Require(russian.Where(s=>s.Sector=="Экстрим партер").Max(s=>s.Y)<russian.Where(s=>s.Sector=="Партер").Min(s=>s.Y),"extra front rows stay closest to stage");
         Rows(estrada,"Партер",[20,20,29,32,38,40,42,42,40,38,36,36,32,28,22,18,40]);
         Rows(estrada,"Бельэтаж",[34,39,44,52,55,68,49,52,56]);
         foreach(var (row,missing) in new[]{(2,new[]{12,13}),(3,new[]{17,18,19}),(4,new[]{16,17,18,19})})Require(!estrada.Any(s=>s.Sector=="Партер"&&s.Row==row.ToString()&&missing.Contains(int.Parse(s.Number))),"source numbering holes must stay empty");
-        var ep=estrada.Where(s=>s.Sector=="Партер"&&s.Row=="1").ToDictionary(s=>int.Parse(s.Number));Require(ep[1].X<ep[20].X&&ep[11].X-ep[10].X>80,"Estrada keeps left-to-right source order and centre aisle");
+        var ep=estrada.Where(s=>s.Sector=="Партер"&&s.Row=="1").ToDictionary(s=>int.Parse(s.Number));Require(ep[1].X<ep[20].X&&ep[11].X-ep[10].X>18,"Estrada keeps left-to-right source order and centre aisle");
     }
     private static void Rows(IReadOnlyList<DraftSeat> seats,string sector,int[] counts)
     {for(var r=1;r<=counts.Length;r++)Require(seats.Count(s=>s.Sector==sector&&s.Row==r.ToString())==counts[r-1],$"{sector}, row{r} count");}

@@ -40,7 +40,10 @@ public sealed class HallView : FrameworkElement
     private long? hoverId;
     public HashSet<long> Selected { get; }=[];
     public bool AllowUnavailableSelection{get;set;}
-    private bool CanSelect(SeatInfo seat)=>AllowUnavailableSelection||SeatSelection.CanSelect(seat);
+    public bool AllowOccupiedSelection{get;set;}
+    private bool CanSelect(SeatInfo seat)=>AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&seat.TicketId.HasValue);
+    private void ExcludeOccupiedFromMixedSelection()
+    {if(!AllowUnavailableSelection&&SelectedSeats.Any(SeatSelection.CanSelect))Selected.ExceptWith(seats.Where(s=>!SeatSelection.CanSelect(s)).Select(s=>s.Id));}
     public event Action? SelectionChanged;
     public event EventHandler? EmptySpaceClicked;
     public event Action<long,Point>? SeatContextRequested;
@@ -152,7 +155,7 @@ public sealed class HallView : FrameworkElement
     public void Zoom(double factor) => ZoomAt(new Point(ActualWidth/2,ActualHeight/2),factor);
     public void Clear() { Selected.Clear(); SelectionChanged?.Invoke(); InvalidateVisual(); }
     public void SetSelection(IEnumerable<long> ids)
-    { var allowed=seats.Where(CanSelect).Select(s=>s.Id).ToHashSet();Selected.Clear();foreach(var id in ids)if(allowed.Contains(id))Selected.Add(id);SelectionChanged?.Invoke();InvalidateVisual(); }
+    { var allowed=seats.Where(CanSelect).Select(s=>s.Id).ToHashSet();Selected.Clear();foreach(var id in ids)if(allowed.Contains(id))Selected.Add(id);ExcludeOccupiedFromMixedSelection();SelectionChanged?.Invoke();InvalidateVisual(); }
     private Point World(Point p)=>new((p.X-offset.X)/zoom,(p.Y-offset.Y)/zoom);
     private Point Screen(Point p)=>new(p.X*zoom+offset.X,p.Y*zoom+offset.Y);
     private void ZoomAt(Point pivot,double factor)
@@ -239,8 +242,7 @@ public sealed class HallView : FrameworkElement
                 var s=Hit(p);
                 if(s is not null)
                 {
-                    if(AllowUnavailableSelection)SeatSelection.Toggle(Selected,s.Id);else SeatSelection.Toggle(Selected,s);
-                    if(!CanSelect(s))rejected=s;
+                    var click=ClickSeat(s);rejected=click.Rejected;contextSeat=click.Context;
                 }
                 else if(e.ChangedButton==MouseButton.Left && Hit(start) is null)emptyClick=true;
             }
@@ -251,10 +253,28 @@ public sealed class HallView : FrameworkElement
         if(contextSeat is not null) SeatContextRequested?.Invoke(contextSeat.Id,p);
         if(emptyClick)EmptySpaceClicked?.Invoke(this,EventArgs.Empty);
     }
+    private (SeatInfo? Context,SeatInfo? Rejected) ClickSeat(SeatInfo seat)
+    {
+        // A click inside an occupied selection opens its actions. Removal remains
+        // available through the existing removal drag gesture.
+        var openSelected=AllowOccupiedSelection&&seat.TicketId.HasValue&&Selected.Contains(seat.Id)&&SelectedSeats.All(s=>s.TicketId.HasValue);
+        if(!openSelected)
+        {
+            if(CanSelect(seat))SeatSelection.Toggle(Selected,seat.Id);else Selected.Remove(seat.Id);
+        }
+        var mixed=SelectedSeats.Any(SeatSelection.CanSelect)&&SelectedSeats.Any(s=>!SeatSelection.CanSelect(s));
+        var rejected=mixed?SelectedSeats.First(s=>!SeatSelection.CanSelect(s)):!CanSelect(seat)?seat:null;
+        ExcludeOccupiedFromMixedSelection();
+        var context=!mixed&&AllowOccupiedSelection&&seat.TicketId.HasValue&&Selected.Contains(seat.Id)?seat:null;
+        return (context,rejected);
+    }
+
     private void SelectRange(Point end)
     {
         var to=World(end);
-        var next=SeatSelection.ApplyRectangle(seats,gestureSelection,worldAnchor.X,worldAnchor.Y,to.X,to.Y,removing,AllowUnavailableSelection);
+        var candidates=seats.Where(CanSelect).ToArray();
+        var next=SeatSelection.ApplyRectangle(candidates,gestureSelection,worldAnchor.X,worldAnchor.Y,to.X,to.Y,removing,true);
+        if(!AllowUnavailableSelection&&candidates.Any(s=>next.Contains(s.Id)&&SeatSelection.CanSelect(s)))next.ExceptWith(candidates.Where(s=>!SeatSelection.CanSelect(s)).Select(s=>s.Id));
         if(Selected.SetEquals(next))return;
         Selected.Clear();Selected.UnionWith(next);SelectionChanged?.Invoke();
     }
@@ -265,7 +285,9 @@ public sealed class HallView : FrameworkElement
         var left=Math.Min(worldAnchor.X,to.X);var right=Math.Max(worldAnchor.X,to.X);
         var top=Math.Min(worldAnchor.Y,to.Y);var bottom=Math.Max(worldAnchor.Y,to.Y);
         if(left>=right||top>=bottom)return [];
-        return seats.Where(s=>!CanSelect(s)&&s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top).ToArray();
+        var touched=seats.Where(s=>s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top).ToArray();
+        if(AllowOccupiedSelection&&!touched.Any(SeatSelection.CanSelect)&&!SelectedSeats.Any(SeatSelection.CanSelect))return [];
+        return touched.Where(s=>!SeatSelection.CanSelect(s)).ToArray();
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
@@ -318,7 +340,7 @@ public sealed class HallView : FrameworkElement
         CloseTip();
         var body=new StackPanel();
         body.Children.Add(new TextBlock{
-            Text=$"{seat.Label}: {seat.Status}.\nМесто занято и не выбирается. Повторная печать — из исходной накладной.",
+            Text=$"{seat.Label}: {seat.Status}.\nВ смешанном выборе оставлены только свободные места. Повторная печать занятых — из исходной накладной.",
             TextWrapping=TextWrapping.Wrap,Foreground=Brushes.Black,FontSize=14,MaxWidth=270
         });
         var ok=new Button{Content="ОК",Width=70,Height=30,FontSize=14,Margin=new Thickness(0,6,0,0),ContentTemplate=null,HorizontalAlignment=HorizontalAlignment.Right};

@@ -33,10 +33,11 @@ public partial class MainWindow : Window
         Height=Math.Min(880,workArea.Height);
         MinWidth=Math.Min(800,workArea.Width);
         MinHeight=Math.Min(500,workArea.Height);
+        Hall.AllowOccupiedSelection=true;
         Hall.SelectionChanged+=UpdateSelection;
         Hall.EmptySpaceClicked+=(_,_)=>SetPriceFocus(null);
         Hall.SeatContextRequested+=OpenSeatContext;
-        Hall.SeatSelectionRejected+=seat=>StatusText.Text=$"{seat.Label}: {seat.Status}. Место занято и не выбирается. Повторная печать — из исходной накладной.";
+        Hall.SeatSelectionRejected+=seat=>StatusText.Text=$"{seat.Label}: {seat.Status}. В смешанном выборе оставлены свободные места. Повторная печать — из исходной накладной.";
         Loaded+=(_,_)=>Run(()=> {
             ReadEventCatalog(); ready=true; ApplyFilter();RefreshRecipients();RefreshSenders();
             HomeSummary.Text=$"В базе мероприятий: {events.Count}. Старые выдачи не переносились.";
@@ -189,7 +190,7 @@ public partial class MainWindow : Window
         ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
         UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
         ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
-        SelectionHint.Text=archived?"Показ удалён из рабочих списков. Накладные доступны в журнале.":selected.Count==0?"Клик и рамка выбирают свободные места. Занятые и снятые с продажи места не выбираются. Повторная печать — из исходной накладной.":
+        SelectionHint.Text=archived?"Показ удалён из рабочих списков. Накладные доступны в журнале.":selected.Count==0?"Клик и рамка выбирают места. Для занятых мест доступны исходная накладная и возврат.":
             free==selected.Count?(string.IsNullOrWhiteSpace(RecipientName)?"Выберите или создайте получателя для каждой новой выдачи и печати.":"Все выбранные места доступны для выдачи и печати."):
             "Назначьте цену выбранным местам для выдачи и печати.";
     }

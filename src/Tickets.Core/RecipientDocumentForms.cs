@@ -78,7 +78,20 @@ public sealed partial class Store
         using var copy=Command(c,"INSERT INTO issue_custom_form(issue_id,kind,file_name,content) SELECT $t,kind,file_name,content FROM issue_custom_form WHERE issue_id=$s; INSERT INTO issue_contract_date(issue_id,value) SELECT $t,value FROM issue_contract_date WHERE issue_id=$s; INSERT INTO issue_contract_number(issue_id,value) SELECT $t,value FROM issue_contract_number WHERE issue_id=$s","$t",target,"$s",source);copy.Transaction=tx;copy.ExecuteNonQuery();
     }
     public byte[]? CustomIssueTemplate(long eventId,long issueId,string kind)
-    {var invoice=Invoice(eventId,issueId);return StandardDocumentForms.Resolve(kind,SnapshotRecipientForm(invoice,kind)?.Content)??StandardDocumentForms.EditorTemplate(kind);}
+    {
+        var invoice=Invoice(eventId,issueId);
+        if(IssueDocumentKinds.All.Contains(kind)&&CustomIssueDocument(eventId,issueId,kind) is null)
+        {
+            var text=GetIssueDocument(eventId,issueId,kind).Template;
+            if(!SourceBusinessForms.CanUseSource(kind,text))
+            {
+                if(!Regex.IsMatch(text,@"\{\{?summary\}\}?",RegexOptions.IgnoreCase))text+="\n\n{summary}";
+                if(!Regex.IsMatch(text,@"\{\{?total\}\}?",RegexOptions.IgnoreCase))text+="\n{total}";
+            }
+            return InvoiceDocuments.TextEditorTemplate(kind,text);
+        }
+        return StandardDocumentForms.Resolve(kind,SnapshotRecipientForm(invoice,kind)?.Content)??StandardDocumentForms.EditorTemplate(kind);
+    }
     public IssueDocumentInfo? CustomIssueDocument(long eventId,long issueId,string kind)
     {
         var invoice=Invoice(eventId,issueId);var form=SnapshotRecipientForm(invoice,kind);
@@ -100,7 +113,7 @@ public sealed partial class Store
 public static class CustomDocumentForms
 {
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    private static bool Part(string name)=>name=="word/document.xml"||Regex.IsMatch(name,@"^word/(header|footer)\d+\.xml$");
+    private static bool Part(string name)=>name is "word/document.xml" or "word/styles.xml" or "word/numbering.xml"||Regex.IsMatch(name,@"^word/(header|footer)\d+\.xml$");
     public static void Validate(byte[] content)
     {
         if(content is null||content.Length==0||content.Length>20*1024*1024)throw new TicketException("Загрузите документ Word размером до 20 МБ.");
@@ -141,6 +154,7 @@ public static class CustomDocumentForms
     {
         var standard=StandardDocumentForms.IsStandard(content);
         var values=SourceBusinessForms.Values(invoice);
+        values["items"]=BusinessDocumentTemplates.Items(invoice,kind);values["title"]=invoice.Title;
         if(standard&&kind=="ttn"){values["senderDetails"]=values["senderDetails"].Replace("\n",", ");values["recipientDetails"]=values["recipientDetails"].Replace("\n",", ");}
         var calendar=SourceBusinessForms.EventCalendarDate(invoice);
         values["contractDate"]=contractDate.ToString("dd.MM.yyyy");values["eventCalendarDate"]=calendar;

@@ -25,7 +25,7 @@ public sealed partial class Store
     }
     private string DocumentSetting(string name,string fallback)
     {using var c=Open();using var cmd=Command(c,"SELECT value FROM document_setting WHERE name=$n","$n",name);return cmd.ExecuteScalar() as string??fallback;}
-    public string Sender { get {var sender=DocumentSetting("sender",DefaultSender);return SenderChoiceAllowed(sender)?sender:DefaultSender;} }
+    public string Sender { get {var sender=DocumentSetting("sender",DefaultSender);return SenderChoiceAllowed(sender)?sender:Senders().FirstOrDefault()??"";} }
     public string DocumentsDirectory=>DocumentSetting("directory",System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"Documents"));
     // Manual exports share their last destination without changing managed internal copies.
     public string DocumentSaveDirectory=>DocumentSetting("manual-save-directory",DocumentsDirectory);
@@ -36,7 +36,7 @@ public sealed partial class Store
     }
     public void SaveDocumentSettings(string sender,string directory)
     {
-        sender=Required(sender,"От кого");if(!SenderChoiceAllowed(sender))sender=DefaultSender;
+        sender=Required(sender,"От кого");if(!SenderChoiceAllowed(sender))throw new TicketException("Отправитель удалён из списка. Выберите другого или создайте отправителя заново.");
         directory=System.IO.Path.GetFullPath(directory.Trim());Directory.CreateDirectory(directory);
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         using(var prior=Command(c,"SELECT value FROM document_setting WHERE name='sender'"))
@@ -48,7 +48,7 @@ public sealed partial class Store
     {
         sender=Required(sender,"От кого");using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         using(var old=Command(c,"SELECT sender FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId))
-        {old.Transaction=tx;var prior=old.ExecuteScalar() as string;if(prior is null)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,prior);if(prior!=sender)CaptureIssueOrganization(c,tx,issueId,sender,true);}
+        {old.Transaction=tx;var prior=old.ExecuteScalar() as string;if(prior is null)throw new TicketException("Выдача не найдена в этом мероприятии.");if(CatalogText.Key(prior)!=CatalogText.Key(sender)&&!SenderChoiceAllowed(sender))throw new TicketException("Отправитель удалён из списка. Выберите другого или создайте отправителя заново.");RememberSender(c,tx,prior);if(prior!=sender)CaptureIssueOrganization(c,tx,issueId,sender,true);}
         using var cmd=Command(c,"UPDATE issue_batch SET sender=$s WHERE id=$i AND event_id=$e","$s",sender,"$i",issueId,"$e",eventId);cmd.Transaction=tx;
         if(cmd.ExecuteNonQuery()!=1)throw new TicketException("Выдача не найдена в этом мероприятии.");RememberSender(c,tx,sender);tx.Commit();
     }

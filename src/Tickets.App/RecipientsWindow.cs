@@ -10,7 +10,7 @@ internal sealed class RecipientsWindow:EditorWindow
 {
     private readonly TextBox search=new();
     private readonly CheckBox showDeleted=new(){Content="Показать удалённых",Margin=new Thickness(0,5,0,5)};
-    private readonly ListBox organizations=new(){DisplayMemberPath=nameof(RecipientDirectoryInfo.Caption),HorizontalContentAlignment=HorizontalAlignment.Stretch};
+    private readonly ListBox organizations=new(){DisplayMemberPath=nameof(RecipientDirectoryInfo.Caption),HorizontalContentAlignment=HorizontalAlignment.Stretch,FontSize=16,FontWeight=FontWeights.Bold};
     private readonly TreeView history=new();
     private readonly TextBlock heading=new(){FontSize=21,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
@@ -114,7 +114,7 @@ internal sealed class RecipientsWindow:EditorWindow
             var events=performance.GroupBy(x=>x.Issue.EventId);
             foreach(var showing in (past?events.OrderByDescending(g=>g.First().StartsAt):events.OrderBy(g=>g.First().StartsAt)))
             {
-                var item=showing.First();var date=new TreeViewItem{Header=$"{item.EventDate} · {item.Venue}",IsExpanded=true};node.Items.Add(date);
+                var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){Foreground=Brushes.Red,FontSize=15});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
                 foreach(var issue in showing.OrderByDescending(x=>x.Issue.IssuedAt).ThenByDescending(x=>x.Issue.Id))
                 {
                     var row=new TreeViewItem{Tag=issue,Header=new TextBlock{Text=$"№ {issue.Issue.Id} · {issue.Issue.Date}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};

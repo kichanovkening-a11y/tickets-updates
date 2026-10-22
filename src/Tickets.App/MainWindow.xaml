@@ -111,7 +111,7 @@
                       <Button Style="{StaticResource SeatActionStyle}" Content="Создать / изменить отправителя" Click="EditSenderClick"/>
                     </WrapPanel>
                     <TextBlock Text="От кого" Margin="0,6,0,4"/>
-                    <ComboBox x:Name="SenderBox" PreviewMouseRightButtonUp="SenderContextRequested" IsEditable="True" IsTextSearchEnabled="True" MinHeight="34" Padding="4"/>
+                    <ComboBox x:Name="SenderBox" DropDownOpened="SenderDropDownOpened" PreviewMouseRightButtonUp="SenderContextRequested" IsEditable="True" IsTextSearchEnabled="True" MinHeight="34" Padding="4"/>
                     <Grid Margin="0,7,0,5"><Grid.ColumnDefinitions><ColumnDefinition Width="80"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                       <StackPanel><TextBlock Text="Серия"/><TextBox x:Name="SeriesBox" Text="ТЕСТ" MaxLength="32" TextChanged="SeriesChanged"/></StackPanel>
                       <StackPanel Grid.Column="2"><TextBlock Text="Первый номер"/><TextBox x:Name="NumberBox" Text="1" TextChanged="InputChanged"/></StackPanel>

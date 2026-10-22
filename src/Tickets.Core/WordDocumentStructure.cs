@@ -7,6 +7,10 @@ internal static class WordDocumentStructure
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static readonly IReadOnlyDictionary<string,string[]> Orders=new Dictionary<string,string[]>
     {
+        ["tcBorders"]="top left start bottom right end insideH insideV tl2br tr2bl".Split(' '),
+        ["tblBorders"]="top left start bottom right end insideH insideV".Split(' '),
+        ["tcMar"]="top left start bottom right end".Split(' '),
+        ["tblCellMar"]="top left start bottom right end".Split(' '),
         ["tcPr"]="cnfStyle tcW gridSpan hMerge vMerge tcBorders shd noWrap tcMar textDirection tcFitText vAlign hideMark headers cellIns cellDel cellMerge tcPrChange".Split(' '),
         ["trPr"]="cnfStyle divId gridBefore gridAfter wBefore wAfter cantSplit trHeight tblHeader tblCellSpacing jc hidden ins del trPrChange".Split(' '),
         ["tblPr"]="tblStyle tblpPr tblOverlap bidiVisual tblStyleRowBandSize tblStyleColBandSize tblW jc tblCellSpacing tblInd tblBorders shd tblLayout tblCellMar tblLook tblCaption tblDescription tblPrChange".Split(' '),
@@ -21,6 +25,10 @@ internal static class WordDocumentStructure
             var children=group.Elements().Select((element,index)=>(element,index)).OrderBy(pair=>{var index=Array.IndexOf(order,pair.element.Name.LocalName);return index<0?int.MaxValue:index;}).ThenBy(pair=>pair.index).Select(pair=>pair.element).ToArray();
             group.ReplaceNodes(children);
         }
+        // Tables and numbering use ST_JcTable / ST_Jc enums, which do not
+        // accept the paragraph-only logical values start/end.
+        foreach(var alignment in document.Descendants().Where(e=>e.Name==W+"lvlJc"||(e.Name==W+"jc"&&e.Parent?.Name==W+"tblPr")))
+        {var value=(string?)alignment.Attribute(W+"val");if(value is "start" or "end")alignment.SetAttributeValue(W+"val",value=="start"?"left":"right");}
         foreach(var cell in document.Descendants(W+"tc"))if(cell.Elements().LastOrDefault()?.Name!=W+"p")cell.Add(new XElement(W+"p"));
     }
     public static void Validate(XDocument document)

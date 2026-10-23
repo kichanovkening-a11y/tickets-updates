@@ -41,6 +41,7 @@ internal static class Parties018Checks
         {
             var sender=(ComboBox)invoice.GetType().GetField("senderBox",flags)!.GetValue(invoice)!;
             sender.SelectedItem=selected;
+            Corrections025UiChecks.ConfirmSender(()=>invoice.GetType().GetMethod("PersistSender",flags)!.Invoke(invoice,null),true);
             Check(sender.ContextMenu?.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Удалить отправителя из списка"))==true,"sender dropdown offers deletion");
             Check(Logical(invoice).OfType<Button>().Any(b=>Equals(b.Content,"Реквизиты получателя")),"recipient requisites remain explicitly separate");
             Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{

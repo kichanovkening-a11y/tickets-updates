@@ -19,7 +19,7 @@ internal sealed class TicketPrintWindow:EditorWindow
     private InvoiceInfo? issuedSnapshot;
     private Action? refreshPreview;
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
-    private readonly ComboBox blankChoice=new(){MinWidth=260,MinHeight=38,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
+    private readonly ComboBox blankChoice=new(){Width=200,MinHeight=44,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
     private TicketBlank? SelectedBlank=>blankChoice.SelectedItem as TicketBlank;
     public long IssueId{get;private set;}
     public bool Printed{get;private set;}
@@ -42,16 +42,13 @@ internal sealed class TicketPrintWindow:EditorWindow
     private void Initialize()
     {
         var options=new StackPanel();
-        var templateBar=new WrapPanel{Margin=new Thickness(0,0,0,10)};
-        templateBar.Children.Add(new TextBlock{Text="На каком бланке печатать:",FontSize=18,FontWeight=FontWeights.Bold,VerticalAlignment=VerticalAlignment.Center});
         blankChoice.Items.Add(new {Name="Стандартный"});foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);
         var lastBlankId=Store.LastTicketBlankId;
         blankChoice.SelectedItem=blankChoice.Items.OfType<TicketBlank>().FirstOrDefault(b=>b.Id==lastBlankId)??blankChoice.Items[0];
-        templateBar.Children.Add(blankChoice);
         blankChoice.SelectionChanged+=(_,_)=>Try(()=>{Store.RememberTicketBlank(SelectedBlank?.Id);refreshPreview?.Invoke();});
-        options.Children.Add(templateBar);options.Children.Add(status);
+        options.Children.Add(status);
         status.Text=draft?"Предпросмотр. Новые билеты будут выданы после подтверждения печати. Ранее выданные билеты останутся в исходных накладных.":"Печать билетов исходной накладной. Серии, номера, цены и привязка к накладной сохраняются.";
-        refreshPreview=UnifiedPrintPreview.Attach(this,BuildPreview,Print,options);
+        refreshPreview=UnifiedPrintPreview.Attach(this,BuildPreview,Print,options,blankChoice,()=>Store.TicketPrintWarningSuppressed(SelectedBlank?.Id),()=>Store.SuppressTicketPrintWarning(SelectedBlank?.Id,true));
     }
     private FixedDocument BuildPreview(PrintDialog dialog,bool allowOverflow)
     {
@@ -105,6 +102,7 @@ internal sealed class TicketPrintWindow:EditorWindow
 
     private FixedDocument BuildWithSources(InvoiceInfo invoice,double pageWidth,double pageHeight,PrintDialog? printer=null,bool allowOverflow=false)
     {
+        invoice=invoice with{Tickets=TicketPrintOrder.Order(invoice.Tickets,Store.Seats(eventId))};
         var headers=new Dictionary<long,InvoiceInfo>();
         foreach(var issue in invoice.Tickets.Where(t=>t.IssueId>0).GroupBy(t=>t.IssueId))
         {var original=Store.Invoice(eventId,issue.Key);foreach(var ticket in issue)headers[ticket.Id]=original;}
@@ -125,6 +123,11 @@ internal sealed class TicketPrintWindow:EditorWindow
                 throw new PrintAreaWarning("Билет стандартного бланка выходит за печатную область принтера. Выберите принтер с меньшими полями. Исходные координаты и масштаб сохраняются.");
         }
     }
+    private static Rect InkBounds(FrameworkElement visual,double x,double y)
+    {
+        visual.Measure(new Size(visual.Width,visual.Height));visual.Arrange(new Rect(0,0,visual.Width,visual.Height));visual.UpdateLayout();
+        var ink=VisualTreeHelper.GetDescendantBounds(visual);if(ink.IsEmpty)return Rect.Empty;ink.Offset(x,y);return ink;
+    }
     private const double DipsPerMm=96.0/25.4;
     private static double Mm(double value)=>value*DipsPerMm;
     internal static string BlankSample(string key)=>key switch {"event"=>"Название мероприятия","venue"=>"Название площадки","date"=>"21.10.2026 19:00","sector"=>"Партер","row"=>"Ряд 5","seat"=>"Место 12","price"=>"1 500 ₽","number"=>"АБ 000001",_=>key};
@@ -144,13 +147,6 @@ internal sealed class TicketPrintWindow:EditorWindow
             throw new TicketException("Принтер сообщил недопустимый размер бумаги или печатной области.");
         if(!allowOverflow&&blank.Legacy is null&&(width>mediaWidth+0.5||height>mediaHeight+0.5))
             throw new PrintAreaWarning($"Бланк «{blank.Name}» ({blank.PageWidth} × {blank.PageHeight} мм) не помещается на бумагу принтера ({mediaWidth/DipsPerMm:0.#} × {mediaHeight/DipsPerMm:0.#} мм). Выберите подходящую бумагу и ориентацию в настройках принтера.");
-        if(printer?.PrintQueue is not null&&blank.Legacy is null&&!allowOverflow)
-            foreach(var position in blank.Positions)foreach(var field in TicketBlankEditing.FieldsFor(blank,position).Where(f=>f.Enabled))
-            {
-                var x=Mm(position.X+field.X);var y=Mm(position.Y+field.Y);
-                if(x<originX-0.5||y<originY-0.5||x+Mm(field.Width)>originX+printableWidth+0.5||y+Mm(field.Height)>originY+printableHeight+0.5)
-                    throw new PrintAreaWarning($"Поле «{field.DisplayName}» выходит за печатную область принтера. Переместите поле или позицию билета внутрь листа в разделе «Бланки печати». Непечатаемые поля слева и сверху: {originX/DipsPerMm:0.#} и {originY/DipsPerMm:0.#} мм.");
-            }
         if(blank.Legacy is not null)return BuildLegacyDocument(invoice,blank,headers,printer?.PrintQueue is null?width:mediaWidth,printer?.PrintQueue is null?height:mediaHeight,printer?.PrintQueue is null?null:new Rect(originX,originY,printableWidth,printableHeight),allowOverflow);
         BitmapImage? background=null;
         if(blank.PrintBackground){var path=Store.TicketBlankScanPath(blank.ScanPath);if(!System.IO.File.Exists(path))throw new TicketException("Скан бланка не найден. Загрузите его заново в разделе «Бланки печати». ");background=new BitmapImage(new Uri(path));}
@@ -168,6 +164,12 @@ internal sealed class TicketPrintWindow:EditorWindow
                 {
                     var text=field.Key switch {"event"=>source.Title,"venue"=>source.Venue,"date"=>source.EventDate,"sector"=>ticket.Sector,"row"=>ticket.Row,"seat"=>ticket.Seat,"price"=>InvoiceDocuments.Money(ticket.Amount),"number"=>ticket.Code,_=>""};
                     var fit=BlankFieldVisual(field,text,DipsPerMm);
+                    if(!allowOverflow&&printer?.PrintQueue is not null)
+                    {
+                        var ink=InkBounds(fit,Mm(position.X+field.X),Mm(position.Y+field.Y));
+                        if(!ink.IsEmpty&&(ink.Left<originX-.5||ink.Top<originY-.5||ink.Right>originX+printableWidth+.5||ink.Bottom>originY+printableHeight+.5))
+                            throw new PrintAreaWarning($"Поле «{field.DisplayName}» выходит за печатную область принтера. Исходные координаты и масштаб сохраняются.");
+                    }
                     FixedPage.SetLeft(fit,Mm(position.X+field.X));FixedPage.SetTop(fit,Mm(position.Y+field.Y));page.Children.Add(fit);
                 }
             }
@@ -231,16 +233,18 @@ internal sealed class TicketPrintWindow:EditorWindow
                 var text=field.Binding.Length==0?field.Text:LegacyTicketTemplates.Value(field.Binding,source,ticket,address,printed,placement.PageNumber);
                 if(text.Length==0)continue;
                 var box=new Rect(Mm(placement.X),Mm(placement.Y),Mm(field.Width),Mm(field.Height));
-                if(!allowOverflow&&printableArea is {} area&&(box.Left<area.Left-.5||box.Top<area.Top-.5||box.Right>area.Right+.5||box.Bottom>area.Bottom+.5))
+                var visual=LegacyElementVisual(field,text,DipsPerMm);
+                var ink=!allowOverflow&&printableArea is not null?InkBounds(visual,box.Left,box.Top):Rect.Empty;
+                if(!ink.IsEmpty&&printableArea is {} area&&(ink.Left<area.Left-.5||ink.Top<area.Top-.5||ink.Right>area.Right+.5||ink.Bottom>area.Bottom+.5))
                     throw new PrintAreaWarning($"Поле «{field.Name}» исходного бланка выходит за печатную область принтера. Выберите бумагу и принтер с подходящими полями. Исходные координаты не сдвигаются.");
-                var visual=LegacyElementVisual(field,text,DipsPerMm);FixedPage.SetLeft(visual,box.Left);FixedPage.SetTop(visual,box.Top);page.Children.Add(visual);
+                FixedPage.SetLeft(visual,box.Left);FixedPage.SetTop(visual,box.Top);page.Children.Add(visual);
             }
             document.Pages.Add(new PageContent{Child=page});
         }
         return document;
     }
     internal static FixedDocument BuildDocument(InvoiceInfo invoice,double pageWidth=794,double pageHeight=1123)
-        =>BuildDocumentCore(invoice,pageWidth,pageHeight,null);
+        =>BuildDocumentCore(invoice with{Tickets=TicketPrintOrder.Order(invoice.Tickets)},pageWidth,pageHeight,null);
     private static FixedDocument BuildDocumentCore(InvoiceInfo invoice,double pageWidth,double pageHeight,IReadOnlyDictionary<long,InvoiceInfo>? headers)
     {
         if(!double.IsFinite(pageWidth)||!double.IsFinite(pageHeight)||pageWidth<160||pageHeight<180)

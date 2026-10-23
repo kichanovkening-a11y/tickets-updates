@@ -202,8 +202,9 @@ internal static class Program
                 creation=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="SenderEditorWindow"&&w.IsVisible);
                 var inputs=Logical(creation).OfType<TextBox>().ToArray();Check(inputs.Length>1&&!inputs[0].IsReadOnly,"main sender creation includes editable name and requisites");
                 inputs[0].Text="UI sender created from main";Click(creation,"Создать");
-            }catch(Exception ex){senderCreationError=ex;creation?.Close();}}));Click(main,"Создать / изменить отправителя");if(senderCreationError is not null)throw senderCreationError;
+            }catch(Exception ex){senderCreationError=ex;creation?.Close();}}));Corrections025UiChecks.ConfirmSender(()=>Click(main,"Создать / изменить отправителя"),true);if(senderCreationError is not null)throw senderCreationError;
             Check(senderBox.Text=="UI sender created from main"&&store.Senders().Contains(senderBox.Text),"main sender creation persists and selects sender");senderBox.Text=Store.DefaultSender;
+            Corrections025UiChecks.ConfirmSender(()=>typeof(Tickets.App.MainWindow).GetMethod("ConfirmSender025",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null),true);
             ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
             store.SaveOrganizationDetails("UI recipient",false,new OrganizationDetails(Name:"UI recipient",Inn:"UI-REQUISITES-MUST-NOT-APPEAR",Signatory:"UI invoice signatory",Position:"UI director"));
             var summaryLabel=(TextBlock)main.FindName("SelectedSummary");Check(Math.Abs(summaryLabel.FontSize-16.8)<.01&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum retain bold red styling at 70 percent size");
@@ -230,7 +231,7 @@ internal static class Program
                     Check(Logical(window).OfType<FlowDocumentScrollViewer>().Single().ActualHeight>400,"invoice preview uses enlarged content area");
                     var invoiceTab=Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Накладная"));Check(Equals(invoiceTab.Background,Brushes.SteelBlue),"invoice tab is visibly active");
                     var senderField=Logical(window).OfType<ComboBox>().Single(b=>b.IsEditable);Check(senderField.IsEditable&&senderField.Items.Contains(Store.DefaultSender),"invoice sender supports saved choice and manual entry");
-                    senderField.Text="UI sender";SaveDocumentThroughDialog(window,Path.Combine(work,"chosen-documents","invoice.docx"));
+                    senderField.Text="UI sender";Corrections025UiChecks.ConfirmSender(()=>SaveDocumentThroughDialog(window,Path.Combine(work,"chosen-documents","invoice.docx")),true);
                     Check(File.Exists(Path.Combine(work,"chosen-documents","invoice.docx")),"invoice manual Save writes its selected destination");
                     var issuedId=store.Issues(eventId).Single().Id;
                     Check(store.Invoice(eventId,issuedId).Sender=="UI sender","edited invoice sender persists");
@@ -303,6 +304,7 @@ internal static class Program
             Isolated("pricing021",Pricing021UiChecks.Run);
             Isolated("hall021",HallEditor021Checks.Run);
             Isolated("hall024",Hall024Checks.Run);
+            Isolated("corrections025",Corrections025UiChecks.Run);
             Isolated("recipients024",Recipients024Checks.Run);
             Isolated("ui023",Ui023Checks.Run);
             Isolated("ui022",Ui022Checks.Run);
@@ -750,6 +752,7 @@ internal static class Program
                 root.LayoutTransform=new ScaleTransform(scale,scale);Pump();window.UpdateLayout();Pump();
                 var actions=Logical(root).OfType<Button>().Where(button=>button.IsVisible&&new[]{"Сохранить","Печать","Открыть в Word"}.Contains(button.Content?.ToString())).ToArray();
                 Check(actions.Length==3,"document exposes save print and open at "+scale+" layout scale");
+                foreach(var scroll in Logical(root).OfType<ScrollViewer>().Where(scroll=>scroll.Content is StackPanel panel&&panel.Children.OfType<Button>().Any(b=>Equals(b.Content,"Накладная"))))scroll.ScrollToRightEnd();Pump();
                 var rectangles=actions.Select(button=>button.TransformToAncestor(root).TransformBounds(new Rect(button.RenderSize))).ToArray();
                 Console.WriteLine($"Document actions scale={scale}; root={root.ActualWidth}x{root.ActualHeight}; buttons={string.Join("; ",rectangles.Select(rect=>rect.ToString()))}");
                 Check(rectangles.All(rect=>rect.Width>0&&rect.Height>0&&rect.Left>=0&&rect.Right<=root.ActualWidth+1&&rect.Top>=0&&rect.Bottom<=root.ActualHeight+1),"document actions remain visible at "+scale+" layout scale");

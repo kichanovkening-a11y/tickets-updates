@@ -5,13 +5,23 @@ namespace Tickets.App;
 
 public partial class MainWindow
 {
+    private string confirmedSender025="";
+    private bool refreshingSenders025;
     private void RefreshSenders(string? selected=null)
     {
+        if(selected is not null)selected=SenderConfirmation025.Choose(this,confirmedSender025,selected);
+        refreshingSenders025=true;
+        try{
         var value=selected??SenderBox.Text;
         var senders=store.Senders();SenderBox.ItemsSource=senders;SenderBox.SelectedItem=null;
         var preferred=string.IsNullOrWhiteSpace(value)||!senders.Contains(value)?store.Sender:value;
-        SenderBox.Text=senders.Contains(preferred)?preferred:"";
+        SenderBox.Text=senders.Contains(preferred)?preferred:"";confirmedSender025=SenderBox.Text;
+        }finally{refreshingSenders025=false;}
     }
+    private void SenderSelectionChanged025(object sender,System.Windows.Controls.SelectionChangedEventArgs e)
+    {if(!refreshingSenders025&&SenderBox.IsDropDownOpen&&e.AddedItems.Count==1)Dispatcher.BeginInvoke(new Action(ConfirmSender025));}
+    private void SenderFocusLost025(object sender,RoutedEventArgs e){if(!refreshingSenders025&&!SenderBox.IsKeyboardFocusWithin)ConfirmSender025();}
+    private void ConfirmSender025(){if(string.IsNullOrWhiteSpace(SenderBox.Text))return;var accepted=SenderConfirmation025.Choose(this,confirmedSender025,SenderBox.Text);SenderBox.Text=accepted;confirmedSender025=accepted;}
     private void SenderDropDownOpened(object sender,EventArgs e)=>RefreshSenders();
     private void SenderContextRequested(object sender,System.Windows.Input.MouseButtonEventArgs e)
     {
@@ -31,6 +41,7 @@ public partial class MainWindow
         // retained its old text. Refresh before validating a stale catalog choice.
         if(!store.Senders().Contains(SenderBox.Text))RefreshSenders();
         if(string.IsNullOrWhiteSpace(SenderBox.Text))throw new TicketException("Выберите отправителя или создайте нового в разделе «Организации и номера».");
+        ConfirmSender025();
         store.SaveDocumentSettings(SenderBox.Text,store.DocumentsDirectory);RefreshSenders(store.Sender);
     }
     private void EditSenderClick(object sender,RoutedEventArgs e)=>Run(()=>{

@@ -68,7 +68,7 @@ public partial class MainWindow : Window
             foreach(var show in group.Shows)
             {
                 var label=new TextBlock{TextWrapping=TextWrapping.Wrap,MaxWidth=180,Margin=new Thickness(0,6,0,6)};
-                label.Inlines.Add(new System.Windows.Documents.Run(show.Date){FontSize=18});label.Inlines.Add(new System.Windows.Documents.Run("\n"+show.Venue));
+                label.Inlines.Add(new System.Windows.Documents.Run(show.Date){FontSize=19});label.Inlines.Add(new System.Windows.Documents.Run("\n"+show.Venue));
                 var item=new TreeViewItem{Header=label,Tag=show};
                 if(past)item.ContextMenu=CleanupMenu023(new[]{show.Id},"Удалить показ окончательно");
                 var normal=past?Brushes.Gray:Brushes.SteelBlue;label.Foreground=normal;
@@ -196,6 +196,7 @@ public partial class MainWindow : Window
         PrintTicketsButton.Content="Печать билетов";
         var allBlocked=selected.Count>0&&selected.All(x=>x.IsBlocked);
         SaleStateButton.Content=allBlocked?"Разблокировать":"Заблокировать";
+        SaleStateButton.ToolTip=null;
         SaleStateButton.IsEnabled=!archived&&selected.Count>0&&issued==0&&(allBlocked||selected.All(x=>!x.IsBlocked));
         ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
         UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;

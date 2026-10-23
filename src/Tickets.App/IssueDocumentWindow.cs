@@ -37,6 +37,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0&&template.Text!=original)Try(Save);};
         preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)preview.Document=Document(Store.GetIssueDocument(eventId,issueId,kind),preview.ActualWidth-20);};
         preview.Document=Document(info);status.Text="Документ подготовлен для текущей выдачи.";
+        if(kind==IssueDocumentKinds.Bill)DocumentFlag025.Apply(this,root,info.Invoice.Recipient,issueId);
         Closing+=(_,e)=>{
             if(template.Text==original)return;
             var answer=MessageBox.Show(DialogOwner,"Сохранить изменения документа?",Title,MessageBoxButton.YesNoCancel,MessageBoxImage.Question);

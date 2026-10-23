@@ -21,10 +21,10 @@ internal static class TicketPrint024Checks
             var size=page.DocumentPaginator.GetPage(0).Size;
             Check(size.Width>size.Height,"orientation updates ticket preview inside the same window");
             var copies=controls.OfType<TextBox>().Single(t=>t.Text=="1");copies.Text="3";
-            Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Обновить просмотр")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Обновить просмотр")||Equals(b.Content,"Отмена")),"ticket preview omits removed refresh and cancel actions");
             Check(Logical(window).OfType<TextBlock>().Any(t=>t.Text.Contains("Копий: 3")),"copy settings update in the same preview before issuance");
-            Check(Logical(window).OfType<Button>().Count(b=>Equals(b.Content,"Печатать"))==1,"ticket window has one final print action");
-            Logical(window).OfType<Button>().Single(b=>Equals(b.Content,"Отмена")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(Logical(window).OfType<Button>().Count(b=>Equals(b.Content,"Печать"))==1,"ticket window has one final print action");
+            window.Close();
         }
         finally{window.Close();}
         Check(store.Issues(eventId).Count==before&&!store.Seats(eventId).Single(s=>s.Id==seatId).TicketId.HasValue,"cancelling consolidated settings does not issue tickets");

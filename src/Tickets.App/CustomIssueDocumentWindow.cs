@@ -45,6 +45,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         Closing+=(_,e)=>{try{SaveForNavigation();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
         preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)Refresh();};
         Refresh();status.Text="Форма получателя подготовлена для текущей выдачи.";
+        if(kind==IssueDocumentKinds.Bill)DocumentFlag025.Apply(this,root,Info.Invoice.Recipient,issueId);
     }
     private static void CompactButton(Panel parent,string caption,Action action)
     {

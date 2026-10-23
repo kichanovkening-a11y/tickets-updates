@@ -27,8 +27,8 @@ internal static class Recipients024Checks
             var performance=Walk(history).OfType<TreeViewItem>().First(x=>x.Header is TextBlock t&&t.Text==choice.Event.Title);
             performance.IsSelected=true;Pump();var title=(TextBlock)performance.Header;
             Check(title.Background==Brushes.SteelBlue&&title.Foreground==Brushes.White,"selected history performance has white text on blue");
-            var date=Walk(history).OfType<TextBlock>().SelectMany(t=>t.Inlines.OfType<Run>()).Single(r=>r.Foreground==Brushes.Red);
-            Check(date.Background==Brushes.Black&&date.FontSize>=19,"history event date is larger and red on black");
+            var date=Walk(history).OfType<TextBlock>().SelectMany(t=>t.Inlines.OfType<Run>()).Single(r=>r.FontSize>=19);
+            Check(date.Background!=Brushes.Black&&date.Foreground!=Brushes.Red&&date.FontSize>=19,"history event date is larger in ordinary colors");
         }
         finally{recipients.Close();}
         var saved=new RecipientPackagesWindow(store,recipient);saved.Show();Pump();

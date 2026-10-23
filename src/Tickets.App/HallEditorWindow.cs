@@ -23,7 +23,7 @@ internal sealed class HallEditorWindow : EditorWindow
     private readonly TextBlock summary=new(){Margin=new Thickness(0,12,0,0),TextWrapping=TextWrapping.Wrap};
     private readonly Dictionary<int,HallRowLayout> spareRows=[];
     private TextBox? countInput,firstLabelInput,placesInput;
-    private sealed record HallState(List<DraftSeat> Seats,List<HallRowLayout> Rows,int[] Selected,Dictionary<int,HallRowLayout> Spare,string CountText,string FirstLabel,string PlacesText);
+    private sealed record HallState(List<DraftSeat> Seats,List<HallRowLayout> Rows,int[] Selected,Dictionary<int,HallRowLayout> Spare,string CountText,string FirstLabel,string PlacesText,bool BuiltSector);
     private static HallRowLayout CloneRow(HallRowLayout row)=>new(){Label=row.Label,SeatCount=row.SeatCount,AisleAfter=row.AisleAfter,RowGapAfter=row.RowGapAfter,FirstSeat=row.FirstSeat};
     private readonly Stack<HallState> history=[];
     private Button? undo;
@@ -32,9 +32,10 @@ internal sealed class HallEditorWindow : EditorWindow
     private Action? showLiveRows;
     private bool showingDraft;
     private bool refreshing;
+    private bool builtSector;
     private readonly CheckBox showHidden=new(){Content="Показать скрытые места",Margin=new Thickness(6)};
     private static DraftSeat Clone(DraftSeat s)=>new(){Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y,Hidden=s.Hidden};
-    private HallState Capture()=>new(seats.Select(Clone).ToList(),rowLayouts.Select(CloneRow).ToList(),Selection().Select(s=>seats.IndexOf(s)).ToArray(),spareRows.ToDictionary(p=>p.Key,p=>CloneRow(p.Value)),countInput?.Text??rowLayouts.Count.ToString(),firstLabelInput?.Text??"1",placesInput?.Text??"1");
+    private HallState Capture()=>new(seats.Select(Clone).ToList(),rowLayouts.Select(CloneRow).ToList(),Selection().Select(s=>seats.IndexOf(s)).ToArray(),spareRows.ToDictionary(p=>p.Key,p=>CloneRow(p.Value)),countInput?.Text??rowLayouts.Count.ToString(),firstLabelInput?.Text??"1",placesInput?.Text??"1",builtSector);
     private void Remember(HallState? state=null){history.Push(state??Capture());if(undo is not null)undo.IsEnabled=true;}
     private void Undo()
     {
@@ -44,6 +45,7 @@ internal sealed class HallEditorWindow : EditorWindow
         restoring=true;
         try
         {
+            builtSector=state.BuiltSector;
             seats.Clear();foreach(var seat in state.Seats)seats.Add(Clone(seat));
             rowLayouts.Clear();foreach(var row in state.Rows)rowLayouts.Add(CloneRow(row));
             spareRows.Clear();foreach(var pair in state.Spare)spareRows[pair.Key]=CloneRow(pair.Value);
@@ -70,7 +72,7 @@ internal sealed class HallEditorWindow : EditorWindow
 
         var rowPanel=new DockPanel{Margin=new Thickness(0,0,0,6),Height=170};
         var rowHeader=new StackPanel();form.Children.Add(rowHeader);
-        var builtSector=seats.Count>0;
+        builtSector=seats.Count>0;
         Expander? rowOptions=null;
         var name=Field(metadata,"Название зала",copy is null?"":copy.Name+" (копия)");
         var address=Field(metadata,"Адрес",copy?.Address??"");
@@ -160,7 +162,7 @@ internal sealed class HallEditorWindow : EditorWindow
         }));
         showLiveRows=()=>
         {
-            if(restoring||seats.Count>0||refreshing)return;
+            if(restoring||seats.Count>0||builtSector||refreshing)return;
             try
             {
                 var draft=HallLayout.Generate(sector.Text,rowLayouts.ToArray(),firstSeat.Text,reverse.IsChecked==true,26);
@@ -224,10 +226,10 @@ internal sealed class HallEditorWindow : EditorWindow
             Remember();foreach(var mark in editor.Result){mark.Y+=y;seats.Add(mark);}
             showingDraft=false;builtSector=true;if(rowOptions is not null)rowOptions.Visibility=Visibility.Collapsed;Refresh();tabs.SelectedIndex=0;
         }));
-        Button(toolbar,"Весь зал",()=>preview.Fit()); Button(toolbar,"Обновить схему",()=>Try(()=>Refresh()));
+        Button(toolbar,"Весь зал",()=>preview.Fit());
         toolbar.Children.Add(showHidden);
         showHidden.Checked+=(_,_)=>Refresh(false);showHidden.Unchecked+=(_,_)=>Refresh(false);
-        preview.SeatContextRequested+=(id,position)=>Try(()=>{
+        void Context(long id,Point position,bool rowCaption)=>Try(()=>{
             if(showingDraft)
             {
                 var selectedDraft=preview.Selected.ToArray();
@@ -236,14 +238,16 @@ internal sealed class HallEditorWindow : EditorWindow
                 Remember();foreach(var mark in generated)seats.Add(mark);showingDraft=false;builtSector=true;Refresh(false);preview.SetSelection(selectedDraft);
             }
             if(id<1||id>seats.Count)return;
-            if(!preview.Selected.Contains(id))preview.SetSelection(new[]{id});
+            if(rowCaption){var row=seats[(int)id-1];preview.SetSelection(seats.Select((s,i)=>(s,i)).Where(p=>p.s.Sector==row.Sector&&p.s.Row==row.Row).Select(p=>(long)p.i+1));}
+            else if(!preview.Selected.Contains(id))preview.SetSelection(new[]{id});
             var target=seats[(int)id-1];var menu=new ContextMenu{PlacementTarget=preview};
             void Item(string title,Action action){var item=new MenuItem{Header=title};item.Click+=(_,_)=>Try(action);menu.Items.Add(item);}
-            Item("Сделать проход",()=>{if(!CommitEdits())return;Remember();HallEditing023.MakeAisle(seats,Selection());Refresh(false);});
+            Item("Сделать проход",()=>{if(!CommitEdits())return;Remember();HallEditing025.MakeAisle(seats,Selection());if(countInput is not null){restoring=true;countInput.Text=seats.Where(s=>s.Sector==target.Sector).Select(s=>s.Row).Distinct().Count().ToString();restoring=false;}Refresh(false);});
             Item("Проход после ряда",()=>{
                 var dialog=new RowAisleWindow024(Store);if(dialog.ShowDialog()!=true)return;
                 if(!CommitEdits())return;Remember();HallEditing024.MakeRowAisle(seats,Selection(),dialog.Gap);Refresh(false);
             });
+            Item("Назначить букву",()=>{var dialog=new HallLetterWindow025(Store);if(dialog.ShowDialog()!=true)return;if(!CommitEdits())return;Remember();HallEditing025.AssignLetter(seats,target,dialog.Letter,rowCaption);Refresh(false);});
             Item("Удалить места",DeleteSelected);
             Item("Скрыть места",()=>{if(!CommitEdits())return;Remember();foreach(var seat in Selection())seat.Hidden=true;Refresh(false);});
             if(Selection().Any(s=>s.Hidden))Item("Показать места",()=>{if(!CommitEdits())return;Remember();foreach(var seat in Selection())seat.Hidden=false;Refresh(false);});
@@ -252,6 +256,8 @@ internal sealed class HallEditorWindow : EditorWindow
             Item("Повернуть сектор",()=>{summary.Text="Тяните мышкой вокруг центра сектора «"+target.Sector+"».";preview.EditSector(target.Sector,true);});
             preview.ContextMenu=menu;menu.IsOpen=true;
         });
+        preview.SeatContextRequested+=(id,point)=>Context(id,point,false);
+        preview.RowContextRequested+=(id,point)=>Context(id,point,true);
         preview.SectorTransformCompleted+=changed=>Try(()=>{
             if(changed.Count==0)return;Remember();
             foreach(var mark in changed)if(mark.Id>0&&mark.Id<=seats.Count){seats[(int)mark.Id-1].X=mark.X;seats[(int)mark.Id-1].Y=mark.Y;}
@@ -281,9 +287,9 @@ internal sealed class HallEditorWindow : EditorWindow
             };
         }
         table.ItemsSource=seats;
-        var liveEditor=new DockPanel();DockPanel.SetDock(rowPanel,Dock.Top);rowOptions=new Expander{Header="Настройки рядов",Content=rowPanel,IsExpanded=seats.Count==0};
+        var liveEditor=new DockPanel();DockPanel.SetDock(rowPanel,Dock.Top);rowOptions=new Expander{Header="Настройки рядов",Content=rowPanel,IsExpanded=seats.Count==0,Visibility=seats.Count==0?Visibility.Visible:Visibility.Collapsed};
         DockPanel.SetDock(rowOptions,Dock.Top);liveEditor.Children.Add(rowOptions);liveEditor.Children.Add(preview);
-        tabs.Items.Add(new TabItem{Header="Ряды и схема",Content=liveEditor});tabs.Items.Add(new TabItem{Header="Места — редактирование",Content=table});area.Children.Add(tabs);
+        tabs.Items.Add(new TabItem{Header="Ряды и схема",Content=liveEditor});area.Children.Add(tabs);
         tabs.SelectedIndex=0;
         OnShown(()=>{if(seats.Count==0)showLiveRows();else Refresh();});
     }
@@ -309,7 +315,7 @@ internal sealed class HallEditorWindow : EditorWindow
             if(CollectionViewSource.GetDefaultView(table.ItemsSource) is IEditableCollectionView editing&&(editing.IsAddingNew||editing.IsEditingItem))return;
             table.Items.Refresh();
         }
-        if(seats.Count==0){refreshing=false;showLiveRows?.Invoke();return;}
+        if(seats.Count==0){refreshing=false;if(builtSector){showingDraft=false;preview.Load([],[],fit);summary.Text="Мест: 0";}else showLiveRows?.Invoke();return;}
         showingDraft=false;
         if(seats.Any(s=>!double.IsFinite(s.X)||!double.IsFinite(s.Y)||string.IsNullOrWhiteSpace(s.Sector)||string.IsNullOrWhiteSpace(s.Row)||string.IsNullOrWhiteSpace(s.Number)))
         {MessageBox.Show(DialogOwner,"Заполните сектор, ряд, место и корректные координаты в таблице.","Зал");return;}

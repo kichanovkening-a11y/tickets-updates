@@ -18,7 +18,9 @@ internal sealed class SenderEditorWindow:EditorWindow
         var actions=new WrapPanel();form.Children.Add(actions);
         var save=Button(actions,editExisting?"Сохранить":"Создать",()=>Try(()=>{
             if(editExisting&&!Store.Senders().Any(sender=>CatalogText.Key(sender)==CatalogText.Key(name.Text)))throw new TicketException("Отправитель удалён из списка. Создайте его заново, чтобы вернуть в список.");
-            Store.SaveOrganizationDetails(name.Text,true,fields.Read(name.Text));CreatedName=Store.SaveSender(name.Text);Finish(true);
+            var details=fields.Read(name.Text);
+            if(editExisting&&System.Text.Json.JsonSerializer.Serialize(details)!=System.Text.Json.JsonSerializer.Serialize(Store.GetOrganizationDetails(initial,true))&&MessageBox.Show(DialogOwner,"Сохранить изменения реквизитов выбранного отправителя?","Изменение отправителя",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
+            Store.SaveOrganizationDetails(name.Text,true,details);CreatedName=Store.SaveSender(name.Text);Finish(true);
         }));save.IsDefault=true;
         var cancel=Button(actions,"Отмена",()=>Finish(false));cancel.Margin=new Thickness(10,0,0,0);cancel.IsCancel=true;
         OnShown(()=>{name.Focus();name.SelectAll();});

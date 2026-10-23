@@ -58,6 +58,8 @@ public sealed class HallView : FrameworkElement
 
     public event EventHandler? EmptySpaceClicked;
     public event Action<long,Point>? SeatContextRequested;
+    public event Action<long,Point>? RowContextRequested;
+    private readonly List<(Rect Bounds,long Id)> rowHits=[];
     public event Action<SeatInfo>? SeatSelectionRejected;
     public IReadOnlyList<SeatInfo> SelectedSeats => seats.Where(s=>Selected.Contains(s.Id)).ToList();
 
@@ -89,7 +91,7 @@ public sealed class HallView : FrameworkElement
 
     private void RebuildDrawing()
     {
-        var visible=seats.Where(s=>!s.IsHidden).ToArray();
+        var visible=seats.Where(s=>!s.IsHidden).ToArray();rowHits.Clear();
         var group=new DrawingGroup();
         using(var dc=group.Open())
         {
@@ -101,21 +103,8 @@ public sealed class HallView : FrameworkElement
                 var label=Text(wrapped?sector.Name.Replace(" (","\n("):sector.Name,15.6,Brushes.SlateGray);
                 label.TextAlignment=TextAlignment.Center;
                 var places=sectorSeats[sector.Name];
-                var x=places.Any()?(places.Min(s=>s.X)+places.Max(s=>s.X)+16)/2:sector.X+label.Width/2;
-                var y=places.Any()?Math.Min(sector.Y,places.Min(s=>s.Y)-label.Height-6):sector.Y;
-                if(wrapped&&places.Any())
-                {
-                    var labelBounds=label.BuildGeometry(new Point(x,y)).Bounds;
-                    if(visible.Any(s=>labelBounds.IntersectsWith(new Rect(s.X,s.Y,16,16))))
-                    {
-                        // Deep side balconies can share a vertical band with central
-                        // rows. Put only a colliding side heading outside its block.
-                        x=sector.Name.Contains("левая сторона",StringComparison.Ordinal)
-                            ?places.Min(s=>s.X)-12-label.Width/2
-                            :places.Max(s=>s.X)+16+12+label.Width/2;
-                        y=places.Min(s=>s.Y)-label.Height-6;
-                    }
-                }
+                var origin=SectorCaptionOrigin(label,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y),wrapped);
+                var x=origin.X;var y=origin.Y;
                 dc.DrawText(label,new Point(x,y));captionBounds.Add(label.BuildGeometry(new Point(x,y)).Bounds);
             }
             foreach(var s in visible)
@@ -161,36 +150,56 @@ public sealed class HallView : FrameworkElement
             // A logical row can curve through many Y coordinates. Draw its caption once,
             // at the leftmost seat, rather than repeating it beside every curved seat.
             var rowCaptions=captionBounds;
-            var seatBounds=visible.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
             foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
             {
-                var first=row.MinBy(s=>s.X)!;
-                var final=row.MaxBy(s=>s.X)!;
+                var first=row.OrderBy(s=>s.Id).First();
                 var label=Text(first.Row,14.3,Brushes.Black);
-                var ink=label.BuildGeometry(new Point());var glyph=ink.Bounds;
-                if(glyph.IsEmpty)continue;
-                var caption=new Rect(first.X-glyph.Width-8,first.Y+(16-glyph.Height)/2,glyph.Width,glyph.Height);
-                // Keep row numbers as plain text, clear of both real seats and other captions.
-                for(var attempt=0;attempt<visible.Length+rowCaptions.Count;attempt++)
+                var glyph=label.BuildGeometry(new Point()).Bounds;if(glyph.IsEmpty)continue;
+                foreach(var anchor in HallEditing025.RowAnchors(row.ToArray()))
                 {
-                    var collisions=seatBounds.Concat(rowCaptions).Where(rect=>rect.IntersectsWith(caption)).ToArray();
-                    if(collisions.Length==0)break;
-                    caption.X=collisions.Min(rect=>rect.Left)-glyph.Width-8;
+                    var caption=new Rect(anchor.X-glyph.Width/2,anchor.Y-glyph.Height/2,glyph.Width,glyph.Height);
+                    dc.DrawText(label,new Point(caption.X-glyph.X,caption.Y-glyph.Y));
+                    rowHits.Add((caption,first.Id));rowCaptions.Add(caption);
                 }
-                dc.DrawText(label,new Point(caption.X-glyph.X,caption.Y-glyph.Y));rowCaptions.Add(caption);
-                var rightCaption=new Rect(final.X+24,final.Y+(16-glyph.Height)/2,glyph.Width,glyph.Height);
-                for(var attempt=0;attempt<visible.Length+rowCaptions.Count;attempt++)
-                {
-                    var collisions=seatBounds.Concat(rowCaptions).Where(rect=>rect.IntersectsWith(rightCaption)).ToArray();
-                    if(collisions.Length==0)break;
-                    rightCaption.X=collisions.Max(rect=>rect.Right)+8;
-                }
-                dc.DrawText(label,new Point(rightCaption.X-glyph.X,rightCaption.Y-glyph.Y));rowCaptions.Add(rightCaption);
             }
         }
         group.Freeze(); drawing=group;
         bounds=drawing.Bounds;
         if(bounds.IsEmpty) bounds=new Rect(0,0,100,100);
+    }
+
+    private static Point SectorCaptionOrigin(FormattedText label,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback,bool wrapped)
+    {
+        if(own.Count==0)return fallback;
+        var glyph=label.BuildGeometry(new Point()).Bounds;
+        var left=own.Min(s=>s.X);var right=own.Max(s=>s.X)+16;var centre=(left+right)/2;
+        Point At(double x)
+        {
+            var first=x+glyph.Left;var last=x+glyph.Right;
+            double Distance(SeatInfo seat)=>Math.Max(0,Math.Max(first-seat.X-16,seat.X-last));
+            var nearest=own.Min(Distance);
+            var upper=own.Where(s=>Distance(s)<=nearest+.001).Min(s=>s.Y);
+            return new Point(x,upper-44-glyph.Bottom);
+        }
+        bool Clear(Point point)
+        {
+            var ink=label.BuildGeometry(point).Bounds;
+            return !all.Any(s=>ink.IntersectsWith(new Rect(s.X,s.Y,16,16)))&&!captions.Any(ink.IntersectsWith);
+        }
+        // Keep headings in their own horizontal footprint. A slanted upper edge
+        // is evaluated locally across the caption width, rather than at its remote corner.
+        for(var distance=0d;distance<=right-left;distance+=4)
+        foreach(var x in distance==0?new[]{centre}:new[]{centre-distance,centre+distance})
+        {
+            if(x+glyph.Left<left||x+glyph.Right>right)continue;
+            var point=At(x);if(Clear(point))return point;
+        }
+        if(wrapped)
+        {
+            foreach(var x in new[]{left-12-glyph.Right,right+12-glyph.Width/2-glyph.Left})
+            {var point=At(x);if(Clear(point))return point;}
+        }
+        return At(centre);
     }
 
     public void Fit()
@@ -226,7 +235,11 @@ public sealed class HallView : FrameworkElement
         dc.PushTransform(new MatrixTransform(zoom,0,0,zoom,offset.X,offset.Y));
         dc.DrawDrawing(drawing);
         if(transformDragging&&movingSectorDrawing is not null)
-        {dc.PushTransform(new MatrixTransform(sectorMatrix));dc.DrawDrawing(movingSectorDrawing);dc.Pop();}
+        {
+            if(!rotateSector)dc.PushTransform(new MatrixTransform(sectorMatrix));
+            dc.DrawDrawing(movingSectorDrawing);
+            if(!rotateSector)dc.Pop();
+        }
         var outerPen=new Pen(Brushes.Black,2/zoom);
         var innerPen=new Pen(Brushes.White,2/zoom);
         foreach(var s in seats.Where(s=>!transformDragging&&Selected.Contains(s.Id)))
@@ -280,6 +293,17 @@ public sealed class HallView : FrameworkElement
                     sectorMatrix.RotateAt(angle,cx,cy);
                 }
                 else sectorMatrix.Translate(world.X-worldAnchor.X,world.Y-worldAnchor.Y);
+                if(rotateSector)
+                {
+                    var original=seats;var originalSectors=sectors;var still=drawing;var originalBounds=bounds;
+                    try
+                    {
+                        seats=transformStart.Select(s=>{var point=sectorMatrix.Transform(new Point(s.X,s.Y));return s with{X=point.X,Y=point.Y};}).ToList();
+                        sectors=originalSectors.Where(s=>s.Name==transformSector).ToArray();
+                        RebuildDrawing();movingSectorDrawing=drawing;
+                    }
+                    finally{seats=original;sectors=originalSectors;drawing=still;bounds=originalBounds;}
+                }
                 last=p;InvalidateVisual();return;
             }
             if(panning)
@@ -299,6 +323,7 @@ public sealed class HallView : FrameworkElement
         var p=e.GetPosition(this);
         var emptyClick=false;
         SeatInfo? rejected=null;
+        var contextRow=rightGesture&&!panMoved?rowHits.FirstOrDefault(h=>h.Bounds.Contains(World(p))).Id:0;
         var contextSeat=rightGesture && e.ChangedButton==MouseButton.Right && !panMoved && (p-start).Length<3?Hit(p):null;
         if(!panning&&!transformDragging)
         {
@@ -320,7 +345,8 @@ public sealed class HallView : FrameworkElement
         }
         EndGesture(); e.Handled=true;
         if(rejected is not null){SeatSelectionRejected?.Invoke(rejected);ShowSeatRejection(rejected,p);}
-        if(contextSeat is {Id:>0}) SeatContextRequested?.Invoke(contextSeat.Id,p);
+        if(contextRow>0&&contextSeat is null)RowContextRequested?.Invoke(contextRow,p);
+        else if(contextSeat is {Id:>0}) SeatContextRequested?.Invoke(contextSeat.Id,p);
         if(emptyClick)EmptySpaceClicked?.Invoke(this,EventArgs.Empty);
     }
     private (SeatInfo? Context,SeatInfo? Rejected) ClickSeat(SeatInfo seat)

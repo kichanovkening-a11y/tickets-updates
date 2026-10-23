@@ -58,7 +58,7 @@ internal static class Ui020Checks
             Check(headings.Length>=sectors.Length,"actual hall drawing contains each sector heading");
             Check(headings.All(heading=>!renderedSeats.Any(seat=>heading.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))),"actual sector heading glyph bounds do not intersect any seat");
             var captions=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-14.3)<.01&&g.ForegroundBrush==System.Windows.Media.Brushes.Black).ToArray();
-            Check(captions.Length==2*layout.GroupBy(s=>(s.Sector,s.Row)).Count(),"each logical row has two separate black text captions");
+            Check(captions.Length>=2*layout.GroupBy(s=>(s.Sector,s.Row)).Count(),"each logical row has endpoint captions and any actual aisle caption");
             foreach(var caption in captions)
             {
                 foreach(var seat in renderedSeats.Where(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16))))Console.WriteLine($"Caption collision: {caption.Bounds}; seat {seat.Sector}/{seat.Row}/{seat.Number} at {seat.X},{seat.Y}");
@@ -76,8 +76,8 @@ internal static class Ui020Checks
             organizations.SelectedItem=organizations.Items.Cast<RecipientDirectoryInfo>().Single(r=>r.Name=="Получатель UI020");
             var history=(TreeView)type.GetField("history",Private)!.GetValue(window)!;
             IEnumerable<TreeViewItem> Nodes(ItemsControl parent){foreach(var child in parent.Items.OfType<TreeViewItem>()){yield return child;foreach(var nested in Nodes(child))yield return nested;}}
-            var date=Nodes(history).Select(n=>n.Header).OfType<TextBlock>().First(t=>t.Inlines.OfType<System.Windows.Documents.Run>().Any(r=>r.Foreground==System.Windows.Media.Brushes.Red));
-            Check(date.Inlines.OfType<System.Windows.Documents.Run>().First().FontSize==19,"recipient history event date and time are red and larger");
+            var date=Nodes(history).Select(n=>n.Header).OfType<TextBlock>().First(t=>t.Inlines.OfType<System.Windows.Documents.Run>().Any(r=>r.FontSize==19));
+            Check(date.Inlines.OfType<System.Windows.Documents.Run>().First().FontSize==19,"recipient history event date and time are larger");
             var issueHeader=Nodes(history).Where(n=>n.Tag is RecipientIssueInfo).Select(n=>n.Header).OfType<DockPanel>().First();
             Check(issueHeader.Children.OfType<CheckBox>().Count()==1&&issueHeader.Children.OfType<TextBlock>().Count()==1,"recipient history has separate package checkbox and single-click issue text");
         }

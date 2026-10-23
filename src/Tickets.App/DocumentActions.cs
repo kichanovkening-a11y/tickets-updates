@@ -7,6 +7,23 @@ namespace Tickets.App;
 // Document commands share one content-sized row, leaving the preview full width.
 internal static class DocumentActions
 {
+    internal static void Append(ScrollViewer navigation,ScrollViewer actions)
+    {
+        if(navigation.Content is not Panel row||actions.Content is not UIElement content)return;
+        actions.Content=null;row.Children.Add(content);
+    }
+    internal static ScrollViewer? TakeToolbar(DependencyObject root)
+    {
+        if(root is Panel panel)
+        {
+            foreach(var item in panel.Children.OfType<UIElement>().ToArray())
+            {
+                if(item is ScrollViewer scroll&&scroll.Content is DockPanel){panel.Children.Remove(item);return scroll;}
+                var found=TakeToolbar(item);if(found is not null)return found;
+            }
+        }
+        return null;
+    }
     internal static ScrollViewer Toolbar(Action openWord,Action save,Action print,Action? printTickets=null)
     {
         var row=new StackPanel{Orientation=Orientation.Horizontal};

@@ -88,6 +88,6 @@ internal sealed class SettingsWindow:EditorWindow
         var directory=Field(form,"Папка накладных и спецификаций",store.DocumentsDirectory);
         Button(form,"Выбрать папку…",()=>{var dialog=new Microsoft.Win32.OpenFolderDialog{Title="Папка документов"};if(System.IO.Directory.Exists(directory.Text))dialog.InitialDirectory=directory.Text;if(dialog.ShowDialog(DialogOwner)==true)directory.Text=dialog.FolderName;});
         Button(form,"Спецификации",()=>new SpecificationWindow(store).ShowDialog());
-        Button(form,"Сохранить",()=>Try(()=>{store.SaveDocumentSettings(sender.Text,directory.Text);main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));
+        Button(form,"Сохранить",()=>Try(()=>{var accepted=SenderConfirmation025.Choose(DialogOwner,store.Sender,sender.Text);if(accepted!=sender.Text){sender.Text=accepted;return;}store.SaveDocumentSettings(sender.Text,directory.Text);main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));
     }
 }

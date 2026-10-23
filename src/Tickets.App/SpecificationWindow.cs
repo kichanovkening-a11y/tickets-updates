@@ -117,6 +117,7 @@ internal sealed class SpecificationWindow : EditorWindow
             MessageBox.Show(DialogOwner,"У этой организации уже есть спецификация. Выберите её в списке слева для просмотра и изменения. Введённый текст оставлен в форме.","Спецификация",MessageBoxButton.OK,MessageBoxImage.Information);
             return null;
         }
+        var accepted=SenderConfirmation025.Choose(DialogOwner,originalSender,sender.Text);if(accepted!=sender.Text){sender.Text=accepted;return null;}
         var info=Store.SaveSpecification(recipient.Text,sender.Text,title.Text,body.Text);
         specifications=Store.Specifications();loading=true;saved.ItemsSource=specifications;loading=false;
         Load(specifications.First(s=>s.Id==info.Id));

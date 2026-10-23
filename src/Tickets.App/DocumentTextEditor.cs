@@ -92,12 +92,11 @@ internal sealed class DocumentTextEditor:UserControl
         {
             original=content;paragraphs.Clear();tokens.Clear();
             using var memory=new MemoryStream(content);using var zip=new ZipArchive(memory,ZipArchiveMode.Read);using var stream=zip.GetEntry("word/document.xml")!.Open();xml=XDocument.Load(stream);
-            var source=xml.Descendants(W+"p").ToArray();var index=0;
             var info=new IssueDocumentInfo(kind,null!,"",""){SourceDocument=content};
             editor.Document=SourceFormPreview.Document(info,null,p=>{
-                // The preview receives its own XML; bind edits to the same paragraph
-                // in the untouched package, including table cells.
-                var match=source.FirstOrDefault(x=>XNode.DeepEquals(x,p)&&!paragraphs.Any(pair=>ReferenceEquals(pair.Source,x)))??source[index];index++;
+                // Render the original tree so each displayed paragraph already has
+                // its exact source identity, including nested/merged Word cells.
+                var match=p;
                 var view=SourceFormPreview.Paragraph(p,kind==IssueDocumentKinds.Contract?"Times New Roman":"Arial");
                 var text=string.Concat(p.Descendants(W+"t").Select(t=>t.Value));
                 if(Regex.IsMatch(text,@"\{\{?\w+\}\}?"))
@@ -121,7 +120,7 @@ internal sealed class DocumentTextEditor:UserControl
                     view.Inlines.Add(Styled(text[offset..],offset));
                 }
                 paragraphs.Add((view,match));return view;
-            });
+            },xml);
             IsDirty=false;editor.IsUndoEnabled=false;editor.IsUndoEnabled=true;
         }
         finally{loading=false;}

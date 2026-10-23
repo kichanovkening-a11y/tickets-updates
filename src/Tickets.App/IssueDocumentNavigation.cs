@@ -77,6 +77,7 @@ internal static class IssueDocumentNavigation
                 }
                 catch(Exception ex){MessageBox.Show(editor.DialogOwnerForHost,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
             });
+            if(selected!=IssueDocumentKinds.Bill&&DocumentActions.TakeToolbar(body) is {} actions)DocumentActions.Append(navigation,actions);
             navigation.Margin=new Thickness(10,10,10,0);
             if(body is FrameworkElement content)content.Margin=new Thickness(10,0,10,10);
             DockPanel.SetDock(navigation,Dock.Top);frame.Children.Add(navigation);frame.Children.Add(body);editor.Content=frame;

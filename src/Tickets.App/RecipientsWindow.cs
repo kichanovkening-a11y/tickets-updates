@@ -52,7 +52,7 @@ internal sealed class RecipientsWindow:EditorWindow
         Button(actions,"Документы получателя",()=>Try(()=>{
             if(organizations.SelectedItem is RecipientDirectoryInfo organization)new RecipientFormsWindow(Store,organization.Name).ShowDialog();
         }));
-        Button(actions,"Общий комплект отмеченных выдач",()=>Try(()=>{
+        Button(actions,"Объединить выдачи",()=>Try(()=>{
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
             var package=Store.CreateRecipientPackage(organization.Name,packageSelection);
             new RecipientPackageWindow(Store,package.Id).ShowDialog();
@@ -121,10 +121,10 @@ internal sealed class RecipientsWindow:EditorWindow
             var events=performance.GroupBy(x=>x.Issue.EventId);
             foreach(var showing in (past?events.OrderByDescending(g=>g.First().StartsAt):events.OrderBy(g=>g.First().StartsAt)))
             {
-                var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){Foreground=Brushes.Red,Background=Brushes.Black,FontSize=19});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
+                var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){FontSize=19});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
                 foreach(var issue in showing.OrderByDescending(x=>x.Issue.IssuedAt).ThenByDescending(x=>x.Issue.Id))
                 {
-                    var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
+                    var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date} · {issue.Issue.Sender}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
                     var text=(TextBlock)row.Header;row.Header=null;
                     var check=new CheckBox{Width=18,Height=18,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)};
                     check.Checked+=(_,_)=>packageSelection.Add((issue.Issue.EventId,issue.Issue.Id));check.Unchecked+=(_,_)=>packageSelection.Remove((issue.Issue.EventId,issue.Issue.Id));

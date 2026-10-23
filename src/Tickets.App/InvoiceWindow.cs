@@ -26,7 +26,7 @@ internal sealed class InvoiceWindow : EditorWindow
             IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
             Refresh();
         })));
-        header.Children.Add(DocumentActions.Toolbar(
+        DocumentActions.Append(documentNavigation!,DocumentActions.Toolbar(
             ()=>Try(OpenWord),
             ()=>Try(()=>{
                 var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Накладная-{issueId}.docx",SaveWord);
@@ -45,10 +45,11 @@ internal sealed class InvoiceWindow : EditorWindow
             if(senderBox.SelectedItem is not string selected)return;
             if(MessageBox.Show(DialogOwner,$"Удалить отправителя «{selected}» из списка?\nРанее оформленные документы сохранятся.","Удаление отправителя",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes)return;
             Store.RemoveSenderChoice(selected);
-            var current=senderBox.Text;senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Senders().Contains(current)?current:"";persistedSender=senderBox.Text;
+            var current=senderBox.Text;senderBox.ItemsSource=Store.Senders();senderBox.Text=current;
         });
-        senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Senders().Contains(Store.Invoice(eventId,issueId).Sender)?Store.Invoice(eventId,issueId).Sender:"";persistedSender=senderBox.Text;header.Children.Add(savedStatus);
-        senderBox.DropDownOpened+=(_,_)=>{var value=senderBox.Text;var choices=Store.Senders();senderBox.ItemsSource=choices;senderBox.Text=choices.Contains(value)?value:"";};
+        senderBox.ItemsSource=Store.Senders();senderBox.Text=Store.Invoice(eventId,issueId).Sender;persistedSender=senderBox.Text;header.Children.Add(savedStatus);
+        senderBox.DropDownOpened+=(_,_)=>{var value=senderBox.Text;var choices=Store.Senders();senderBox.ItemsSource=choices;senderBox.Text=value;};
+        senderBox.SelectionChanged+=(_,e)=>{if(senderBox.IsDropDownOpen&&e.AddedItems.Count==1)Dispatcher.BeginInvoke(new Action(()=>Try(()=>{PersistSender();Refresh();})));};
         senderBox.LostKeyboardFocus+=(_,_)=>{if(!senderBox.IsKeyboardFocusWithin)Try(()=>{PersistSender();Refresh();});};
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);tabs.Items.Add(new TabItem{Header="Документ",Content=reader});
         var editing=new DockPanel();var saveRow=new WrapPanel{Margin=new Thickness(0,5,0,5)};DockPanel.SetDock(saveRow,Dock.Bottom);editing.Children.Add(saveRow);
@@ -103,7 +104,7 @@ internal sealed class InvoiceWindow : EditorWindow
     {
         var editor=new SenderEditorWindow(Store,existing?senderBox.Text:"",existing);
         if(editor.ShowDialog()!=true)return;
-        senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;PersistSender();Store.RefreshInvoiceSender(eventId,issueId);SaveFiles();Refresh();
+        senderBox.ItemsSource=Store.Senders();senderBox.Text=editor.CreatedName;if(!PersistSender())return;Store.RefreshInvoiceSender(eventId,issueId);SaveFiles();Refresh();
     }
     private void EditRecipient()
     {
@@ -115,11 +116,12 @@ internal sealed class InvoiceWindow : EditorWindow
         Store.RefreshInvoiceRecipient(eventId,issueId);SaveFiles();Refresh();
         savedStatus.Text="Реквизиты получателя обновлены. "+savedStatus.Text;
     }
-    private void PersistSender()
+    private bool PersistSender()
     {
-        if(senderBox.Text==persistedSender||string.IsNullOrWhiteSpace(senderBox.Text))return;
+        if(senderBox.Text==persistedSender||string.IsNullOrWhiteSpace(senderBox.Text))return true;
+        var accepted=SenderConfirmation025.Choose(DialogOwner,persistedSender,senderBox.Text);if(accepted!=senderBox.Text){senderBox.Text=accepted;return false;}
         Store.UpdateInvoiceSender(eventId,issueId,senderBox.Text);persistedSender=senderBox.Text;
-        SaveFiles();
+        SaveFiles();return true;
     }
     private void PrintInvoiceTickets()
     {

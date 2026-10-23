@@ -11,9 +11,9 @@ namespace Tickets.App;
 internal static class SourceFormPreview
 {
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null,Func<XElement,Paragraph>? paragraphFactory=null)
+    internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null,Func<XElement,Paragraph>? paragraphFactory=null,XDocument? sourceXml=null)
     {
-        var xml=InvoiceDocuments.IssueDocumentXml(info);var body=xml.Root!.Element(W+"body")!;
+        var xml=sourceXml??InvoiceDocuments.IssueDocumentXml(info);var body=xml.Root!.Element(W+"body")!;
         var width=pageWidth??(info.Kind==IssueDocumentKinds.Waybill?1123:794);var usable=Math.Max(100,width-50);
         var document=new FlowDocument{PageWidth=width,PagePadding=new Thickness(25),ColumnWidth=usable,FontFamily=new FontFamily(info.Kind==IssueDocumentKinds.Contract?"Times New Roman":"Arial"),FontSize=13};
         foreach(var block in body.Elements())

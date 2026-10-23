@@ -34,6 +34,7 @@ internal sealed class PerformanceWindow : EditorWindow
             {
                 var node=new TreeViewItem{Header=new TextBlock{Text=performance.Title,FontSize=13,FontWeight=FontWeights.SemiBold},Tag=performance};
                 tree.Items.Add(node);
+                TreeSelection025.Apply(node);
                 node.PreviewMouseLeftButtonDown+=(_,e)=>{
                     if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),node))
                     {node.IsSelected=true;node.IsExpanded=!node.IsExpanded;foreach(var child in node.Items.OfType<TreeViewItem>().Where(i=>i.Tag is null))child.IsExpanded=node.IsExpanded;e.Handled=true;}
@@ -43,7 +44,7 @@ internal sealed class PerformanceWindow : EditorWindow
                 {
                     foreach(var showing in items)
                     {
-                        var leaf=new TreeViewItem{Header=$"{showing.Date} · {showing.Venue}",Tag=showing};
+                        var leaf=new TreeViewItem{Header=new TextBlock{Text=$"{showing.Date} · {showing.Venue}",FontSize=19},Tag=showing};
                         leaf.PreviewMouseLeftButtonDown+=(_,e)=>{
                             if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),leaf))
                             {e.Handled=true;SelectedEventId=showing.Id;Finish(true);}

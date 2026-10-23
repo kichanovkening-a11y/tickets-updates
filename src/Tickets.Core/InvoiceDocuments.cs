@@ -93,6 +93,10 @@ public static class InvoiceDocuments
     public static bool UsesSourceForm(IssueDocumentInfo document)=>document.SourceDocument is not null||SourceBusinessForms.CanUseSource(document.Kind,document.Template);
     public static XDocument IssueDocumentXml(IssueDocumentInfo document)
     {
+        if(document.SourceDocument is {} bytes)
+        {
+            using var memory=new MemoryStream(bytes);using var zip=new ZipArchive(memory,ZipArchiveMode.Read);using var stream=zip.GetEntry("word/document.xml")!.Open();return XDocument.Load(stream);
+        }
         var path=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"Tickets-preview-"+Guid.NewGuid().ToString("N")+".docx");
         try
         {

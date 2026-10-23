@@ -37,6 +37,12 @@ internal static class Docs017Checks
                 var body=(FrameworkElement)window.Content;window.Content=null;body.Margin=new Thickness(10,0,10,10);
                 var frame=new DockPanel();
                 var types=(ScrollViewer)toolbar.Invoke(null,new object[]{key,(Action<string>)(_=>{})})!;types.Margin=new Thickness(10,10,10,0);
+                if(key!=IssueDocumentKinds.Bill)
+                {
+                    var actions=assembly.GetType("Tickets.App.DocumentActions")!;
+                    var taken=actions.GetMethod("TakeToolbar",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[body]);
+                    if(taken is not null)actions.GetMethod("Append",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[types,taken]);
+                }
                 DockPanel.SetDock(types,Dock.Top);frame.Children.Add(types);frame.Children.Add(body);window.Content=frame;
             }
             window.Show();Pump();
@@ -50,8 +56,8 @@ internal static class Docs017Checks
                 Check(row.Orientation==Orientation.Horizontal&&actions.All(button=>ReferenceEquals(button.Parent,row)),key+": three adjacent horizontal commands");
                 var typeBounds=types.Select(button=>Bounds(button,window)).ToArray();var actionBounds=actions.Select(button=>Bounds(button,window)).ToArray();
                 Check(typeBounds.Max(rect=>rect.Top)-typeBounds.Min(rect=>rect.Top)<1&&actionBounds.Max(rect=>rect.Top)-actionBounds.Min(rect=>rect.Top)<1,key+": exactly one row for types and one for commands");
-                Check(actionBounds[0].Top>=typeBounds.Max(rect=>rect.Bottom)&&actionBounds[0].Top-typeBounds.Max(rect=>rect.Bottom)<=12,key+": commands immediately below document types");
-                Check(Math.Abs(typeBounds[0].Left-actionBounds[0].Left)<1,key+": both rows align left");
+                if(key!=IssueDocumentKinds.Bill)Check(Math.Abs(actionBounds[0].Top-typeBounds[0].Top)<1,key+": navigation and actions share one row");
+                if(key!=IssueDocumentKinds.Bill)Check(actionBounds[0].Left>=typeBounds[^1].Right,key+": actions follow navigation");
                 foreach(var button in types.Concat(actions))
                 {
                     Check(button.FontSize==16.9&&button.ContentTemplate is null&&!Visual(button).OfType<Viewbox>().Any(),key+": readable unscaled caption "+button.Content);
@@ -60,7 +66,7 @@ internal static class Docs017Checks
                 }
                 Check(actions.All(button=>button.ActualHeight<60&&double.IsNaN(button.Width)),key+": compact content-sized commands");
                 var preview=Logical(window).OfType<FlowDocumentScrollViewer>().Single();var previewBounds=Bounds(preview,window);
-                Check(preview.ActualWidth>=window.ActualWidth-70&&previewBounds.Top>=actionBounds.Max(rect=>rect.Bottom),key+": document uses full available width below commands");
+                Check(preview.ActualWidth>=window.ActualWidth-(key==IssueDocumentKinds.Bill?100:70)&&previewBounds.Top>=actionBounds.Max(rect=>rect.Bottom),key+": document uses full available width below commands");
                 var active=types.Single(button=>Equals(button.Background,Brushes.SteelBlue));
                 Check(Equals(active.Foreground,Brushes.White)&&Equals(active.Content,key=="invoice"?"Накладная":key=="specification"?"Спецификация":IssueDocumentKinds.Name(key)),key+": active type highlighted");
             }

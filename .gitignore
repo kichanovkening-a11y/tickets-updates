@@ -10,3 +10,5 @@ github-release/
 data/seed.db
 **/PrintBlanks/
 **/Documents/
+
+.superpowers/

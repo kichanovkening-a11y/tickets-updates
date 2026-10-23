@@ -14,6 +14,12 @@ internal static class Hall023Checks
             HallEditing023.MakeAisle(seats,row.Where(s=>s.Number=="3").ToArray());
             if(!numbers.SequenceEqual(row.Select(s=>s.Number)))throw new Exception("Aisle renumbered seats");
         });
+        run("023 curved row aisles follow geometry rather than database enumeration",_=>{
+            var row=Enumerable.Range(1,5).Select(n=>new DraftSeat{Sector="Партер",Row="1",Number=n.ToString(),X=(n-1)*20,Y=4-Math.Abs(n-3)*2}).ToArray();
+            var shuffled=new[]{row[0],row[4],row[1],row[3],row[2]};
+            HallEditing023.MakeAisle(shuffled,new[]{row[2]});
+            if(row[0].X!=0||row[1].X!=20||row[2].X!=60||row[3].X!=80||row[4].X!=100)throw new Exception("Curved aisle moved wrong places");
+        });
         run("023 Estrada omitted seats are display placeholders only",_=>{
             var actual=VenueLayouts019.EstradaSeats().Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,1000,"#F00",null,"","",null)).ToArray();
             var shown=HallEditing023.WithEstradaPlaceholders(actual);

@@ -22,9 +22,15 @@ public static class HallEditing023
         var chosen=selected.ToHashSet();
         foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)))
         {
-            var ordered=row.ToArray();if(ordered.Length<2||!ordered.Any(chosen.Contains))continue;
-            var dx=ordered[^1].X-ordered[0].X;var dy=ordered[^1].Y-ordered[0].Y;var length=Math.Sqrt(dx*dx+dy*dy);
-            if(length<.001)continue;
+            var points=row.ToArray();if(points.Length<2||!points.Any(chosen.Contains))continue;
+            var cx=points.Average(s=>s.X);var cy=points.Average(s=>s.Y);
+            var xx=points.Sum(s=>(s.X-cx)*(s.X-cx));var yy=points.Sum(s=>(s.Y-cy)*(s.Y-cy));var xy=points.Sum(s=>(s.X-cx)*(s.Y-cy));
+            if(xx+yy<.001)continue;
+            var angle=.5*Math.Atan2(2*xy,xx-yy);var dx=Math.Cos(angle);var dy=Math.Sin(angle);
+            if(Math.Abs(dy)>Math.Abs(dx)&&dy<0){dx=-dx;dy=-dy;}
+            // Curved rows are stored by Y/X, often interleaving their left and right
+            // ends. Sort on their geometric major axis instead of database order.
+            var ordered=points.OrderBy(s=>s.X*dx+s.Y*dy).ToArray();var length=1d;
             var gaps=0;var previous=false;
             foreach(var s in ordered)
             {

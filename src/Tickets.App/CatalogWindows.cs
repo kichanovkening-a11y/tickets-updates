@@ -22,6 +22,7 @@ internal class EditorWindow : Window
     }
     internal bool HasClosedForHost{get;private set;}
     internal bool IsInline{get;set;}
+    internal string? DocumentTab{get;set;}
     internal bool? InlineResult{get;private set;}
     private Action? shown;
     private bool wasShown;

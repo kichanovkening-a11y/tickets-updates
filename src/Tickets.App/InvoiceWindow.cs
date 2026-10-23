@@ -12,13 +12,14 @@ internal sealed class InvoiceWindow : EditorWindow
     private readonly ComboBox senderBox=new(){FontSize=18,IsEditable=true,IsTextSearchEnabled=true,Height=34,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
     private readonly TextBlock savedStatus=new(){TextTrimming=TextTrimming.CharacterEllipsis,Margin=new Thickness(0,3,0,3),FontSize=12};
     private string persistedSender="";
+    private bool confirmingSender;
     private readonly DocumentTextEditor textEditor=new();
     private ScrollViewer? documentNavigation;
     private readonly FlowDocumentScrollViewer reader=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
     public InvoiceWindow(Store store,long eventId,long issueId,bool print=false):base(store,$"Накладная № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;
-        var root=new Grid{Margin=new Thickness(10)};Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
+        var root=new Grid{Margin=new Thickness(2)};Content=root;DocumentFlag025.Apply(this,root,Store.Invoice(eventId,issueId).Recipient,issueId,"Накладная");DocumentPrintPreview.Route(root,()=>Try(Print));
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(documentNavigation=IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
@@ -118,10 +119,12 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private bool PersistSender()
     {
-        if(senderBox.Text==persistedSender||string.IsNullOrWhiteSpace(senderBox.Text))return true;
-        var accepted=SenderConfirmation025.Choose(DialogOwner,persistedSender,senderBox.Text);if(accepted!=senderBox.Text){senderBox.Text=accepted;return false;}
+        if(confirmingSender||senderBox.Text==persistedSender||string.IsNullOrWhiteSpace(senderBox.Text))return true;
+        confirmingSender=true;try{
+        var accepted=SenderConfirmation025.Choose(DialogOwner,persistedSender,senderBox.Text);if(accepted!=senderBox.Text){senderBox.SelectedItem=accepted;senderBox.Text=accepted;return false;}
         Store.UpdateInvoiceSender(eventId,issueId,senderBox.Text);persistedSender=senderBox.Text;
         SaveFiles();return true;
+        }finally{confirmingSender=false;}
     }
     private void PrintInvoiceTickets()
     {

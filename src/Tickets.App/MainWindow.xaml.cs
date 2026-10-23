@@ -158,7 +158,14 @@ public partial class MainWindow : Window
         currentArchived=store.IsEventArchived(current.Id);
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;EventDate.Text=current.Date;
-        EventSubtitle.Text=$"{current.Venue}\nВсего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
+        EventVenue.Text=current.Venue;
+        // Keep the two square actions at their approved coordinates while using
+        // the vacated venue line for the ordinary commands and tab headings.
+        var venueLine=EventSubtitle.FontSize*EventSubtitle.FontFamily.LineSpacing;
+        EventSummaryHeader.Margin=new Thickness(8,0,0,4+venueLine);
+        OrdinaryActionsScroll.RenderTransform=new System.Windows.Media.TranslateTransform(0,-venueLine);
+        WorkspaceTabs.Margin=new Thickness(0,-venueLine+5,0,0);
+        EventSubtitle.Text=$"Всего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
         EventTitle.ToolTip=EventSubtitle.Text;UpdateCompactLayout();
         PriceBox.Clear();
         if(fit){Hall.FocusPrice=null;ClearIssuanceRecipient();}
@@ -322,6 +329,7 @@ public partial class MainWindow : Window
         store.Return(ids); LoadEvent(false); StatusText.Text=$"Возвращено билетов: {ids.Length}. Записи сохранены в журнале.";
         foreach(var issue in issueIds)try{store.SaveAllDocuments(eventId,issue);}catch(Exception ex){StatusText.Text+=" Не удалось обновить Word: "+ex.Message;}
     }
+    internal void BackupFromSettings()=>BackupClick(this,new RoutedEventArgs());
     private void BackupClick(object sender,RoutedEventArgs e)=>Run(()=> {
         var dialog=new SaveFileDialog {Filter="База билетов (*.db)|*.db",FileName=$"tickets-{DateTime.Now:yyyy-MM-dd-HHmm}.db"};
         if(dialog.ShowDialog(this)==true) { store.Backup(dialog.FileName); StatusText.Text="Резервная копия сохранена: "+dialog.FileName; }

@@ -30,7 +30,7 @@ internal static class DocumentActions
         void Add(string caption,Action action,Brush color)
         {
             var button=new Button{Content=caption,ContentTemplate=null,FontSize=16.9,Width=double.NaN,
-                MinHeight=34,Padding=new Thickness(10,2,10,2),Margin=new Thickness(0,0,5,4),
+                MinHeight=34,Padding=new Thickness(2,2,2,2),Margin=new Thickness(0,0,5,4),
                 Background=color,Foreground=Brushes.White,FontWeight=FontWeights.Bold};
             button.Click+=(_,_)=>action();row.Children.Add(button);
         }
@@ -40,7 +40,7 @@ internal static class DocumentActions
         var layout=new DockPanel{LastChildFill=false};DockPanel.SetDock(row,Dock.Left);layout.Children.Add(row);
         if(printTickets is not null)
         {
-            var tickets=new Button{Content="Печать билетов",ContentTemplate=null,FontSize=16.9,Width=double.NaN,MinHeight=34,Padding=new Thickness(10,2,10,2),Margin=new Thickness(8,0,0,4),Background=Brushes.SeaGreen,Foreground=Brushes.White,FontWeight=FontWeights.Bold};tickets.Click+=(_,_)=>printTickets();DockPanel.SetDock(tickets,Dock.Right);layout.Children.Add(tickets);
+            var tickets=new Button{Content="Печать билетов",ContentTemplate=null,FontSize=16.9,Width=double.NaN,MinHeight=34,Padding=new Thickness(2,2,2,2),Margin=new Thickness(8,0,0,4),Background=Brushes.SeaGreen,Foreground=Brushes.White,FontWeight=FontWeights.Bold};tickets.Click+=(_,_)=>printTickets();DockPanel.SetDock(tickets,Dock.Right);layout.Children.Add(tickets);
         }
         return new ScrollViewer{Content=layout,HorizontalContentAlignment=HorizontalAlignment.Stretch,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,
             VerticalScrollBarVisibility=ScrollBarVisibility.Disabled,Margin=new Thickness(0,0,0,4)};

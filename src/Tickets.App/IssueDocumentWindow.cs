@@ -17,7 +17,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
     public IssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,IssueDocumentKinds.Name(kind)+$" · выдача № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
-        var root=new Grid{Margin=new Thickness(10)};Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
+        var root=new Grid{Margin=new Thickness(2)};Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         var info=Store.GetIssueDocument(eventId,issueId,kind);original=info.Template;template.Text=original;
@@ -27,7 +27,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
             var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx",destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});
             if(path is not null)status.Text="Сохранено: "+path;
         }),()=>Try(Print)));
-        header.Children.Add(new TextBlock{Text="Получатель: "+info.Invoice.Recipient,FontWeight=FontWeights.Bold,TextWrapping=TextWrapping.Wrap});header.Children.Add(status);
+        header.Children.Add(status);
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
         var editing=new DockPanel{Margin=new Thickness(8)};var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Bottom);editing.Children.Add(tools);
@@ -37,7 +37,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0&&template.Text!=original)Try(Save);};
         preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)preview.Document=Document(Store.GetIssueDocument(eventId,issueId,kind),preview.ActualWidth-20);};
         preview.Document=Document(info);status.Text="Документ подготовлен для текущей выдачи.";
-        if(kind==IssueDocumentKinds.Bill)DocumentFlag025.Apply(this,root,info.Invoice.Recipient,issueId);
+        DocumentFlag025.Apply(this,root,info.Invoice.Recipient,issueId,IssueDocumentKinds.Name(kind));
         Closing+=(_,e)=>{
             if(template.Text==original)return;
             var answer=MessageBox.Show(DialogOwner,"Сохранить изменения документа?",Title,MessageBoxButton.YesNoCancel,MessageBoxImage.Question);

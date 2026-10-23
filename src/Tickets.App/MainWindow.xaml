@@ -14,7 +14,6 @@
         <WrapPanel HorizontalAlignment="Right">
           <Button Content="Настройки" Click="SettingsClick" Margin="0,3,6,3"/>
           <Button Content="Главная" Click="HomeClick" Margin="0,3,6,3"/>
-          <Button Content="Обновление" Click="UpdateClick" Margin="0,3,6,3"/>
           <Button Content="Закрыть" Click="CloseClick" Margin="0,3,0,3"/>
         </WrapPanel>
       </DockPanel>
@@ -35,25 +34,26 @@
             <TextBox x:Name="SearchBox" TextChanged="SearchChanged" ToolTip="Поиск по названию, площадке или дате"/>
             <TextBlock Text="Название, площадка или дата" Foreground="#64748B" FontSize="14.3" Margin="0,4,0,9"/>
           </StackPanel>
-          <Button DockPanel.Dock="Bottom" Content="Резервная копия…" Click="BackupClick" Margin="0,10,0,0"/>
           <TreeView x:Name="EventsList" SelectedItemChanged="EventChanged" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled"/>
 
         </DockPanel>
       </Border>
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <StackPanel Margin="8,0,0,4"><ScrollViewer x:Name="EventHeaderScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="EventDate" FontSize="19" Margin="10,3,0,0" FontWeight="Bold"/></StackPanel></ScrollViewer>
+        <StackPanel x:Name="EventSummaryHeader" Margin="8,0,0,4"><ScrollViewer x:Name="EventHeaderScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="EventDate" FontSize="19" Margin="10,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventVenue" FontSize="19" Foreground="#64748B" Margin="10,3,0,0"/></StackPanel></ScrollViewer>
           <TextBlock x:Name="EventSubtitle" FontSize="19" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
-        <ScrollViewer Grid.Row="1" Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="8,0,0,5">
+        <Grid Grid.Row="1" Grid.Column="0" Margin="8,0,0,5" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+        <ScrollViewer x:Name="OrdinaryActionsScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Top">
           <Grid x:Name="UpperActions" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <Button Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Изменить цену" Click="TogglePriceClick" Margin="0,3,6,3"/>
+            <Button x:Name="ChangePriceButton" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Изменить цену" Click="TogglePriceClick" Margin="0,3,6,3"/>
             <Button x:Name="UndoPriceButton" Grid.Column="1" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Отменить изменение цены" Click="UndoPriceClick" IsEnabled="False" Margin="0,3,6,3"/>
             <Button x:Name="ExtendInvoiceButton" Grid.Column="2" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Дополнить накладную" Click="ExtendInvoiceClick" IsEnabled="False" Margin="0,3,6,3"/>
-            <StackPanel Grid.Column="3" Orientation="Horizontal" Margin="0,0,3,0">
+          </Grid>
+        </ScrollViewer>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,3,0">
               <Button x:Name="PrintTicketsButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Style="{StaticResource SeatActionStyle}" Content="Печать билетов" Click="PrintTicketsClick" Background="#1B7A43" Foreground="White" IsEnabled="False"/>
               <Button x:Name="IssueButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Style="{StaticResource SeatActionStyle}" Content="Выдать накладную" Click="IssueClick" Background="#2466A8" Foreground="White" IsEnabled="False"/>
             </StackPanel>
           </Grid>
-        </ScrollViewer>
         <TabControl x:Name="WorkspaceTabs" SelectionChanged="WorkspaceTabChanged" Grid.Row="2" BorderBrush="#CBD5E1" Background="White">
           <TabItem><TabItem.Header><TextBlock Text="Схема зала" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>
             <Grid>
@@ -61,8 +61,8 @@
                 <ScrollViewer DockPanel.Dock="Top" Margin="10,4" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
                   <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Height="32" Click="FitClick"/><Button Content="−" Height="32" Width="44" Click="ZoomOutClick"/><Button Content="+" Height="32" Width="44" Click="ZoomInClick"/></StackPanel>
                 </ScrollViewer>
-                <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="80" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
-                  <StackPanel><TextBlock x:Name="HallTotals" Margin="10,4" FontWeight="Bold" TextWrapping="Wrap"/><Grid x:Name="LegendPanel" Margin="10,4" HorizontalAlignment="Left"/><WrapPanel x:Name="StatusLegendPanel" Margin="10,4"/></StackPanel>
+                <ScrollViewer DockPanel.Dock="Bottom" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+                  <StackPanel><TextBlock x:Name="HallTotals" Margin="10,1" FontWeight="Bold" TextWrapping="Wrap"/><Grid x:Name="LegendPanel" Margin="10,1" HorizontalAlignment="Left"/><WrapPanel x:Name="StatusLegendPanel" Margin="10,1"/></StackPanel>
                 </ScrollViewer>
                 <local:HallView x:Name="Hall" Margin="5"/>
               </DockPanel>
@@ -72,20 +72,21 @@
           <TabItem x:Name="JournalTab"><TabItem.Header><TextBlock Text="Журнал выдачи и возвратов" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>
             <DockPanel Margin="10">
               <Grid x:Name="JournalHeader" DockPanel.Dock="Top" Height="44" Margin="0,0,0,6">
-                <TextBlock x:Name="JournalInstructions" Text="Нажмите строку, чтобы открыть накладную. Для объединения отметьте несколько накладных." Foreground="#64748B" TextWrapping="Wrap" VerticalAlignment="Center" FontSize="14"/>
+                <TextBlock x:Name="JournalInstructions" Text="Нажмите строку, чтобы открыть накладную. Для объединения отметьте несколько накладных." Foreground="#64748B" TextWrapping="Wrap" VerticalAlignment="Center" HorizontalAlignment="Stretch" TextAlignment="Center" FontSize="18"/>
                 <Grid x:Name="JournalMergeActions" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Button x:Name="MergeInvoicesButton" Width="Auto" Height="34" FontSize="14" Margin="0" VerticalAlignment="Center" Padding="10,2" Content="Объединить накладные" Visibility="Collapsed" HorizontalAlignment="Left" Click="MergeInvoicesClick"/><TextBlock x:Name="JournalSelectionStatus" Grid.Column="1" FontSize="14" VerticalAlignment="Center" TextWrapping="Wrap" Margin="8,0,0,0"/></Grid>
               </Grid>
-              <DataGrid x:Name="HistoryGrid" GridLinesVisibility="All" HorizontalGridLinesBrush="#B8C2CE" VerticalGridLinesBrush="#B8C2CE" SelectionMode="Single" SelectionUnit="FullRow" PreviewMouseLeftButtonUp="HistoryRowClick">
+              <DataGrid x:Name="HistoryGrid" FontSize="18" ColumnHeaderHeight="30" GridLinesVisibility="All" HorizontalGridLinesBrush="#B8C2CE" VerticalGridLinesBrush="#B8C2CE" SelectionMode="Single" SelectionUnit="FullRow" PreviewMouseLeftButtonUp="HistoryRowClick">
+                <DataGrid.Resources><Style TargetType="TextBlock"><Setter Property="TextAlignment" Value="Center"/><Setter Property="VerticalAlignment" Value="Center"/></Style></DataGrid.Resources>
                 <DataGrid.Columns>
                   <DataGridTemplateColumn Header="" Width="38" CanUserSort="False"><DataGridTemplateColumn.CellTemplate><DataTemplate>
                     <CheckBox Tag="{Binding Id}" IsChecked="{Binding IsSelected, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Checked="JournalChecked" Unchecked="JournalChecked" HorizontalAlignment="Center" VerticalAlignment="Center" ToolTip="Выбрать накладную для объединения"/>
                   </DataTemplate></DataGridTemplateColumn.CellTemplate></DataGridTemplateColumn>
                   <DataGridTextColumn Header="№" Binding="{Binding Id}" Width="100"/>
-                  <DataGridTextColumn Header="Выдача" Binding="{Binding Date}" Width="145"/>
-                  <DataGridTextColumn Header="От" Binding="{Binding SenderKind}" Width="55"/>
-                  <DataGridTextColumn Header="Получатель" Binding="{Binding Recipient}" Width="*"/>
-                  <DataGridTextColumn Header="Билетов" Binding="{Binding Count}" Width="75"/>
-                  <DataGridTextColumn Header="Сумма, ₽" Binding="{Binding Total, StringFormat=N0}" Width="110"/>
+                  <DataGridTextColumn Header="Выдача" Binding="{Binding Date}" Width="190" MinWidth="190"/>
+                  <DataGridTextColumn Header="От" Binding="{Binding SenderKind}" Width="75" MinWidth="75"/>
+                  <DataGridTextColumn Header="Получатель" Binding="{Binding Recipient}" Width="*" MinWidth="140"/>
+                  <DataGridTextColumn Header="Билетов" Binding="{Binding Count}" Width="95"/>
+                  <DataGridTextColumn Header="Сумма, ₽" Binding="{Binding Total, StringFormat=N0}" Width="130" MinWidth="130"/>
                   <DataGridTextColumn Header="Возвращено" Binding="{Binding ReturnedCount}" Width="90" Visibility="Collapsed"/>
                   <DataGridTextColumn Header="Состояние" Binding="{Binding Status}" Width="140" Visibility="Collapsed"/>
                 </DataGrid.Columns>

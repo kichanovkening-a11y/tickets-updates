@@ -19,7 +19,7 @@ internal static class IssueDocumentNavigation
             var active=key==selected;
             // Natural caption widths keep all six documents on one row at the
             // regular font size. Bypass the shared shrinking/wrapping template.
-            var button=new Button{Content=caption,ContentTemplate=null,Width=double.NaN,MinWidth=60,MinHeight=34,Padding=new Thickness(10,2,10,2),Margin=new Thickness(0,0,5,4),
+            var button=new Button{Content=caption,ContentTemplate=null,Width=double.NaN,MinWidth=0,MinHeight=34,Padding=new Thickness(2,2,2,2),Margin=new Thickness(0,0,5,4),
                 HorizontalContentAlignment=HorizontalAlignment.Center};
             if(active)
             {
@@ -60,7 +60,7 @@ internal static class IssueDocumentNavigation
                 :selected==Specification
                 ?new SpecificationWindow(store,eventId,issueId)
                 :new IssueDocumentWindow(store,eventId,issueId,selected);
-            if(selected==Specification)editor.Title=$"Спецификация · выдача № {issueId}";
+            if(selected==Specification&&editor.DocumentTab is null)DocumentFlag025.Apply(editor,(UIElement)editor.Content,store.Invoice(eventId,issueId).Recipient,issueId,"Спецификация");
             var body=editor.Content as UIElement??throw new InvalidOperationException("Нет содержимого документа.");
             editor.Content=null;
             var frame=new DockPanel();
@@ -77,9 +77,9 @@ internal static class IssueDocumentNavigation
                 }
                 catch(Exception ex){MessageBox.Show(editor.DialogOwnerForHost,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
             });
-            if(selected!=IssueDocumentKinds.Bill&&DocumentActions.TakeToolbar(body) is {} actions)DocumentActions.Append(navigation,actions);
-            navigation.Margin=new Thickness(10,10,10,0);
-            if(body is FrameworkElement content)content.Margin=new Thickness(10,0,10,10);
+            if(DocumentActions.TakeToolbar(body) is {} actions)DocumentActions.Append(navigation,actions);
+            navigation.Margin=new Thickness(2,2,2,0);
+            if(body is FrameworkElement content)content.Margin=new Thickness(2,0,2,2);
             DockPanel.SetDock(navigation,Dock.Top);frame.Children.Add(navigation);frame.Children.Add(body);editor.Content=frame;
             editor.ShowDialog();
             selected=next;

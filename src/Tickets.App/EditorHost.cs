@@ -39,12 +39,19 @@ public partial class MainWindow
         var card=new Border{Background=Brushes.White,BorderBrush=Brushes.SlateGray,BorderThickness=new Thickness(1),Margin=new Thickness(12),
             MaxWidth=editor.Width,MaxHeight=editor.Height,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch};
         TextElement.SetFontFamily(card,editor.FontFamily);TextElement.SetFontSize(card,editor.FontSize);TextElement.SetFontWeight(card,editor.FontWeight);
-        var panel=new DockPanel();card.Child=panel;page.Children.Add(card);
-        var title=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,editor is PriceEditorWindow?0:8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
+        var panel=new DockPanel();card.Child=panel;
+        if(editor.DocumentTab is {} tab)
+        {
+            var documentFrame=new Grid{MaxWidth=editor.Width+34,MaxHeight=editor.Height,Margin=new Thickness(2),VerticalAlignment=VerticalAlignment.Top};
+            documentFrame.ColumnDefinitions.Add(new(){Width=GridLength.Auto});documentFrame.ColumnDefinitions.Add(new());
+            documentFrame.Children.Add(DocumentFlag025.Tab(tab));card.Margin=new Thickness(0);Grid.SetColumn(card,1);documentFrame.Children.Add(card);page.Children.Add(documentFrame);
+        }
+        else page.Children.Add(card);
+        var title=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,editor is PriceEditorWindow||editor.DocumentTab is not null?0:8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
         title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         title.ColumnDefinitions.Add(new ColumnDefinition());
         title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
-        var close=new Button{Content="Закрыть",Margin=new Thickness(8),Width=120};close.Click+=(_,_)=>editor.Close();Grid.SetColumn(close,2);title.Children.Add(close);
+        var close=new Button{Content="Закрыть",Margin=new Thickness(editor.DocumentTab is not null?2:8),Width=120};close.Click+=(_,_)=>editor.Close();Grid.SetColumn(close,2);title.Children.Add(close);
         if(editor is PriceEditorWindow priceEditor&&priceEditor.HeaderSaveAction is not null)
         {
             // Match the pricing form's sidebar so the caption is centred over the hall.
@@ -55,7 +62,7 @@ public partial class MainWindow
         }
         else
         {
-            var caption=new TextBlock{Text=editor.Title,FontSize=21,FontWeight=FontWeights.Bold,Margin=new Thickness(15),VerticalAlignment=VerticalAlignment.Center,TextWrapping=TextWrapping.Wrap};
+            var caption=new TextBlock{Text=editor.Title,FontSize=21,FontWeight=FontWeights.Bold,Margin=new Thickness(editor.DocumentTab is not null?2:15),HorizontalAlignment=HorizontalAlignment.Center,TextAlignment=TextAlignment.Center,VerticalAlignment=VerticalAlignment.Center,TextWrapping=TextWrapping.Wrap};
             Grid.SetColumn(caption,1);title.Children.Add(caption);
         }
         var content=new ContentControl{Content=body,Tag=editor,HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch};panel.Children.Add(content);
@@ -87,7 +94,8 @@ internal sealed class SettingsWindow:EditorWindow
         var sender=Field(form,"От кого по умолчанию",store.Sender);
         var directory=Field(form,"Папка накладных и спецификаций",store.DocumentsDirectory);
         Button(form,"Выбрать папку…",()=>{var dialog=new Microsoft.Win32.OpenFolderDialog{Title="Папка документов"};if(System.IO.Directory.Exists(directory.Text))dialog.InitialDirectory=directory.Text;if(dialog.ShowDialog(DialogOwner)==true)directory.Text=dialog.FolderName;});
-        Button(form,"Спецификации",()=>new SpecificationWindow(store).ShowDialog());
+        Button(form,"Обновление",()=>new UpdateWindow(store).ShowDialog());
+        Button(form,"Резервная копия…",()=>main.BackupFromSettings());
         Button(form,"Сохранить",()=>Try(()=>{var accepted=SenderConfirmation025.Choose(DialogOwner,store.Sender,sender.Text);if(accepted!=sender.Text){sender.Text=accepted;return;}store.SaveDocumentSettings(sender.Text,directory.Text);main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));
     }
 }

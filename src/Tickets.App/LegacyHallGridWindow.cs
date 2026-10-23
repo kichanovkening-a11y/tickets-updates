@@ -1,94 +1,47 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Input;
 using Tickets.Core;
-
 namespace Tickets.App;
 
-/// <summary>Opt-in legacy cell classification; returns a draft only after explicit acceptance.</summary>
-internal sealed class LegacyHallGridWindow : EditorWindow
+internal sealed class LegacyHallGridWindow:EditorWindow
 {
-    public sealed class GridRow
-    {
-        public int Index{get;}
-        private readonly string[] labels;
-        public GridRow(int index,string[] labels){Index=index;this.labels=labels;}
-        public string this[int column]=>labels[column];
-    }
-    private LegacyHallGrid draft=new(1,1);
-    private readonly Stack<LegacyHallGrid> history=[];
-    private readonly DataGrid table=new(){AutoGenerateColumns=false,IsReadOnly=true,CanUserAddRows=false,CanUserDeleteRows=false,CanUserReorderColumns=false,SelectionUnit=DataGridSelectionUnit.Cell,SelectionMode=DataGridSelectionMode.Extended,EnableColumnVirtualization=true,EnableRowVirtualization=true,RowHeaderWidth=35,ColumnWidth=36};
-    private readonly HallView preview=new();
-    private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,0)};
-    private readonly TextBox sector,rows,places,firstRow,firstSeat;
-    private readonly CheckBox reverse=new(){Content="Нумерация справа налево",Margin=new Thickness(0,8,0,0)};
+    private readonly HallView preview=new(){AllowUnavailableSelection=true,ShowInactivePlaceholders=false};
+    private List<DraftSeat> seats=[];
+    private readonly Stack<List<DraftSeat>> history=[];
     public IReadOnlyList<DraftSeat> Result{get;private set;}=[];
+    private static DraftSeat Copy(DraftSeat s)=>new(){Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y,Hidden=s.Hidden};
     public LegacyHallGridWindow(Store store,string sectorName):base(store,"Сетка как в старой программе",1200,820)
     {
         var root=new Grid{Margin=new Thickness(16)};root.ColumnDefinitions.Add(new(){Width=new GridLength(265)});root.ColumnDefinitions.Add(new());Content=root;
         var settings=new StackPanel{Margin=new Thickness(0,0,12,0)};root.Children.Add(new ScrollViewer{Content=settings,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
-        sector=Field(settings,"Сектор",sectorName);rows=Field(settings,"Количество рядов (включая проходы)","1");places=Field(settings,"Ячеек мест в ряду (включая проходы)","1");
-        firstRow=Field(settings,"Начало рядов","1");firstSeat=Field(settings,"Начало мест","1");settings.Children.Add(reverse);
-        Button(settings,"Создать сетку",()=>Try(()=>{
-            var next=new LegacyHallGrid(Number(rows,1,200),Number(places,1,300));history.Push(draft.Clone());draft=next;ShowCells();preview.Load([],[],true);
-        }));
-        settings.Children.Add(new TextBlock{Text="Выделите ячейки или прямоугольник. Правой кнопкой задайте места, подписи рядов или проходы. Крайние столбцы — подписи, они не становятся местами. Полностью пустые ряды не расходуют номера. Для буквенных ячеек числовое начало означает А.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,10,0,0)});
-        Button(settings,"Шаг назад",()=>Try(()=>{if(history.TryPop(out var state)){draft=state;rows.Text=draft.Rows.ToString();places.Text=draft.Places.ToString();ShowCells();preview.Load([],[],true);}}));
-        Button(settings,"Применить",()=>Try(()=>Apply()));
-        Button(settings,"Принять места",()=>Try(()=>{var compiled=Apply();Result=compiled;Finish(true);}));
-        settings.Children.Add(status);
-        var area=new Grid();Grid.SetColumn(area,1);root.Children.Add(area);area.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});area.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});area.Children.Add(table);Grid.SetRow(preview,1);area.Children.Add(preview);
-        var menu=new ContextMenu();
-        foreach(var (caption,kind) in new[]{("Установить места с цифровой нумерацией",LegacyHallCell.NumberSeat),("Установить места с буквенной нумерацией",LegacyHallCell.LetterSeat),("Установить ряд с цифровой нумерацией",LegacyHallCell.NumberRow),("Установить ряд с буквенной нумерацией",LegacyHallCell.LetterRow),("Установить проход",LegacyHallCell.Empty)})
+        var sector=Field(settings,"Сектор",sectorName);var rows=Field(settings,"Количество рядов","1");var places=Field(settings,"Мест в ряду","1");
+        var firstRow=Field(settings,"Начало рядов","1");var firstSeat=Field(settings,"Начало мест","1");
+        var reverse=new CheckBox{Content="Нумерация справа налево",Margin=new Thickness(0,8,0,0)};settings.Children.Add(reverse);
+        var showHidden=new CheckBox{Content="Показать скрытые места"};settings.Children.Add(showHidden);
+        void Remember()=>history.Push(seats.Select(Copy).ToList());
+        void Refresh()=>preview.Load(seats.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,0,"#A9C5E4",null,"","",null)).Where((s,i)=>showHidden.IsChecked==true||!seats[i].Hidden).ToArray(),[],true);
+        List<DraftSeat> Selection()=>preview.Selected.Where(id=>id>0&&id<=seats.Count).Select(id=>seats[(int)id-1]).ToList();
+        showHidden.Checked+=(_,_)=>Refresh();showHidden.Unchecked+=(_,_)=>Refresh();
+        Button(settings,"Создать сетку",()=>Try(()=>{var grid=new LegacyHallGrid(Number(rows,1,200),Number(places,1,300));var generated=grid.Compile(sector.Text,firstRow.Text,firstSeat.Text,reverse.IsChecked==true);Remember();seats=generated;Refresh();}));
+        Button(settings,"Шаг назад",()=>{if(history.TryPop(out var previous)){seats=previous;Refresh();}});
+        Button(settings,"Принять места",()=>Try(()=>{if(seats.Count==0)throw new TicketException("Создайте сетку мест.");Result=seats.Select(Copy).ToList();Finish(true);}));
+        Button(settings,"Весь зал",()=>preview.Fit());
+        Grid.SetColumn(preview,1);root.Children.Add(preview);
+        void Context(long id,bool row)
         {
-            var item=new MenuItem{Header=caption};item.Click+=(_,_)=>Try(()=>Classify(kind));menu.Items.Add(item);
+            if(id<1||id>seats.Count)return;var target=seats[(int)id-1];
+            if(row)preview.SetSelection(seats.Select((s,i)=>(s,i)).Where(p=>p.s.Sector==target.Sector&&p.s.Row==target.Row).Select(p=>(long)p.i+1));
+            else if(!preview.Selected.Contains(id))preview.SetSelection(new[]{id});
+            var menu=new ContextMenu{PlacementTarget=preview};
+            void Item(string name,Action action){var item=new MenuItem{Header=name};item.Click+=(_,_)=>Try(action);menu.Items.Add(item);}
+            Item("Сделать проход",()=>{Remember();HallEditing025.MakeAisle(seats,Selection());Refresh();});
+            Item("Проход после ряда",()=>{var dialog=new RowAisleWindow024(Store);if(dialog.ShowDialog()!=true)return;Remember();HallEditing024.MakeRowAisle(seats,Selection(),dialog.Gap);Refresh();});
+            Item("Назначить букву",()=>{var dialog=new HallLetterWindow025(Store);if(dialog.ShowDialog()!=true)return;Remember();HallEditing025.AssignLetter(seats,target,dialog.Letter,row);Refresh();});
+            Item("Удалить места",()=>{Remember();HallEditing024.Delete(seats,Selection());Refresh();});
+            Item("Скрыть места",()=>{Remember();foreach(var seat in Selection())seat.Hidden=true;Refresh();});
+            if(Selection().Any(s=>s.Hidden))Item("Показать места",()=>{Remember();foreach(var seat in Selection())seat.Hidden=false;Refresh();});
+            preview.ContextMenu=menu;menu.IsOpen=true;
         }
-        table.ContextMenu=menu;
-        var scale=1.0;
-        void Zoom(double factor)
-        {
-            scale=Math.Clamp(scale*factor,.25,2);
-            table.RowHeight=Math.Max(12,28*scale);table.FontSize=Math.Max(8,14*scale);
-            foreach(var column in table.Columns)column.Width=Math.Max(12,36*scale);
-            table.ColumnHeaderHeight=Math.Max(18,28*scale);
-        }
-        var zoomButtons=new WrapPanel();settings.Children.Add(zoomButtons);
-        Button(zoomButtons,"−",()=>Zoom(1/1.2));Button(zoomButtons,"+",()=>Zoom(1.2));
-        Button(settings,"Вся сетка",()=>{var cell=table.ActualWidth/Math.Max(1,draft.Columns);scale=1;Zoom(Math.Clamp(Math.Min(cell/36,table.ActualHeight/Math.Max(1,draft.Rows)/28),.25,2));});
-        table.PreviewMouseWheel+=(_,e)=>{Zoom(e.Delta>0?1.15:1/1.15);e.Handled=true;};
-        ShowCells();
-    }
-    private void Classify(LegacyHallCell kind)
-    {
-        if(table.SelectedCells.Count==0)return;
-        history.Push(draft.Clone());
-        foreach(var cell in table.SelectedCells.ToArray())
-            if(cell.Item is GridRow row)draft.Set(row.Index,cell.Column.DisplayIndex,kind);
-        ShowCells();preview.Load([],[],true);
-    }
-    private List<DraftSeat> Apply()
-    {
-        var compiled=draft.Compile(sector.Text,firstRow.Text,firstSeat.Text,reverse.IsChecked==true);
-        ShowCells(compiled);
-        preview.Load(compiled.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,0,"#A9C5E4",null,"","",null)).ToArray(),[],true);
-        status.Text=$"Предпросмотр: {compiled.Count} мест. «Принять места» добавляет их в редактор зала.";return compiled;
-    }
-    private void ShowCells(IReadOnlyList<DraftSeat>? compiled=null)
-    {
-        if(table.Columns.Count!=draft.Columns)
-        {
-            table.Columns.Clear();
-            for(var c=0;c<draft.Columns;c++)table.Columns.Add(new DataGridTextColumn{Header=c==0||c==draft.Columns-1?"Ряд":c.ToString(),Binding=new Binding($"[{c}]"),Width=36});
-        }
-        var labels=compiled?.ToDictionary(s=>((int)Math.Round(s.Y/22),(int)Math.Round(s.X/20)+1),s=>s.Number);
-        var rowLabels=compiled?.GroupBy(s=>(int)Math.Round(s.Y/22)).ToDictionary(g=>g.Key,g=>g.First().Row);
-        table.ItemsSource=Enumerable.Range(0,draft.Rows).Select(r=>new GridRow(r,Enumerable.Range(0,draft.Columns).Select(c=>{
-            var kind=draft.Get(r,c);
-            if(kind is LegacyHallCell.NumberRow or LegacyHallCell.LetterRow)return rowLabels?.GetValueOrDefault(r)??(kind==LegacyHallCell.LetterRow?"А":"Ряд");
-            if(kind==LegacyHallCell.Empty)return "";
-            return labels?.GetValueOrDefault((r,c))??(kind==LegacyHallCell.LetterSeat?"А":"1");
-        }).ToArray())).ToArray();
-        if(compiled is null)status.Text="Сетка изменена. Нажмите «Применить» для проверки нумерации.";
+        preview.SeatContextRequested+=(id,_)=>Context(id,false);preview.RowContextRequested+=(id,_)=>Context(id,true);
     }
 }

@@ -59,7 +59,7 @@ internal sealed class RecipientsWindow:EditorWindow
         }));
         Button(actions,"Сохранённые комплекты",()=>Try(()=>{
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
-            new RecipientPackagesWindow(Store,organization.Name).ShowSeparateDialog();
+            new RecipientPackagesWindow(Store,organization.Name).ShowDialog();
         }));
         organizations.MouseDoubleClick+=(_,_)=>{if(edit.IsEnabled)edit.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));};
         delete=new MenuItem{Header="Удалить"};

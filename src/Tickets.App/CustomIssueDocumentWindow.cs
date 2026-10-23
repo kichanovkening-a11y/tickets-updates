@@ -19,7 +19,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     internal CustomIssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,Tickets.Core.Store.RecipientDocumentName(kind)+$" · выдача № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
-        var root=new Grid{Margin=new Thickness(10)};Content=root;
+        var root=new Grid{Margin=new Thickness(2)};Content=root;
         DocumentPrintPreview.Route(root,()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>IssueDocumentWindow.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);}));
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
@@ -31,7 +31,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
                 if(path is not null)status.Text="Сохранено: "+path;
             }),
             ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>IssueDocumentWindow.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);})));
-        header.Children.Add(new TextBlock{Text="Получатель: "+Info.Invoice.Recipient,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold});
+
         header.Children.Add(ContractFields.Row(Store,eventId,issueId,()=>{Refresh();status.Text="Поля договора сохранены для всего комплекта.";}));
         header.Children.Add(status);
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
@@ -45,7 +45,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         Closing+=(_,e)=>{try{SaveForNavigation();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
         preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)Refresh();};
         Refresh();status.Text="Форма получателя подготовлена для текущей выдачи.";
-        if(kind==IssueDocumentKinds.Bill)DocumentFlag025.Apply(this,root,Info.Invoice.Recipient,issueId);
+        DocumentFlag025.Apply(this,root,Info.Invoice.Recipient,issueId,Tickets.Core.Store.RecipientDocumentName(kind));
     }
     private static void CompactButton(Panel parent,string caption,Action action)
     {

@@ -16,7 +16,7 @@ internal sealed class RecipientPackagesWindow:EditorWindow
         if(packages.Count==0)list.Children.Add(new TextBlock{Text="Комплектов пока нет"});
         foreach(var package in packages)
         {
-            var button=Button(list,$"Комплект № {package.Id} · выдач: {package.Issues.Count} · билетов: {package.Invoice.Tickets.Count}",()=>Try(()=>{var editor=new RecipientPackageWindow(Store,package.Id){Owner=this};editor.ShowSeparateDialog();}));
+            var button=Button(list,$"Комплект № {package.Id} · выдач: {package.Issues.Count} · билетов: {package.Invoice.Tickets.Count}",()=>Try(()=>{var editor=new RecipientPackageWindow(Store,package.Id){Owner=this};editor.ShowDialog();}));
             button.Width=double.NaN;button.ContentTemplate=null;button.HorizontalContentAlignment=HorizontalAlignment.Left;button.Padding=new Thickness(10,2,10,2);button.Tag=package.Id;
         }
     }

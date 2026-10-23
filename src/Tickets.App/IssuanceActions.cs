@@ -7,6 +7,7 @@ public partial class MainWindow
 {
     private string confirmedSender025="";
     private bool refreshingSenders025;
+    private bool confirmingSender026;
     private void RefreshSenders(string? selected=null)
     {
         if(selected is not null)selected=SenderConfirmation025.Choose(this,confirmedSender025,selected);
@@ -21,7 +22,13 @@ public partial class MainWindow
     private void SenderSelectionChanged025(object sender,System.Windows.Controls.SelectionChangedEventArgs e)
     {if(!refreshingSenders025&&SenderBox.IsDropDownOpen&&e.AddedItems.Count==1)Dispatcher.BeginInvoke(new Action(ConfirmSender025));}
     private void SenderFocusLost025(object sender,RoutedEventArgs e){if(!refreshingSenders025&&!SenderBox.IsKeyboardFocusWithin)ConfirmSender025();}
-    private void ConfirmSender025(){if(string.IsNullOrWhiteSpace(SenderBox.Text))return;var accepted=SenderConfirmation025.Choose(this,confirmedSender025,SenderBox.Text);SenderBox.Text=accepted;confirmedSender025=accepted;}
+    private void ConfirmSender025()
+    {
+        if(confirmingSender026||refreshingSenders025||string.IsNullOrWhiteSpace(SenderBox.Text))return;
+        confirmingSender026=true;
+        try{var accepted=SenderConfirmation025.Choose(this,confirmedSender025,SenderBox.Text);SenderBox.SelectedItem=accepted;SenderBox.Text=accepted;confirmedSender025=accepted;}
+        finally{confirmingSender026=false;}
+    }
     private void SenderDropDownOpened(object sender,EventArgs e)=>RefreshSenders();
     private void SenderContextRequested(object sender,System.Windows.Input.MouseButtonEventArgs e)
     {

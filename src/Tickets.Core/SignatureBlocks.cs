@@ -30,6 +30,21 @@ public static class SignatureBlocks
         var spacing=titleProps.Element(W+"spacing");if(spacing is null){spacing=new XElement(W+"spacing");titleProps.Add(spacing);}spacing.SetAttributeValue(W+"after",0);
         return p;
     }
+    internal static void KeepRightBillSignature(XDocument xml,InvoiceInfo invoice)
+    {
+        if(!Regex.IsMatch(invoice.Sender.Trim(),@"^ИП(?:\s|$)",RegexOptions.IgnoreCase))return;
+        foreach(var table in xml.Descendants(W+"tbl").ToArray())
+        {
+            var names=table.Descendants(W+"t").Count(t=>t.Value.Contains("{senderSignatory}")||t.Value==Sender(invoice).Name);
+            var text=string.Concat(table.Descendants(W+"t").Select(t=>t.Value));
+            if(names!=2||!text.Contains("Руководитель")||!text.Contains("Бухгалтер",StringComparison.OrdinalIgnoreCase))continue;
+            foreach(var row in table.Elements(W+"tr"))
+            {
+                var cells=row.Elements(W+"tc").ToArray();
+                foreach(var cell in cells.Take(cells.Length/2)){cell.Elements().Where(e=>e.Name!=W+"tcPr").Remove();cell.Add(new XElement(W+"p"));}
+            }
+        }
+    }
     internal static void FillTemplateSignatures(XDocument xml,InvoiceInfo invoice)
     {
         foreach(var row in xml.Descendants(W+"tr").ToArray())

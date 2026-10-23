@@ -38,7 +38,7 @@ internal static class Program
             DocumentEditor019Checks.Run();
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
-            if(args.Contains("--corrections025",StringComparer.Ordinal)){Corrections025UiChecks.Run(store);main.Close();return 0;}
+            if(args.Contains("--corrections025",StringComparer.Ordinal)){Corrections025UiChecks.Run(store);Corrections026UiChecks.Run(store,main);main.Close();return 0;}
             var actions=Logical(main).OfType<Button>().ToList();
             Check(actions.Count>=15,"main actions found");
             Check(!actions.Any(b=>Equals(b.Content,"Спецификации")||Equals(b.Content,"Свернуть")||Equals(b.Content,"В окно")),"main toolbar omits duplicate window controls and specifications");
@@ -212,7 +212,7 @@ internal static class Program
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
             Exception? invoiceError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
-                var window=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Накладная №"));
+                var window=app.Windows.Cast<Window>().Single(w=>w.GetType().Name=="InvoiceWindow");
                 try{
                     var document=Logical(window).OfType<FlowDocumentScrollViewer>().Single().Document;
                     var text=new TextRange(document.ContentStart,document.ContentEnd).Text;
@@ -909,14 +909,14 @@ internal static class Program
         Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
         var upper=(Grid)main.FindName("UpperActions");var toolbarScroll=(ScrollViewer)upper.Parent;
-        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,upper)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
-        Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==3&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
+        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,toolbarScroll.Parent)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
+        Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==1&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
         Check(toolbarScroll.HorizontalScrollBarVisibility==ScrollBarVisibility.Auto&&toolbarScroll.VerticalScrollBarVisibility==ScrollBarVisibility.Disabled&&Grid.GetColumnSpan(toolbarScroll)==1,"show toolbar scrolls horizontally within the hall column");
         Check(print.ActualWidth==72&&print.ActualHeight==72&&issue.ActualWidth==72&&issue.ActualHeight==72&&Equals(print.Style,issue.Style),"main printing and issuance use the same compact square style");
         var whiteActions=upper.Children.OfType<Button>().ToArray();
-        var whiteBounds=whiteActions.Select(button=>button.TransformToAncestor(upper).TransformBounds(new Rect(button.RenderSize))).ToArray();
+        var whiteBounds=whiteActions.Select(button=>button.TransformToAncestor(main).TransformBounds(new Rect(button.RenderSize))).ToArray();
         Check(whiteActions.Length==3&&whiteBounds.Max(rect=>rect.Top)-whiteBounds.Min(rect=>rect.Top)<2&&whiteActions.All(button=>double.IsNaN(button.Width)&&button.FontSize==14),"three white show actions retain their type size and share one row");
-        var printBounds=print.TransformToAncestor(upper).TransformBounds(new Rect(print.RenderSize));var issueBounds=issue.TransformToAncestor(upper).TransformBounds(new Rect(issue.RenderSize));
+        var printBounds=print.TransformToAncestor(main).TransformBounds(new Rect(print.RenderSize));var issueBounds=issue.TransformToAncestor(main).TransformBounds(new Rect(issue.RenderSize));
         Check(whiteBounds.All(rect=>rect.Right<=printBounds.Left+1)&&Math.Abs(printBounds.Top-issueBounds.Top)<1&&issueBounds.Left>=printBounds.Right,"colored actions sit immediately right of extension with issuance to the right of printing");
         var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
         var dateBounds=date.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(date.RenderSize));
@@ -951,7 +951,7 @@ internal static class Program
             foreach(var scale in new[]{1.25,1.5})
             {
                 mainRoot.LayoutTransform=new ScaleTransform(scale,scale);Pump();main.UpdateLayout();Pump();
-                var rects=whiteActions.Select(button=>button.TransformToAncestor(upper).TransformBounds(new Rect(button.RenderSize))).ToArray();
+                var rects=whiteActions.Select(button=>button.TransformToAncestor(main).TransformBounds(new Rect(button.RenderSize))).ToArray();
                 Check(rects.Max(rect=>rect.Top)-rects.Min(rect=>rect.Top)<2&&whiteActions.All(button=>button.FontSize==14),"show actions preserve one row and readable type at "+scale+" layout scale");
                 foreach(var button in whiteActions.Concat(new[]{print,issue}))
                 {

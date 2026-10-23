@@ -45,27 +45,7 @@ internal static class Ui020Checks
         typeof(HallView).GetField("removing",Private)!.SetValue(geometry,true);
         Geometry("SelectRange",mixedEnd);
         Check(geometry.Selected.Count==0,"removal drag still removes selected free places");
-        foreach(var layout in new[]{VenueLayouts019.RussianSongSeats(),VenueLayouts019.EstradaSeats()})
-        {
-            var diagramSeats=layout.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,null,"#336699",null,"","",null)).ToArray();
-            var sectors=layout.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(s=>s.X),g.Min(s=>s.Y)-26)).ToArray();
-            var diagram=new HallView();diagram.Load(diagramSeats,sectors,true);
-            var drawing=(System.Windows.Media.DrawingGroup)typeof(HallView).GetField("drawing",Private)!.GetValue(diagram)!;
-            var renderedSeats=(IReadOnlyList<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(diagram)!;
-            IEnumerable<System.Windows.Media.GlyphRunDrawing> Glyphs(System.Windows.Media.Drawing node)
-            {if(node is System.Windows.Media.GlyphRunDrawing glyph)yield return glyph;else if(node is System.Windows.Media.DrawingGroup group)foreach(var child in group.Children)foreach(var descendant in Glyphs(child))yield return descendant;}
-            var headings=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-15.6)<.01).ToArray();
-            Check(headings.Length>=sectors.Length,"actual hall drawing contains each sector heading");
-            Check(headings.All(heading=>!renderedSeats.Any(seat=>heading.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))),"actual sector heading glyph bounds do not intersect any seat");
-            var captions=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-14.3)<.01&&g.ForegroundBrush==System.Windows.Media.Brushes.Black).ToArray();
-            Check(captions.Length>=2*layout.GroupBy(s=>(s.Sector,s.Row)).Count(),"each logical row has endpoint captions and any actual aisle caption");
-            foreach(var caption in captions)
-            {
-                foreach(var seat in renderedSeats.Where(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16))))Console.WriteLine($"Caption collision: {caption.Bounds}; seat {seat.Sector}/{seat.Row}/{seat.Number} at {seat.X},{seat.Y}");
-                foreach(var heading in headings.Where(heading=>heading.Bounds.IntersectsWith(caption.Bounds)))Console.WriteLine($"Caption collision: {caption.Bounds}; heading {heading.Bounds}");
-            }
-            Check(captions.All(caption=>!renderedSeats.Any(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))&&!headings.Any(heading=>heading.Bounds.IntersectsWith(caption.Bounds))),"row captions remain clear of real seats and sector headings");
-        }
+        CheckHallCaptions();
         var type=typeof(MainWindow).Assembly.GetType("Tickets.App.RecipientsWindow")!;
         var window=(Window)Activator.CreateInstance(type,BindingFlags.Instance|BindingFlags.Public|BindingFlags.NonPublic,null,[store],null)!;
         try
@@ -83,6 +63,57 @@ internal static class Ui020Checks
         }
         finally{window.Close();}
         store.Return(store.Invoice(show.Id,invoice).Tickets.Select(t=>t.Id).ToArray());main.SelectEvent(show.Id);Pump();
+    }
+    internal static void CheckHallCaptions()
+    {
+        foreach(var (name,layout) in new[]{("russian-song",VenueLayouts019.RussianSongSeats()),("estrada",VenueLayouts019.EstradaSeats())})
+        {
+            var diagramSeats=layout.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,null,"#336699",null,"","",null)).ToArray();
+            var sectors=layout.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(s=>s.X),g.Min(s=>s.Y)-26)).ToArray();
+            var diagram=new HallView();diagram.Load(diagramSeats,sectors,true);
+            var drawing=(System.Windows.Media.DrawingGroup)typeof(HallView).GetField("drawing",Private)!.GetValue(diagram)!;
+            var renderedSeats=(IReadOnlyList<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(diagram)!;
+            IEnumerable<System.Windows.Media.GlyphRunDrawing> Glyphs(System.Windows.Media.Drawing node)
+            {if(node is System.Windows.Media.GlyphRunDrawing glyph)yield return glyph;else if(node is System.Windows.Media.DrawingGroup group)foreach(var child in group.Children)foreach(var descendant in Glyphs(child))yield return descendant;}
+            var headings=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-15.6)<.01).ToArray();
+            var capture=new Window{Title="UI025 real hall "+name,Width=1100,Height=900,Content=diagram};capture.Show();Pump();
+            try{Corrections025UiChecks.Capture(capture,"025-real-hall-"+name);}finally{capture.Close();}
+            foreach(var heading in headings)
+            {
+                var text=heading.GlyphRun.Characters is null?"?":new string(heading.GlyphRun.Characters.ToArray());
+                Console.WriteLine($"025 {name} heading '{text}': bounds={heading.Bounds}");
+                foreach(var seat in renderedSeats.Where(seat=>heading.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16))))
+                    Console.WriteLine($"025 {name} heading collision '{text}' {heading.Bounds}: seat {seat.Sector}/{seat.Row}/{seat.Number} at {seat.X},{seat.Y}");
+                foreach(var other in headings.Where(other=>!ReferenceEquals(other,heading)&&other.Bounds.IntersectsWith(heading.Bounds)))
+                    Console.WriteLine($"025 {name} heading/heading collision: {heading.Bounds}; other={other.Bounds}");
+            }
+            var headingIndex=0;
+            foreach(var sector in sectors)
+            {
+                var wrapped=sector.Name.StartsWith("Ложа партера (",StringComparison.Ordinal)||sector.Name.StartsWith("Балкон №",StringComparison.Ordinal);
+                var label=(System.Windows.Media.FormattedText)typeof(HallView).GetMethod("Text",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,[wrapped?sector.Name.Replace(" (","\n("):sector.Name,15.6,System.Windows.Media.Brushes.SlateGray])!;
+                label.TextAlignment=TextAlignment.Center;
+                var native=new System.Windows.Media.DrawingGroup();using(var context=native.Open())context.DrawText(label,new Point());
+                var ink=Rect.Empty;foreach(var heading in headings.Skip(headingIndex).Take(Glyphs(native).Count()))ink.Union(heading.Bounds);headingIndex+=Glyphs(native).Count();
+                var own=renderedSeats.Where(seat=>seat.Sector==sector.Name).ToArray();
+                double Distance(SeatInfo seat)=>Math.Max(0,Math.Max(ink.Left-seat.X-16,seat.X-ink.Right));
+                var nearest=own.Min(Distance);var upper=own.Where(seat=>Distance(seat)<=nearest+.001).Min(seat=>seat.Y);
+                var left=own.Min(seat=>seat.X);var right=own.Max(seat=>seat.X)+16;
+                Console.WriteLine($"025 {name} sector '{sector.Name}': ink={ink}; ownX={left}..{right}; localUpper={upper}; clearance={upper-ink.Bottom}; sideExtension={Math.Max(0,Math.Max(left-ink.Left,ink.Right-right))}");
+                Check(upper-ink.Bottom>=43.9,"real sector heading retains two standard spacings above its local seats");
+            }
+            Check(headings.Length>=sectors.Length,"actual hall drawing contains each sector heading");
+            Check(headings.All(heading=>!renderedSeats.Any(seat=>heading.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))),"actual sector heading glyph bounds do not intersect any seat");
+            Check(headings.All(heading=>!headings.Any(other=>!ReferenceEquals(other,heading)&&heading.Bounds.IntersectsWith(other.Bounds))),"actual sector heading glyph bounds do not intersect other headings");
+            var captions=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-14.3)<.01&&g.ForegroundBrush==System.Windows.Media.Brushes.Black).ToArray();
+            Check(captions.Length>=2*layout.GroupBy(s=>(s.Sector,s.Row)).Count(),"each logical row has endpoint captions and any actual aisle caption");
+            foreach(var caption in captions)
+            {
+                foreach(var seat in renderedSeats.Where(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16))))Console.WriteLine($"Caption collision: {caption.Bounds}; seat {seat.Sector}/{seat.Row}/{seat.Number} at {seat.X},{seat.Y}");
+                foreach(var heading in headings.Where(heading=>heading.Bounds.IntersectsWith(caption.Bounds)))Console.WriteLine($"Caption collision: {caption.Bounds}; heading {heading.Bounds}");
+            }
+            Check(captions.All(caption=>!renderedSeats.Any(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))&&!headings.Any(heading=>heading.Bounds.IntersectsWith(caption.Bounds))),"row captions remain clear of real seats and sector headings");
+        }
     }
     private static void Pump()=>Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool value,string message){if(!value)throw new Exception(message);Console.WriteLine("PASS "+message);}

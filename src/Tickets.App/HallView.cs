@@ -97,6 +97,19 @@ public sealed class HallView : FrameworkElement
         {
             var sectorSeats=visible.ToLookup(s=>s.Sector);
             var captionBounds=new List<Rect>();
+            // Row labels must stay at their real endpoints/aisles. Reserve their
+            // rendered ink before choosing a sector heading's collision fallback.
+            foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
+            {
+                var label=Text(row.Key.Row,14.3,Brushes.Black);
+                var glyph=label.BuildGeometry(new Point()).Bounds;if(glyph.IsEmpty)continue;
+                var native=new DrawingGroup();using(var context=native.Open())context.DrawText(label,new Point());
+                foreach(var anchor in HallEditing025.RowAnchors(row.ToArray()))
+                {
+                    var ink=native.Bounds;ink.Offset(anchor.X-glyph.Width/2-glyph.X,anchor.Y-glyph.Height/2-glyph.Y);
+                    captionBounds.Add(ink);
+                }
+            }
             foreach(var sector in sectors)
             {
                 var wrapped=sector.Name.StartsWith("Ложа партера (",StringComparison.Ordinal)||sector.Name.StartsWith("Балкон №",StringComparison.Ordinal);
@@ -105,7 +118,7 @@ public sealed class HallView : FrameworkElement
                 var places=sectorSeats[sector.Name];
                 var captionDrawing=new DrawingGroup();using(var textContext=captionDrawing.Open())textContext.DrawText(label,new Point());
                 var ink=captionDrawing.Bounds;
-                var origin=SectorCaptionOrigin(ink,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y),wrapped);
+                var origin=SectorCaptionOrigin(ink,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y));
                 var x=origin.X;var y=origin.Y;
                 dc.DrawText(label,new Point(x,y));ink.Offset(x,y);captionBounds.Add(ink);
             }
@@ -170,7 +183,7 @@ public sealed class HallView : FrameworkElement
         if(bounds.IsEmpty) bounds=new Rect(0,0,100,100);
     }
 
-    private static Point SectorCaptionOrigin(Rect glyph,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback,bool wrapped)
+    private static Point SectorCaptionOrigin(Rect glyph,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback)
     {
         if(own.Count==0)return fallback;
         var left=own.Min(s=>s.X);var right=own.Max(s=>s.X)+16;var centre=(left+right)/2;
@@ -195,12 +208,15 @@ public sealed class HallView : FrameworkElement
             if(x+glyph.Left<left||x+glyph.Right>right)continue;
             var point=At(x);if(Clear(point))return point;
         }
-        if(wrapped)
-        {
-            foreach(var x in new[]{left-12-glyph.Right,right+12-glyph.Width/2-glyph.Left})
-            {var point=At(x);if(Clear(point))return point;}
-        }
-        return At(centre);
+        // A different sector can fill the entire local 44px band (the real
+        // Russian Song layout has only 36px between zones). Keep this heading
+        // at its own local height and use the nearest clear side position only
+        // after exhausting its footprint. Obstacle edges include a 2px margin;
+        // the outermost edge is always clear, so no unchecked fallback remains.
+        var obstacles=all.Select(s=>new Rect(s.X,s.Y,16,16)).Concat(captions).ToArray();
+        return obstacles.SelectMany(r=>new[]{r.Left-2-glyph.Right,r.Right+2-glyph.Left})
+            .Where(x=>x+glyph.Left<left||x+glyph.Right>right)
+            .OrderBy(x=>Math.Abs(x-centre)).Select(At).First(Clear);
     }
 
     public void Fit()

@@ -19,6 +19,7 @@ internal static class Corrections025UiChecks
         CheckFreshDraftUndo(store,assembly);
         CheckLetterOrderUndo(store,assembly);
         CheckLocalSectorCaption();
+        Ui020Checks.CheckHallCaptions();
         var draft=HallLayout.Generate("Партер",new[]{"1","2","3"}.Select(r=>new HallRowLayout{Label=r,SeatCount=8,AisleAfter=4}).ToArray(),"1",false,50).ToList();
         draft[10].Hidden=true;
         var venue=store.CreateHall("UI025 rotations", "",draft);

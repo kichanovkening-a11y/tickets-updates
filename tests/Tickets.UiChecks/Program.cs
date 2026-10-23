@@ -38,6 +38,7 @@ internal static class Program
             DocumentEditor019Checks.Run();
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--corrections025",StringComparer.Ordinal)){Corrections025UiChecks.Run(store);main.Close();return 0;}
             var actions=Logical(main).OfType<Button>().ToList();
             Check(actions.Count>=15,"main actions found");
             Check(!actions.Any(b=>Equals(b.Content,"Спецификации")||Equals(b.Content,"Свернуть")||Equals(b.Content,"В окно")),"main toolbar omits duplicate window controls and specifications");

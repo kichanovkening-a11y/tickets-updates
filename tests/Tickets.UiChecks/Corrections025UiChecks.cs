@@ -119,11 +119,19 @@ internal static class Corrections025UiChecks
         var hall=new HallView{ShowInactivePlaceholders=false};hall.Load(seats,[new SectorInfo("Бельэтаж",0,240)],true);
         var drawing=(DrawingGroup)typeof(HallView).GetField("drawing",Private)!.GetValue(hall)!;
         var heading=Glyphs(drawing).Single(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-15.6)<.01);var ink=heading.Bounds;
-        Check(ink.Top>253&&ink.Top>240&&ink.Left>=0&&ink.Right<=816,"slanted sector heading moves below old title into own inter-zone gap");
-        Check(seats.All(s=>!ink.IntersectsWith(new Rect(s.X,s.Y,16,16))),"local sector heading does not overlap either zone seats");
-        var upper=seats.Where(s=>s.Sector=="Бельэтаж"&&s.X<ink.Right&&s.X+16>ink.Left).Min(s=>s.Y);
-        Check(upper-ink.Bottom>=43.9,"local upper-envelope keeps two standard spacings above own seats");
-        var window=new Window{Title="UI025 local sector heading",Width=1000,Height=650,Content=hall};window.Show();Pump();try{Capture(window,"025-slanted-local-caption");}finally{window.Close();}
+        var window=new Window{Title="UI025 local sector heading",Width=1000,Height=650,Content=hall};window.Show();Pump();
+        try
+        {
+            Capture(window,"025-slanted-local-caption");
+            var upper=seats.Where(s=>s.Sector=="Бельэтаж"&&s.X<ink.Right&&s.X+16>ink.Left).Min(s=>s.Y);
+            var formatted=(FormattedText)typeof(HallView).GetMethod("Text",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,["Бельэтаж",15.6,Brushes.SlateGray])!;formatted.TextAlignment=TextAlignment.Center;
+            var outlines=formatted.BuildGeometry(new Point()).Bounds;var native=new DrawingGroup();using(var context=native.Open())context.DrawText(formatted,new Point());
+            Console.WriteLine($"025 caption metrics: rendered={ink}; upper={upper}; clearance={upper-ink.Bottom}; outlineRelative={outlines}; nativeRelative={native.Bounds}");
+            Check(ink.Top>253&&ink.Top>240&&ink.Left>=0&&ink.Right<=816,"slanted sector heading moves below old title into own inter-zone gap");
+            Check(seats.All(s=>!ink.IntersectsWith(new Rect(s.X,s.Y,16,16))),"local sector heading does not overlap either zone seats");
+            Check(upper-ink.Bottom>=43.9,"local upper-envelope keeps two standard spacings above own seats");
+        }
+        finally{window.Close();}
     }
     private static void CheckFreshDraftUndo(Store store,Assembly assembly)
     {

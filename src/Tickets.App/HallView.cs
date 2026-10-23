@@ -103,9 +103,11 @@ public sealed class HallView : FrameworkElement
                 var label=Text(wrapped?sector.Name.Replace(" (","\n("):sector.Name,15.6,Brushes.SlateGray);
                 label.TextAlignment=TextAlignment.Center;
                 var places=sectorSeats[sector.Name];
-                var origin=SectorCaptionOrigin(label,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y),wrapped);
+                var captionDrawing=new DrawingGroup();using(var textContext=captionDrawing.Open())textContext.DrawText(label,new Point());
+                var ink=captionDrawing.Bounds;
+                var origin=SectorCaptionOrigin(ink,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y),wrapped);
                 var x=origin.X;var y=origin.Y;
-                dc.DrawText(label,new Point(x,y));captionBounds.Add(label.BuildGeometry(new Point(x,y)).Bounds);
+                dc.DrawText(label,new Point(x,y));ink.Offset(x,y);captionBounds.Add(ink);
             }
             foreach(var s in visible)
             {
@@ -168,10 +170,9 @@ public sealed class HallView : FrameworkElement
         if(bounds.IsEmpty) bounds=new Rect(0,0,100,100);
     }
 
-    private static Point SectorCaptionOrigin(FormattedText label,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback,bool wrapped)
+    private static Point SectorCaptionOrigin(Rect glyph,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback,bool wrapped)
     {
         if(own.Count==0)return fallback;
-        var glyph=label.BuildGeometry(new Point()).Bounds;
         var left=own.Min(s=>s.X);var right=own.Max(s=>s.X)+16;var centre=(left+right)/2;
         Point At(double x)
         {
@@ -183,7 +184,7 @@ public sealed class HallView : FrameworkElement
         }
         bool Clear(Point point)
         {
-            var ink=label.BuildGeometry(point).Bounds;
+            var ink=glyph;ink.Offset(point.X,point.Y);
             return !all.Any(s=>ink.IntersectsWith(new Rect(s.X,s.Y,16,16)))&&!captions.Any(ink.IntersectsWith);
         }
         // Keep headings in their own horizontal footprint. A slanted upper edge

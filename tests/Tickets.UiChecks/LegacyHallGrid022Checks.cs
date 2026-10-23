@@ -23,7 +23,10 @@ internal static class LegacyHallGrid022Checks
                 var callback=typeof(HallView).GetField("SeatContextRequested",flags)!.GetValue(preview) as Action<long,Point>;callback!(2,new Point());
                 preview.ContextMenu!.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Сделать проход")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Pump();
                 seats=(List<SeatInfo>)typeof(HallView).GetField("seats",flags)!.GetValue(preview)!;
-                Check(seats.Count==11,"scheme passage removes selected places without table");Click(window,"Принять места");
+                Check(seats.Count==15&&seats.Single(s=>s.Id==2).X==40&&seats.Single(s=>s.Id==7).X==40,"scheme passage creates gaps without deleting places");
+                preview.SetSelection(new long[]{2,3,7,8});callback!(2,new Point());
+                preview.ContextMenu!.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Удалить места")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Pump();
+                seats=(List<SeatInfo>)typeof(HallView).GetField("seats",flags)!.GetValue(preview)!;Check(seats.Count==11,"scheme deletion removes exactly four selected places");Click(window,"Принять места");
             }catch(Exception ex){error=ex;window.Close();}
         }));
         try{var accepted=(bool?)type.BaseType!.GetMethod("ShowSeparateDialog",flags)!.Invoke(window,null);if(error is not null)throw error;

@@ -110,15 +110,15 @@ internal static class Program
             var draftPreview=Logical(hallEditor).OfType<Tickets.App.HallView>().Single();
             var materialize=(Action<long,Point>)typeof(Tickets.App.HallView).GetField("SeatContextRequested",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(draftPreview)!;
             materialize(1,new Point(10,10));draftPreview.ContextMenu!.IsOpen=false;Pump();draftPreview.SetSelection(new long[]{1,2,3});
-            Click(hallEditor,"Удалить выбранные (Del)");Click(hallEditor,"Шаг назад");
+            hallType.GetMethod("DeleteSelected",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(hallEditor,null);Click(hallEditor,"Шаг назад");
             var draftSeats=(System.Collections.ICollection)hallType.GetField("seats",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(hallEditor)!;
             Check(draftSeats.Count==42,"hall undo restores deleted places");
-            Click(hallEditor,"Удалить выбранные (Del)");Click(hallEditor,"Сохранить как новый зал");
+            hallType.GetMethod("DeleteSelected",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(hallEditor,null);Click(hallEditor,"Сохранить как новый зал");
             }catch(Exception ex){hallError=ex;hallEditor.Close();}}));
             hallEditor.ShowDialog();Pump();if(hallError is not null)throw hallError;
             var editedHall=store.Venues().Single(v=>v.Name=="UI row hall");var remaining=store.HallDraft(editedHall.Id);
-            Check(remaining.Count==39&&remaining.Where(x=>x.Row=="А").Select(x=>x.Number).Contains("4")&&!remaining.Where(x=>x.Row=="А").Any(x=>x.Number=="1"),"drawing deletion preserves surviving seat labels");
-            Check(remaining.Single(x=>x.Row=="А"&&x.Number=="4").X==60,"drawing deletion preserves original seat coordinates");
+            Check(remaining.Count==39&&remaining.Where(x=>x.Row=="А").Select(x=>int.Parse(x.Number)).Order().SequenceEqual(Enumerable.Range(1,20)),"drawing deletion renumbers surviving places sequentially");
+            Check(remaining.Single(x=>x.Row=="А"&&x.Number=="1").X==60,"drawing deletion preserves original seat coordinates");
             var automaticHall=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;
             Exception? automaticError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
@@ -154,6 +154,7 @@ internal static class Program
             typeof(Tickets.App.MainWindow).GetField("events",BindingFlags.Instance|BindingFlags.NonPublic)!.SetValue(main,store.Events());
             typeof(Tickets.App.MainWindow).GetMethod("ApplyFilter",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
             var performanceGroup=events.Items.OfType<TreeViewItem>().First(i=>i.Header is TextBlock text&&text.Text=="UI event");performanceGroup.IsExpanded=false;performanceGroup.IsSelected=true;Pump();
+            Check(performanceGroup.Header is TextBlock performanceTitle&&performanceTitle.Background==Brushes.SteelBlue&&performanceTitle.Foreground==Brushes.White,"selected performance title has white text on blue");
             Check(performanceGroup.IsExpanded,"selecting a performance title opens its shows on one click");main.SelectEvent(eventId);Pump();
             var six=new Tickets.App.HallView();var sixWindow=new Window{Content=six,Width=600,Height=400};sixWindow.Show();Pump();
             var sixSeats=Enumerable.Range(0,6).Select(i=>new SeatInfo(i+1,"Партер",(i/3+1).ToString(),(i%3+1).ToString(),i%3*20,i/3*20,1000,"#00E676",null,"","",null)).ToArray();
@@ -162,6 +163,7 @@ internal static class Program
             Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");CheckSeatRenderingAndContext(six,sixSeats);CheckHallNavigation(six,sixSeats);sixWindow.Close();
             var currentShowRow=performanceGroup.Items.OfType<TreeViewItem>().Single(i=>i.Tag is EventInfo e&&e.Id==eventId);
             Check(currentShowRow.Header is TextBlock selectedTitle&&Equals(selectedTitle.Foreground,Brushes.White)&&Equals(selectedTitle.Background,Brushes.DarkSlateBlue),"selected show text has contrast against its background");
+            Check(((TextBlock)currentShowRow.Header).Inlines.OfType<Run>().First().FontSize==18,"main tree event dates are larger");
             var hall=(Tickets.App.HallView)main.FindName("Hall");CheckSelectionSidebar(main);CheckMainPresentation(main,store,seatIds);main.Activate();hall.Focus();hall.Fit();Pump();
             ((ComboBox)main.FindName("RecipientBox")).Text="UI context availability";hall.SetSelection(seatIds.Take(2));
             var mainContextCalls=0;hall.SeatContextRequested+=(_,_)=>mainContextCalls++;
@@ -300,6 +302,8 @@ internal static class Program
             Isolated("docs021",Docs021UiChecks.Run);
             Isolated("pricing021",Pricing021UiChecks.Run);
             Isolated("hall021",HallEditor021Checks.Run);
+            Isolated("hall024",Hall024Checks.Run);
+            Isolated("recipients024",Recipients024Checks.Run);
             Isolated("ui023",Ui023Checks.Run);
             Isolated("ui022",Ui022Checks.Run);
             Isolated("legacygrid022",LegacyHallGrid022Checks.Run);
@@ -786,7 +790,7 @@ internal static class Program
                     {if(pointer.GetPointerContext(LogicalDirection.Forward)!=TextPointerContext.Text)continue;var rectangle=pointer.GetCharacterRect(LogicalDirection.Forward);if(!rectangle.IsEmpty)bounds.Add(rectangle);}
                     var columnLeft=document.PagePadding.Left+table.Columns[0].Width.Value;var columnRight=columnLeft+table.Columns[1].Width.Value;
                     Check(bounds.Count>0&&bounds.All(rectangle=>rectangle.Left>=columnLeft-1&&rectangle.Right<=columnRight+1),caption+" right-aligned recipient text stays inside its column and the page");
-                    if(caption=="invoice"&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal))Check(row.Cells.Count==2&&row.Cells[0].Blocks.OfType<Paragraph>().Single().TextAlignment==TextAlignment.Left&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal)&&new TextRange(row.Cells[1].ContentStart,row.Cells[1].ContentEnd).Text.StartsWith("Получил:",StringComparison.Ordinal),"invoice signatures explicitly align sender left and recipient right");
+                    if(caption=="invoice"&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal))Check(row.Cells.Count==2&&row.Cells[0].Blocks.OfType<Paragraph>().Count()==2&&row.Cells[1].Blocks.OfType<Paragraph>().Count()==2&&row.Cells[0].Blocks.OfType<Paragraph>().All(p=>p.TextAlignment==TextAlignment.Left)&&row.Cells[1].Blocks.OfType<Paragraph>().All(p=>p.TextAlignment==TextAlignment.Right)&&new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.StartsWith("Передал:",StringComparison.Ordinal)&&new TextRange(row.Cells[1].ContentStart,row.Cells[1].ContentEnd).Text.StartsWith("Получил:",StringComparison.Ordinal),"invoice signatures explicitly align sender left and recipient right");
                 }
                 else Check(!first.IsEmpty&&!second.IsEmpty&&second.Left-first.Left>=20&&second.Left-first.Left<=document.PageWidth/2,caption+" rendered first column has a sensible width");
                 if(new TextRange(row.Cells[0].ContentStart,row.Cells[0].ContentEnd).Text.Trim().Length<=20)Check(!last.IsEmpty&&last.Bottom-first.Top<160,caption+" rendered short row does not expand into a giant empty cell");

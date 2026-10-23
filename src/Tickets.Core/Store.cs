@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); }
 
     private SqliteConnection Open()
     {
@@ -28,7 +28,7 @@ public sealed partial class Store
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT e.id,e.venue_id,e.title,v.name,e.legacy_date,e.starts_at,
-              (SELECT count(*) FROM seat s WHERE s.venue_id=e.venue_id AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))),
+              (SELECT count(*) FROM seat s WHERE s.venue_id=e.venue_id AND NOT EXISTS(SELECT 1 FROM hall_hidden_seat hs WHERE hs.seat_id=s.id) AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))),
               (SELECT count(*) FROM ticket t WHERE t.event_id=e.id AND t.returned_at IS NULL)
             FROM event e JOIN venue v ON v.id=e.venue_id
             WHERE $all=1 OR NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='venue' AND h.entity_key=CAST(e.venue_id AS TEXT))
@@ -54,7 +54,7 @@ public sealed partial class Store
             LEFT JOIN ticket_state ts ON ts.ticket_id=t.id
             LEFT JOIN price_color pc ON pc.amount=coalesce(t.amount,p.amount)
             LEFT JOIN event_seat_block b ON b.event_id=e.id AND b.seat_id=s.id
-            WHERE e.id=$e AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.y,s.x,s.id
+            WHERE e.id=$e AND NOT EXISTS(SELECT 1 FROM hall_hidden_seat hs WHERE hs.seat_id=s.id) AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.y,s.x,s.id
             ""","$e",eventId);
         using var r=cmd.ExecuteReader(); var result=new List<SeatInfo>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),
@@ -139,6 +139,7 @@ public sealed partial class Store
                     SELECT p.amount FROM event_price p JOIN event e ON e.id=p.event_id
                     JOIN seat s ON s.id=p.seat_id AND s.venue_id=e.venue_id
                     WHERE p.event_id=$e AND p.seat_id=$s
+                    AND NOT EXISTS(SELECT 1 FROM hall_hidden_seat hs WHERE hs.seat_id=s.id)
                     AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))
                     AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=$e AND t.seat_id=$s AND t.returned_at IS NULL)
                     AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=$s)

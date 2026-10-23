@@ -64,6 +64,7 @@ public static class InvoiceDocuments
         var lines=BusinessDocumentTemplates.Layout(document);
         for(var index=0;index<lines.Count;index++)
         {
+            if(lines[index].Signatures){var labels=BusinessDocumentTemplates.PartyLabels(document.Kind);body.Add(Paragraph(""),Paragraph(""),SignaturesTable(document.Invoice,labels.Seller,labels.Buyer,document.Kind==IssueDocumentKinds.Waybill?14050:9600));continue;}
             if(lines[index].Requisites){var labels=BusinessDocumentTemplates.PartyLabels(document.Kind);body.Add(RequisitesTable(document.Invoice,labels.Seller,labels.Buyer,document.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act,document.Kind==IssueDocumentKinds.Waybill?14050:9600));continue;}
             var line=lines[index].Text;
             if(line.StartsWith("№ | Билеты и места |",StringComparison.Ordinal))
@@ -159,14 +160,13 @@ public static class InvoiceDocuments
     }
     internal static XElement SignaturesTable(InvoiceInfo invoice,string left,string right,int width=9600)
     {
-        var labels=new[]{left,right};var seller=DocumentParties.Sender(invoice);
-        var identities=new[]{string.Join(" ",new[]{seller.Position,seller.Signatory}.Where(x=>!string.IsNullOrWhiteSpace(x))),DocumentParties.ReceivedBy(invoice)};
+        var labels=new[]{left,right};var parties=new[]{SignatureBlocks.Sender(invoice),SignatureBlocks.Recipient(invoice)};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(e=>new XElement(W+e,new XAttribute(W+"w",0),new XAttribute(W+"type","dxa"))))),new XElement(W+"tblGrid",Enumerable.Range(0,2).Select(_=>new XElement(W+"gridCol",new XAttribute(W+"w",width/2)))));
         foreach(var signatureRow in new[]{0,1,2})
             table.Add(new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),Enumerable.Range(0,2).Select(i=>{
-                var paragraph=Paragraph(signatureRow==2?"________________":signatureRow==1?"":labels[i]+": "+identities[i],false,20);
+                var paragraph=Paragraph(signatureRow==2?"________________":signatureRow==1?"":labels[i]+": "+parties[i].Position,false,20);
                 paragraph.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")),signatureRow<2?new XElement(W+"keepNext"):null);
-                return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),paragraph);
+                return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),signatureRow==0?new[]{paragraph,SignatureBlocks.NameParagraph(parties[i].Name,paragraph)}:new[]{paragraph});
             })));
         return table;
     }

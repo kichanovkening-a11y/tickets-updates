@@ -14,11 +14,9 @@ internal sealed class RecipientsWindow:EditorWindow
     private readonly TreeView history=new();
     private readonly TextBlock heading=new(){FontSize=21,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
-    private readonly TextBlock requisites=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
     private readonly Button edit;
     private readonly TextBlock count=new(){Margin=new Thickness(0,5,0,10)};
     private List<RecipientDirectoryInfo> directory=[];
-    private readonly Button open;
     private readonly HashSet<(long EventId,long IssueId)> packageSelection=[];
     private readonly MenuItem delete;
 
@@ -44,9 +42,8 @@ internal sealed class RecipientsWindow:EditorWindow
         filter.Children.Add(count);left.Children.Add(organizations);
         var splitter=new GridSplitter{Width=5,HorizontalAlignment=HorizontalAlignment.Center,VerticalAlignment=VerticalAlignment.Stretch};Grid.SetColumn(splitter,1);root.Children.Add(splitter);
         var right=new DockPanel();Grid.SetColumn(right,2);root.Children.Add(right);
-        var details=new StackPanel();DockPanel.SetDock(details,Dock.Top);right.Children.Add(details);details.Children.Add(heading);details.Children.Add(summary);details.Children.Add(new ScrollViewer{Content=requisites,MaxHeight=210,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
+        var details=new StackPanel();DockPanel.SetDock(details,Dock.Top);right.Children.Add(details);details.Children.Add(heading);details.Children.Add(summary);
         var actions=new WrapPanel{Margin=new Thickness(0,0,0,12)};details.Children.Add(actions);
-        open=Button(actions,"Открыть выдачу",()=>Try(OpenSelected));open.Margin=new Thickness(0,0,10,0);
         edit=Button(actions,"Реквизиты организации",()=>Try(()=>{
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
             var editor=new RecipientEditorWindow(Store,organization.Name,true);
@@ -62,8 +59,7 @@ internal sealed class RecipientsWindow:EditorWindow
         }));
         Button(actions,"Сохранённые комплекты",()=>Try(()=>{
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
-            var packages=Store.RecipientPackages(organization.Name);
-            var menu=new ContextMenu();foreach(var package in packages){var item=new MenuItem{Header=$"Комплект № {package.Id} · выдач: {package.Issues.Count} · билетов: {package.Invoice.Tickets.Count}"};item.Click+=(_,_)=>Try(()=>new RecipientPackageWindow(Store,package.Id).ShowDialog());menu.Items.Add(item);}if(packages.Count==0)menu.Items.Add(new MenuItem{Header="Комплектов пока нет",IsEnabled=false});menu.IsOpen=true;
+            new RecipientPackagesWindow(Store,organization.Name).ShowSeparateDialog();
         }));
         organizations.MouseDoubleClick+=(_,_)=>{if(edit.IsEnabled)edit.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));};
         delete=new MenuItem{Header="Удалить"};
@@ -81,7 +77,6 @@ internal sealed class RecipientsWindow:EditorWindow
         right.Children.Add(history);
         search.TextChanged+=(_,_)=>Try(Filter);
         organizations.SelectionChanged+=(_,_)=>Try(ShowHistory);
-        history.SelectedItemChanged+=(_,_)=>open.IsEnabled=history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo};
         history.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter&&history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo}){e.Handled=true;Try(OpenSelected);}};
         directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
     }
@@ -97,12 +92,10 @@ internal sealed class RecipientsWindow:EditorWindow
 
     private void ShowHistory()
     {
-        packageSelection.Clear();history.Items.Clear();open.IsEnabled=false;requisites.Text="";
+        packageSelection.Clear();history.Items.Clear();
         var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};edit.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
-        var organizationDetails=Store.GetOrganizationDetails(organization.Name,false);
-        requisites.Text=organizationDetails.DisplayText==organization.Name?"Реквизиты пока не заполнены. Нажмите «Реквизиты организации».":organizationDetails.DisplayText;
         var issues=Store.RecipientHistory(organization.Name);
         summary.Text=issues.Count==0?"Выдач пока нет. Организация сохранена в справочнике.":
             $"Выдач: {issues.Count} · билетов: {issues.Sum(x=>x.Issue.Count)} · возвращено: {issues.Sum(x=>x.Issue.ReturnedCount)}. Нажмите выдачу, чтобы открыть накладную.";
@@ -121,11 +114,14 @@ internal sealed class RecipientsWindow:EditorWindow
         var groups=issues.GroupBy(x=>x.Title,StringComparer.CurrentCultureIgnoreCase);
         foreach(var performance in (past?groups.OrderByDescending(g=>g.Max(x=>x.StartsAt)):groups.OrderBy(g=>g.Min(x=>x.StartsAt))))
         {
-            var node=new TreeViewItem{Header=new TextBlock{Text=performance.Key,FontSize=13,FontWeight=FontWeights.SemiBold},IsExpanded=true};parent.Items.Add(node);
+            var title=new TextBlock{Text=performance.Key,FontSize=13,FontWeight=FontWeights.SemiBold};
+            var node=new TreeViewItem{Header=title,IsExpanded=true};parent.Items.Add(node);
+            node.Selected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,node)){title.Background=Brushes.SteelBlue;title.Foreground=Brushes.White;}};
+            node.Unselected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,node)){title.Background=Brushes.Transparent;title.ClearValue(TextBlock.ForegroundProperty);}};
             var events=performance.GroupBy(x=>x.Issue.EventId);
             foreach(var showing in (past?events.OrderByDescending(g=>g.First().StartsAt):events.OrderBy(g=>g.First().StartsAt)))
             {
-                var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){Foreground=Brushes.Red,FontSize=15});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
+                var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){Foreground=Brushes.Red,Background=Brushes.Black,FontSize=19});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
                 foreach(var issue in showing.OrderByDescending(x=>x.Issue.IssuedAt).ThenByDescending(x=>x.Issue.Id))
                 {
                     var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};

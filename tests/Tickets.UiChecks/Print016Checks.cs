@@ -14,6 +14,7 @@ internal static class Print016Checks
         var type=assembly.GetType("Tickets.App.TicketPrintWindow")!;
         var show=store.Events().First(e=>store.Seats(e.Id).Any(s=>s.Available));
         var seat=store.Seats(show.Id).First(s=>s.Available);
+        TicketPrint024Checks.Run(store,type,show.Id,seat.Id);
         var blank=store.TicketBlanks().First();store.RememberTicketBlank(blank.Id);
         Window Open()=> (Window)Activator.CreateInstance(type,store,show.Id,new[]{seat.Id},"UI016","PRINT016",1L)!;
         var window=Open();

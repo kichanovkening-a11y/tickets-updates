@@ -32,7 +32,7 @@ static class Docs021Checks
             foreach(var invoice in new[]{first,second}){
                 var current=reopened.Invoice(invoice.EventId,invoice.Id);Require(current.RecipientDetails!.Signatory=="Сидоров С.С."&&current.RecipientDetails.Position=="Управляющий","stale issue representative");
                 Require(current.RecipientDetails.Inn=="original-021","unrelated historical requisite changed");
-                foreach(var kind in new[]{"invoice","contract","act","bill","ttn","specification"})Require(reopened.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!.Body.Contains("Сидоров С.С."),"stale document representative: "+kind);
+                foreach(var kind in new[]{"invoice","contract","act","bill","ttn","specification"})Require(reopened.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!.Body.Replace('\u00a0',' ').Contains("Сидоров С.С."),"stale document representative: "+kind);
             }
             Require(reopened.ContractNumber(first.EventId,first.Id)=="АВТО-021"&&reopened.ContractDate(first.EventId,first.Id)==new DateTime(2026,10,22),"contract metadata lost");
         });

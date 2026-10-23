@@ -1,6 +1,5 @@
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Controls.Primitives;
 using System.Windows.Documents;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -18,10 +17,9 @@ internal sealed class TicketPrintWindow:EditorWindow
     private readonly long firstNumber;
     private readonly bool draft;
     private InvoiceInfo? issuedSnapshot;
-    private readonly StackPanel pages=new(){HorizontalAlignment=HorizontalAlignment.Center};
+    private Action? refreshPreview;
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
     private readonly ComboBox blankChoice=new(){MinWidth=260,MinHeight=38,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
-    private InvoiceInfo? previewInfo;
     private TicketBlank? SelectedBlank=>blankChoice.SelectedItem as TicketBlank;
     public long IssueId{get;private set;}
     public bool Printed{get;private set;}
@@ -35,70 +33,58 @@ internal sealed class TicketPrintWindow:EditorWindow
         var occupied=selected.Where(s=>s.TicketId.HasValue).Select(s=>s.Id).ToArray();
         if(occupied.Length>0)originalOccupied=Store.TicketReprint(eventId,occupied);
         if(draftSeatIds.Length==0)throw new TicketException("Для ранее выданных мест откройте печать существующих билетов.");
-        Initialize(Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied));
+        Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber);Initialize();
     }
     public TicketPrintWindow(Store store,long eventId,IReadOnlyCollection<long> seatIds):base(store,"Повторная печать билетов",1000,850)
     {
-        this.eventId=eventId;this.seatIds=seatIds.ToArray();issuedSnapshot=Store.TicketReprint(eventId,this.seatIds);Initialize(issuedSnapshot);
+        this.eventId=eventId;this.seatIds=seatIds.ToArray();issuedSnapshot=Store.TicketReprint(eventId,this.seatIds);Initialize();
     }
-    private void Initialize(InvoiceInfo info)
+    private void Initialize()
     {
-        var root=new DockPanel{Margin=new Thickness(12)};Content=root;
+        var options=new StackPanel();
         var templateBar=new WrapPanel{Margin=new Thickness(0,0,0,10)};
         templateBar.Children.Add(new TextBlock{Text="На каком бланке печатать:",FontSize=18,FontWeight=FontWeights.Bold,VerticalAlignment=VerticalAlignment.Center});
         blankChoice.Items.Add(new {Name="Стандартный"});foreach(var blank in Store.TicketBlanks())blankChoice.Items.Add(blank);
         var lastBlankId=Store.LastTicketBlankId;
         blankChoice.SelectedItem=blankChoice.Items.OfType<TicketBlank>().FirstOrDefault(b=>b.Id==lastBlankId)??blankChoice.Items[0];
         templateBar.Children.Add(blankChoice);
-        blankChoice.SelectionChanged+=(_,_)=>Try(()=>{Store.RememberTicketBlank(SelectedBlank?.Id);if(previewInfo is not null)Preview(previewInfo);});
-        DockPanel.SetDock(templateBar,Dock.Top);root.Children.Add(templateBar);
-        DockPanel.SetDock(status,Dock.Top);root.Children.Add(status);
-        var actions=new StackPanel{Margin=new Thickness(10,0,0,0)};DockPanel.SetDock(actions,Dock.Right);root.Children.Add(actions);
-        InvoiceWindow.Square(actions,"Распечатать",Print,Brushes.SeaGreen);
-        root.Children.Add(new ScrollViewer{Content=pages,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto});
+        blankChoice.SelectionChanged+=(_,_)=>Try(()=>{Store.RememberTicketBlank(SelectedBlank?.Id);refreshPreview?.Invoke();});
+        options.Children.Add(templateBar);options.Children.Add(status);
         status.Text=draft?"Предпросмотр. Новые билеты будут выданы после подтверждения печати. Ранее выданные билеты останутся в исходных накладных.":"Печать билетов исходной накладной. Серии, номера, цены и привязка к накладной сохраняются.";
-        Preview(info);
+        refreshPreview=UnifiedPrintPreview.Attach(this,BuildPreview,Print,options);
     }
-    private void Preview(InvoiceInfo info)
+    private FixedDocument BuildPreview(PrintDialog dialog,bool allowOverflow)
     {
-        previewInfo=info;
-        var document=BuildWithSources(info,SelectedBlank is {} b?Mm(b.PageWidth):794,SelectedBlank is {} b2?Mm(b2.PageHeight):1123);pages.Children.Clear();
-        status.Text=(draft?"Предпросмотр. Новые билеты будут выданы после подтверждения печати.":"Повторная печать исходных билетов.")+ $" Страниц: {document.Pages.Count}";
-        for(var i=0;i<document.Pages.Count;i++)pages.Children.Add(new DocumentPageView{DocumentPaginator=document.DocumentPaginator,PageNumber=i,Margin=new Thickness(0,0,0,12)});
+        if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
+        var info=issuedSnapshot??Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied);
+        var size=UnifiedPrintPreview.PageSize(dialog);
+        return BuildWithSources(info,size.Width,size.Height,dialog,allowOverflow);
     }
-    private void Print()
+    private void Print(PrintDialog dialog,FixedDocument _)
     {
         var submitted=false;
         try
         {
-            UnifiedPrintPreview.Show(DialogOwner,"Билеты",(dialog,allowOverflow)=>
+            // All cancellation and printable-area checks happen before issuance.
+            if(draft&&IssueId==0)
             {
                 if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
-                var info=issuedSnapshot??Combine(Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber),originalOccupied);
-                var size=UnifiedPrintPreview.PageSize(dialog);
-                return BuildWithSources(info,size.Width,size.Height,dialog,allowOverflow);
-            },(dialog,preview)=>
-            {
-                // All cancellation and printable-area checks happen before issuance.
-                if(draft&&IssueId==0)
-                {
-                    if(originalOccupied is not null)ValidateSnapshot(originalOccupied);
-                    Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber);
-                    IssueId=Store.Issue(eventId,draftSeatIds,recipient,series,firstNumber);
-                    issuedSnapshot=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
-                    status.Text=$"Выдача № {IssueId} сохранена. При ошибке печати повторная попытка использует те же билеты.";
-                }
-                var info=issuedSnapshot!;
-                var current=Store.TicketReprint(eventId,seatIds);
-                if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(info.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
-                    throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
-                // Recreate from the issued snapshot with the exact preview settings.
-                var size=UnifiedPrintPreview.PageSize(dialog);var document=BuildWithSources(info,size.Width,size.Height,dialog,true);
-                dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
-                try{Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());}
-                catch(Exception ex){MessageBox.Show(DialogOwner,"Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);}
-                Preview(info);status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
-            });
+                Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber);
+                IssueId=Store.Issue(eventId,draftSeatIds,recipient,series,firstNumber);
+                issuedSnapshot=Combine(Store.Invoice(eventId,IssueId),originalOccupied);
+                status.Text=$"Выдача № {IssueId} сохранена. При ошибке печати повторная попытка использует те же билеты.";
+            }
+            var info=issuedSnapshot!;
+            var current=Store.TicketReprint(eventId,seatIds);
+            if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(info.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
+                throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
+            // Recreate from the issued snapshot with the exact preview settings.
+            var size=UnifiedPrintPreview.PageSize(dialog);var document=BuildWithSources(info,size.Width,size.Height,dialog,true);
+            dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
+            try{Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());}
+            catch(Exception ex){MessageBox.Show(DialogOwner,"Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);}
+            status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
+            refreshPreview?.Invoke();
         }
         catch(Exception ex)
         {

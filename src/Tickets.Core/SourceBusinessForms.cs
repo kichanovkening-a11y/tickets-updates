@@ -199,19 +199,11 @@ internal static class SourceBusinessForms
         while(last?.Name==W+"p"&&!last.Descendants(W+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value)))
         {var previous=last.PreviousNode as XElement;last.Remove();last=previous;}
         var labels=BusinessDocumentTemplates.PartyLabels(document.Kind);
-        var table=InvoiceDocuments.SignaturesTable(document.Invoice,labels.Seller,labels.Buyer,width);
+        var signatureLabels=document.Kind switch {IssueDocumentKinds.Bill=>(Seller:"Руководитель предприятия",Buyer:"Получил"),IssueDocumentKinds.Waybill=>(Seller:"Отпуск груза разрешил",Buyer:"Груз получил грузополучатель"),_=>labels};
+        var table=InvoiceDocuments.SignaturesTable(document.Invoice,signatureLabels.Seller,signatureLabels.Buyer,width);
         if(document.Kind==IssueDocumentKinds.Contract)foreach(var font in table.Descendants(W+"rFonts")){font.SetAttributeValue(W+"ascii","Times New Roman");font.SetAttributeValue(W+"hAnsi","Times New Roman");}
-        if(document.Kind==IssueDocumentKinds.Bill)
+        if(document.Kind==IssueDocumentKinds.Waybill)
         {
-            var cells=table.Elements(W+"tr").First().Elements(W+"tc").ToArray();
-            SetParagraph(cells[0].Element(W+"p")!,"Руководитель предприятия: "+DocumentParties.Sender(document.Invoice).Signatory);
-            SetParagraph(cells[1].Element(W+"p")!,"Получил: "+DocumentParties.ReceivedBy(document.Invoice));
-        }
-        else if(document.Kind==IssueDocumentKinds.Waybill)
-        {
-            var cells=table.Elements(W+"tr").First().Elements(W+"tc").ToArray();
-            SetParagraph(cells[0].Element(W+"p")!,"Отпуск груза разрешил: "+DocumentParties.Sender(document.Invoice).Position+" "+DocumentParties.Sender(document.Invoice).Signatory);
-            SetParagraph(cells[1].Element(W+"p")!,"Груз получил грузополучатель: "+DocumentParties.ReceivedBy(document.Invoice));
             table.Add(new XElement(W+"tr",new XElement(W+"tc",InvoiceDocuments.Paragraph("Главный (старший) бухгалтер: ________________\nОтпуск груза произвел: ________________\nМ.П.",false,16)),new XElement(W+"tc",InvoiceDocuments.Paragraph("Груз принял: ________________\nМ.П.",false,16))));
         }
         if(section is null)body.Add(InvoiceDocuments.Paragraph(""),InvoiceDocuments.Paragraph(""),table);

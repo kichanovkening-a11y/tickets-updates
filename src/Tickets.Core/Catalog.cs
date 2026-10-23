@@ -14,6 +14,7 @@ public sealed class DraftSeat
     public string Number {get;set;}="1";
     public double X {get;set;}
     public double Y {get;set;}
+    public bool Hidden {get;set;}
 }
 public sealed partial class Store
 {
@@ -75,8 +76,12 @@ public sealed partial class Store
         using var cmd=Command(c,"INSERT OR IGNORE INTO performance(title,name_key) VALUES($n,$k)","$n",title,"$k",key); cmd.Transaction=tx; cmd.ExecuteNonQuery();
         using var find=Command(c,"SELECT id FROM performance WHERE name_key=$k","$k",key); find.Transaction=tx; var id=Convert.ToInt64(find.ExecuteScalar()); tx.Commit(); return id;
     }
-    public List<DraftSeat> HallDraft(long venueId)=>VenueSeats(venueId).Select(s=>new DraftSeat{
-        Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y}).ToList();
+    public List<DraftSeat> HallDraft(long venueId)
+    {
+        using var c=Open();using var cmd=Command(c,"SELECT z.name,s.row_label,s.number,s.x,s.y,h.seat_id IS NOT NULL FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id LEFT JOIN hall_hidden_seat h ON h.seat_id=s.id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden x WHERE x.kind='sector' AND x.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.id","$v",venueId);
+        using var r=cmd.ExecuteReader();var result=new List<DraftSeat>();
+        while(r.Read())result.Add(new(){Sector=r.GetString(0),Row=r.GetString(1),Number=r.GetString(2),X=r.GetDouble(3),Y=r.GetDouble(4),Hidden=r.GetBoolean(5)});return result;
+    }
     public long CreateHall(string name,string address,IReadOnlyCollection<DraftSeat> seats)
     {
         name=Required(name,"Название зала");
@@ -100,6 +105,7 @@ public sealed partial class Store
             {
                 using var seat=Command(c,"INSERT INTO seat(venue_id,sector_id,row_label,number,x,y) VALUES($v,$z,$r,$n,$x,$y)",
                     "$v",id,"$z",zid,"$r",s.Row,"$n",s.Number,"$x",s.X,"$y",s.Y); seat.Transaction=tx; seat.ExecuteNonQuery();
+                if(s.Hidden){using var hidden=Command(c,"INSERT INTO hall_hidden_seat(seat_id) VALUES(last_insert_rowid())");hidden.Transaction=tx;hidden.ExecuteNonQuery();}
             }
         }
         tx.Commit(); return id;
@@ -112,12 +118,12 @@ public sealed partial class Store
     }
     public List<PriceValue> PlanPrices(long planId)
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT p.seat_id,p.amount,coalesce(pc.color,p.color) FROM plan_price p JOIN seat s ON s.id=p.seat_id LEFT JOIN price_color pc ON pc.amount=p.amount WHERE p.plan_id=$p AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))","$p",planId);
+        using var c=Open(); using var cmd=Command(c,"SELECT p.seat_id,p.amount,coalesce(pc.color,p.color) FROM plan_price p JOIN seat s ON s.id=p.seat_id LEFT JOIN price_color pc ON pc.amount=p.amount WHERE p.plan_id=$p AND NOT EXISTS(SELECT 1 FROM hall_hidden_seat hs WHERE hs.seat_id=s.id) AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))","$p",planId);
         using var r=cmd.ExecuteReader(); var list=new List<PriceValue>(); while(r.Read()) list.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2))); return list;
     }
     public List<SeatInfo> VenueSeats(long venueId)
     {
-        using var c=Open(); using var cmd=Command(c,"SELECT s.id,z.name,s.row_label,s.number,s.x,s.y FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.y,s.x","$v",venueId);
+        using var c=Open(); using var cmd=Command(c,"SELECT s.id,z.name,s.row_label,s.number,s.x,s.y FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM hall_hidden_seat hs WHERE hs.seat_id=s.id) AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.y,s.x","$v",venueId);
         using var r=cmd.ExecuteReader(); var list=new List<SeatInfo>();
         while(r.Read()) list.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),r.GetDouble(4),r.GetDouble(5),null,"#CBD5E1",null,"","",null)); return list;
     }

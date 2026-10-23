@@ -42,7 +42,7 @@ public sealed class HallView : FrameworkElement
     public bool AllowUnavailableSelection{get;set;}
     public bool AllowOccupiedSelection{get;set;}
     public bool ShowInactivePlaceholders{get;set;}=true;
-    private bool CanSelect(SeatInfo seat)=>seat.Id>0&&(AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked)));
+    private bool CanSelect(SeatInfo seat)=>!seat.IsHidden&&seat.Id>0&&(AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked)));
     private void ExcludeOccupiedFromMixedSelection()
     {if(!AllowUnavailableSelection&&SelectedSeats.Any(SeatSelection.CanSelect))Selected.ExceptWith(seats.Where(s=>!SeatSelection.CanSelect(s)).Select(s=>s.Id));}
     public event Action? SelectionChanged;
@@ -50,6 +50,9 @@ public sealed class HallView : FrameworkElement
     private string? transformSector;
     private bool rotateSector,transformDragging;
     private SeatInfo[] transformStart=[];
+    private DrawingGroup? movingSectorDrawing;
+    private Matrix sectorMatrix=Matrix.Identity;
+    private Point sectorCentre;
     public bool SectorEditingEnabled{get;set;}
     public void EditSector(string sector,bool rotate){if(!SectorEditingEnabled)return;transformSector=sector;rotateSector=rotate;Cursor=rotate?Cursors.Cross:Cursors.SizeAll;}
 
@@ -86,10 +89,11 @@ public sealed class HallView : FrameworkElement
 
     private void RebuildDrawing()
     {
+        var visible=seats.Where(s=>!s.IsHidden).ToArray();
         var group=new DrawingGroup();
         using(var dc=group.Open())
         {
-            var sectorSeats=seats.ToLookup(s=>s.Sector);
+            var sectorSeats=visible.ToLookup(s=>s.Sector);
             var captionBounds=new List<Rect>();
             foreach(var sector in sectors)
             {
@@ -102,7 +106,7 @@ public sealed class HallView : FrameworkElement
                 if(wrapped&&places.Any())
                 {
                     var labelBounds=label.BuildGeometry(new Point(x,y)).Bounds;
-                    if(seats.Any(s=>labelBounds.IntersectsWith(new Rect(s.X,s.Y,16,16))))
+                    if(visible.Any(s=>labelBounds.IntersectsWith(new Rect(s.X,s.Y,16,16))))
                     {
                         // Deep side balconies can share a vertical band with central
                         // rows. Put only a colliding side heading outside its block.
@@ -114,7 +118,7 @@ public sealed class HallView : FrameworkElement
                 }
                 dc.DrawText(label,new Point(x,y));captionBounds.Add(label.BuildGeometry(new Point(x,y)).Bounds);
             }
-            foreach(var s in seats)
+            foreach(var s in visible)
             {
                 var rect=new Rect(s.X,s.Y,16,16);
                 var occupied=s.TicketId.HasValue || s.IsReserved;
@@ -157,8 +161,8 @@ public sealed class HallView : FrameworkElement
             // A logical row can curve through many Y coordinates. Draw its caption once,
             // at the leftmost seat, rather than repeating it beside every curved seat.
             var rowCaptions=captionBounds;
-            var seatBounds=seats.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
-            foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)))
+            var seatBounds=visible.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
+            foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
             {
                 var first=row.MinBy(s=>s.X)!;
                 var final=row.MaxBy(s=>s.X)!;
@@ -167,7 +171,7 @@ public sealed class HallView : FrameworkElement
                 if(glyph.IsEmpty)continue;
                 var caption=new Rect(first.X-glyph.Width-8,first.Y+(16-glyph.Height)/2,glyph.Width,glyph.Height);
                 // Keep row numbers as plain text, clear of both real seats and other captions.
-                for(var attempt=0;attempt<seats.Count+rowCaptions.Count;attempt++)
+                for(var attempt=0;attempt<visible.Length+rowCaptions.Count;attempt++)
                 {
                     var collisions=seatBounds.Concat(rowCaptions).Where(rect=>rect.IntersectsWith(caption)).ToArray();
                     if(collisions.Length==0)break;
@@ -175,7 +179,7 @@ public sealed class HallView : FrameworkElement
                 }
                 dc.DrawText(label,new Point(caption.X-glyph.X,caption.Y-glyph.Y));rowCaptions.Add(caption);
                 var rightCaption=new Rect(final.X+24,final.Y+(16-glyph.Height)/2,glyph.Width,glyph.Height);
-                for(var attempt=0;attempt<seats.Count+rowCaptions.Count;attempt++)
+                for(var attempt=0;attempt<visible.Length+rowCaptions.Count;attempt++)
                 {
                     var collisions=seatBounds.Concat(rowCaptions).Where(rect=>rect.IntersectsWith(rightCaption)).ToArray();
                     if(collisions.Length==0)break;
@@ -213,7 +217,7 @@ public sealed class HallView : FrameworkElement
     private SeatInfo? Hit(Point p)
     {
         var w=World(p);
-        return SeatSelection.Hit(seats,w.X,w.Y);
+        return SeatSelection.Hit(seats.Where(s=>!s.IsHidden),w.X,w.Y);
     }
     protected override void OnRender(DrawingContext dc)
     {
@@ -221,9 +225,11 @@ public sealed class HallView : FrameworkElement
         dc.DrawRectangle(Brushes.White,null,new Rect(RenderSize));
         dc.PushTransform(new MatrixTransform(zoom,0,0,zoom,offset.X,offset.Y));
         dc.DrawDrawing(drawing);
+        if(transformDragging&&movingSectorDrawing is not null)
+        {dc.PushTransform(new MatrixTransform(sectorMatrix));dc.DrawDrawing(movingSectorDrawing);dc.Pop();}
         var outerPen=new Pen(Brushes.Black,2/zoom);
         var innerPen=new Pen(Brushes.White,2/zoom);
-        foreach(var s in seats.Where(s=>Selected.Contains(s.Id)))
+        foreach(var s in seats.Where(s=>!transformDragging&&Selected.Contains(s.Id)))
         {
             // Two screen-pixel borders remain visible over every price and hatch color.
             // Neither border covers the seat fill or changes its status pattern.
@@ -254,6 +260,7 @@ public sealed class HallView : FrameworkElement
         {
             transformStart=seats.Where(s=>s.Sector==transformSector&&s.Id>0).ToArray();
             transformDragging=transformStart.Length>0;panning=false;
+            if(transformDragging)CacheSectorDrawing();
         }
         removing=SeatSelection.RemoveOnDrag(seats,gestureSelection,worldAnchor.X,worldAnchor.Y);
         CaptureMouse(); if(panning) Cursor=Cursors.Hand; e.Handled=true;
@@ -265,15 +272,15 @@ public sealed class HallView : FrameworkElement
         {
             if(transformDragging)
             {
-                var world=World(p);var cx=transformStart.Average(s=>s.X);var cy=transformStart.Average(s=>s.Y);
-                var angle=Math.Atan2(world.Y-cy,world.X-cx)-Math.Atan2(worldAnchor.Y-cy,worldAnchor.X-cx);
-                foreach(var seat in transformStart)
+                var world=World(p);var cx=sectorCentre.X;var cy=sectorCentre.Y;
+                sectorMatrix=Matrix.Identity;
+                if(rotateSector)
                 {
-                    var index=seats.FindIndex(s=>s.Id==seat.Id);var x=seat.X-cx;var y=seat.Y-cy;
-                    seats[index]=rotateSector?seat with{X=cx+x*Math.Cos(angle)-y*Math.Sin(angle),Y=cy+x*Math.Sin(angle)+y*Math.Cos(angle)}:
-                        seat with{X=seat.X+world.X-worldAnchor.X,Y=seat.Y+world.Y-worldAnchor.Y};
+                    var angle=(Math.Atan2(world.Y-cy,world.X-cx)-Math.Atan2(worldAnchor.Y-cy,worldAnchor.X-cx))*180/Math.PI;
+                    sectorMatrix.RotateAt(angle,cx,cy);
                 }
-                RebuildDrawing();last=p;InvalidateVisual();return;
+                else sectorMatrix.Translate(world.X-worldAnchor.X,world.Y-worldAnchor.Y);
+                last=p;InvalidateVisual();return;
             }
             if(panning)
             {
@@ -344,7 +351,7 @@ public sealed class HallView : FrameworkElement
         if(left>=right||top>=bottom)return [];
         var touched=seats.Where(s=>s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top).ToArray();
         if(AllowOccupiedSelection&&!touched.Any(SeatSelection.CanSelect)&&!SelectedSeats.Any(SeatSelection.CanSelect))return [];
-        return touched.Where(s=>s.Id>0&&!SeatSelection.CanSelect(s)).ToArray();
+        return touched.Where(s=>s.Id>0&&!s.IsHidden&&!SeatSelection.CanSelect(s)).ToArray();
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
@@ -356,13 +363,32 @@ public sealed class HallView : FrameworkElement
     private void EndGesture()
     {
         scrollTimer.Stop();
-        var transformed=transformDragging?seats.Where(s=>s.Sector==transformSector&&s.Id>0).ToArray():null;
-        transformDragging=false;if(transformed is not null){transformSector=null;transformStart=[];}
+        SeatInfo[]? transformed=null;
+        if(transformDragging)
+        {
+            transformed=transformStart.Select(s=>{var p=sectorMatrix.Transform(new Point(s.X,s.Y));return s with{X=p.X,Y=p.Y};}).ToArray();
+            var updates=transformed.ToDictionary(s=>s.Id);
+            for(var i=0;i<seats.Count;i++)if(updates.TryGetValue(seats[i].Id,out var seat))seats[i]=seat;
+        }
+        transformDragging=false;movingSectorDrawing=null;sectorMatrix=Matrix.Identity;
+        if(transformed is not null){transformSector=null;transformStart=[];RebuildDrawing();}
         dragging=panning=marquee=rightGesture=panMoved=false;
         Cursor=Cursors.Arrow;
         if(IsMouseCaptured)ReleaseMouseCapture();
         InvalidateVisual();
         if(transformed is not null)SectorTransformCompleted?.Invoke(transformed);
+    }
+
+    private void CacheSectorDrawing()
+    {
+        var originalSeats=seats;var originalSectors=sectors;var originalBounds=bounds;
+        try
+        {
+            seats=originalSeats.Where(s=>s.Sector==transformSector).ToList();sectors=originalSectors.Where(s=>s.Name==transformSector).ToArray();RebuildDrawing();movingSectorDrawing=drawing;
+            seats=originalSeats.Where(s=>s.Sector!=transformSector).ToList();sectors=originalSectors.Where(s=>s.Name!=transformSector).ToArray();RebuildDrawing();
+        }
+        finally{seats=originalSeats;sectors=originalSectors;bounds=originalBounds;}
+        sectorCentre=new Point(transformStart.Average(s=>s.X),transformStart.Average(s=>s.Y));sectorMatrix=Matrix.Identity;
     }
 
     private void AutoScroll()

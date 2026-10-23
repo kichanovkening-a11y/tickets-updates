@@ -29,7 +29,7 @@ static class Docs016Checks
             {
                 using var archive=System.IO.Compression.ZipFile.OpenRead(path);using var stream=archive.GetEntry("word/document.xml")!.Open();
                 var text=string.Concat(System.Xml.Linq.XDocument.Load(stream).Descendants(System.Xml.Linq.XName.Get("t","http://schemas.openxmlformats.org/wordprocessingml/2006/main")).Select(t=>t.Value));
-                Require(text.Contains(updated.Signatory)&&text.Contains(oldSender.Signatory),"regenerated document has stale recipient or changed sender: "+path);
+                Require(text.Replace('\u00a0',' ').Contains(updated.Signatory)&&text.Replace('\u00a0',' ').Contains(oldSender.Signatory),"regenerated document has stale recipient or changed sender: "+path);
             }
         });
         test("recipient refresh rejects an issue belonging to another event without changing snapshots",s=>{

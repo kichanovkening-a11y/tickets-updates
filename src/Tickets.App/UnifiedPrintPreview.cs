@@ -13,10 +13,18 @@ internal static class UnifiedPrintPreview
 {
     internal static bool Show(Window owner,string title,Func<PrintDialog,bool,FixedDocument> build,Action<PrintDialog,FixedDocument> submit,bool landscape=false,FrameworkElement? options=null,Size? preferredMedia=null)
     {
+        var window=new PrintPreviewWindow(owner,"Предварительный просмотр печати · "+title);
+        var completed=false;
+        Attach(window,build,(settings,pages)=>{submit(settings,pages);completed=true;window.Close();},options);
+        window.ShowDialog();return completed;
+    }
+
+    // Reuse the same controls in ticket issuance so Print never opens another settings window.
+    internal static Action Attach(EditorWindow window,Func<PrintDialog,bool,FixedDocument> build,Action<PrintDialog,FixedDocument> submit,FrameworkElement? options=null)
+    {
         var settings=new PrintDialog{PrintQueue=null,PrintTicket=new PrintTicket()};
         settings.PrintTicket.PageOrientation=PageOrientation.Portrait;
         settings.PrintTicket.PageMediaSize=A4Media();
-        var window=new PrintPreviewWindow(owner,"Предварительный просмотр печати · "+title);
         var root=new DockPanel{Margin=new Thickness(8)};window.Content=root;
         var toolbar=new WrapPanel{Margin=new Thickness(0,0,0,8)};DockPanel.SetDock(toolbar,Dock.Top);root.Children.Add(toolbar);
         var printers=new ComboBox{Width=270,DisplayMemberPath="FullName",Margin=new Thickness(4)};
@@ -34,7 +42,7 @@ internal static class UnifiedPrintPreview
         // Page views keep all printing within this application's settings and confirmation.
         var pagesPanel=new StackPanel{HorizontalAlignment=HorizontalAlignment.Center};
         root.Children.Add(new ScrollViewer{Content=pagesPanel,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto});
-        FixedDocument? pages=null;var completed=false;var ready=false;
+        FixedDocument? pages=null;var ready=false;
         void ReadSettings()
         {
             if(!int.TryParse(copies.Text,out var count)||count<1||count>999)throw new InvalidOperationException("Укажите количество копий от 1 до 999.");
@@ -76,7 +84,7 @@ internal static class UnifiedPrintPreview
             if(settings.PrintQueue is null)throw new InvalidOperationException("Выберите установленный принтер для печати.");
             Rebuild();if(pages is null)return;
             try{build(settings,false);}catch(PrintAreaWarning ex){if(!ConfirmOverflow(window.DialogOwnerForHost,ex.Message))return;}
-            submit(settings,pages);completed=true;window.Close();
+            submit(settings,pages);
         });
         root.CommandBindings.Add(new CommandBinding(ApplicationCommands.Print,(_,e)=>{e.Handled=true;print.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}));
         try
@@ -89,7 +97,7 @@ internal static class UnifiedPrintPreview
         }
         catch{settings.PrintQueue=null;}
         LoadPaper();ready=true;Safe(Rebuild);
-        window.ShowDialog();return completed;
+        return ()=>Safe(Rebuild);
     }
     internal static PageMediaSize A4Media()=>new(PageMediaSizeName.ISOA4,210*96/25.4,297*96/25.4);
     internal static PageMediaSize SelectMedia(IEnumerable<PageMediaSize> supported,PageMediaSize? explicitlySelected=null)

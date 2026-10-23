@@ -27,7 +27,7 @@ internal static class Ui023Checks
             var menu=preview.ContextMenu!;
             var remove=menu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Удалить места"));remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));menu.IsOpen=false;
             var draft=(System.Collections.ObjectModel.ObservableCollection<DraftSeat>)typeof(HallEditorWindow).GetField("seats",flags)!.GetValue(editor)!;
-            Check(draft.Select(s=>s.Number).SequenceEqual(new[]{"4","5"}),"group deletion retains remaining original numbers");
+            Check(draft.Select(s=>s.Number).SequenceEqual(new[]{"1","2"})&&draft.Select(s=>s.X).SequenceEqual(new[]{60d,80d}),"group deletion renumbers without moving remaining seats");
             typeof(HallEditorWindow).GetMethod("Undo",flags)!.Invoke(editor,null);Pump();
             preview.SetSelection(new long[]{2,4});context(2,new Point(10,10));Pump();
             var before=draft.Select(s=>s.X).ToArray();menu=preview.ContextMenu!;

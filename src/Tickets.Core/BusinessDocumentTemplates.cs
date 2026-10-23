@@ -1,6 +1,6 @@
 namespace Tickets.Core;
 
-public sealed record BusinessDocumentLine(string Text,bool Requisites=false);
+public sealed record BusinessDocumentLine(string Text,bool Requisites=false,bool Signatures=false);
 
 /// <summary>Editable business forms based on the supplied contract, act, bill and goods waybill.</summary>
 public static class BusinessDocumentTemplates
@@ -30,10 +30,9 @@ public static class BusinessDocumentTemplates
                 for(var j=start;j<i+block.Length;j++)omitted.Add(j);
             }
         }
-        if(document.Kind is IssueDocumentKinds.Contract or IssueDocumentKinds.Act)
         {
             var labels=PartyLabels(document.Kind);
-            var parties=new[]{(labels.Seller,document.Invoice.SenderDetails),(labels.Buyer,document.Invoice.RecipientDetails)};
+            var parties=new[]{(labels.Seller,document.Invoice.SenderDetails),(labels.Buyer,document.Invoice.RecipientDetails),("Отпуск разрешил",document.Invoice.SenderDetails),("Руководитель",document.Invoice.SenderDetails),("Груз получил грузополучатель",document.Invoice.RecipientDetails)};
             foreach(var (label,details) in parties)
             {
                 var signature=$"{label}: {Missing(details?.Position??"")} ____________ / {Missing(details?.Signatory??"")} /";
@@ -46,6 +45,7 @@ public static class BusinessDocumentTemplates
             if(i==insertion)result.Add(new("",true));
             if(i<lines.Length&&!omitted.Contains(i))result.Add(new(lines[i]));
         }
+        if(document.Kind is not (IssueDocumentKinds.Contract or IssueDocumentKinds.Act))result.Add(new("",Signatures:true));
         return result;
     }
     private static bool IsPartyHeading(string line)=>line is "Продавец" or "Покупатель" or "Реквизиты исполнителя" or "Реквизиты заказчика" or "Поставщик и получатель платежа" or "Покупатель и плательщик" or "Грузоотправитель и поставщик" or "Грузополучатель и плательщик";

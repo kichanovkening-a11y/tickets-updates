@@ -35,7 +35,7 @@ internal static class DocumentFormCorrections
         if(text.Contains("Руководитель")&&text.Contains("Бухгалтер")&&StandardDocumentForms.HasOriginalBillSignatures(table))
         {
             var replacement=new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",9600),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed"))),new XElement(W+"tblGrid",new XElement(W+"gridCol",new XAttribute(W+"w",4800)),new XElement(W+"gridCol",new XAttribute(W+"w",4800))));
-            foreach(var values in new[]{new[]{"Руководитель: {senderSignatory}","Бухгалтер: {senderSignatory}"},new[]{"________________________","________________________"}})
+            foreach(var values in new[]{new[]{"Руководитель: {senderPosition} {senderSignatory}","Бухгалтер: {senderSignatory}"},new[]{"________________________","________________________"}})
                 replacement.Add(new XElement(W+"tr",values.Select(v=>new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",4800),new XAttribute(W+"type","dxa"))),InvoiceDocuments.Paragraph(v,false,20)))));
             table.ReplaceWith(replacement);table=replacement;
         }
@@ -58,7 +58,11 @@ internal static class DocumentFormCorrections
         else names.AddBeforeSelf(Blank(),Blank());
         line.AddBeforeSelf(Blank());
         foreach(var row in new[]{names,line})foreach(var cell in row.Elements(W+"tc"))
-        {var pr=cell.Element(W+"tcPr");if(pr is null){pr=new XElement(W+"tcPr");cell.AddFirst(pr);}pr.Elements(W+"vAlign").Remove();pr.Add(new XElement(W+"vAlign",new XAttribute(W+"val","bottom")));}
+        {
+            var pr=cell.Element(W+"tcPr");if(pr is null){pr=new XElement(W+"tcPr");cell.AddFirst(pr);}pr.Elements(W+"vAlign").Remove();pr.Add(new XElement(W+"vAlign",new XAttribute(W+"val",row==names?"top":"bottom")));
+            if(row.Elements(W+"tc").Count()==2)foreach(var p in cell.Elements(W+"p"))
+            {var props=p.Element(W+"pPr");if(props is null){props=new XElement(W+"pPr");p.AddFirst(props);}props.Elements(W+"jc").Remove();props.Add(new XElement(W+"jc",new XAttribute(W+"val",cell==row.Elements(W+"tc").First()?"left":"right")));}
+        }
     }
     internal static void RestoreInvoiceBorders(XDocument xml)
     {

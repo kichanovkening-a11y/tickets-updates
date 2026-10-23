@@ -7,6 +7,7 @@ internal static class BusinessDocumentChecks
 {
     public static void Register(Action<string,Action<Store>> test)
     {
+        SignatureBlocksChecks.Register(test);
         test("business forms use actual tickets and selected organization snapshots",s=>{
             var evt=s.Events().First(e=>s.Seats(e.Id).Count(x=>x.Available)>=2);
             var seats=s.Seats(evt.Id).Where(x=>x.Available).Take(2).ToArray();

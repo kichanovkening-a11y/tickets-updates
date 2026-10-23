@@ -63,9 +63,12 @@ public partial class MainWindow : Window
         {
             var title=new TextBlock{Text=group.Title,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,FontSize=13,MaxWidth=205};
             var root=new TreeViewItem{Header=title,Foreground=past?Brushes.Gray:Brushes.Black,Margin=new Thickness(0,5,0,5)};
+            root.Selected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,root)){title.Background=Brushes.SteelBlue;title.Foreground=Brushes.White;}};
+            root.Unselected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,root)){title.Background=Brushes.Transparent;title.ClearValue(TextBlock.ForegroundProperty);}};
             foreach(var show in group.Shows)
             {
-                var label=new TextBlock{Text=show.Date+"\n"+show.Venue,TextWrapping=TextWrapping.Wrap,MaxWidth=180,Margin=new Thickness(0,6,0,6)};
+                var label=new TextBlock{TextWrapping=TextWrapping.Wrap,MaxWidth=180,Margin=new Thickness(0,6,0,6)};
+                label.Inlines.Add(new System.Windows.Documents.Run(show.Date){FontSize=18});label.Inlines.Add(new System.Windows.Documents.Run("\n"+show.Venue));
                 var item=new TreeViewItem{Header=label,Tag=show};
                 if(past)item.ContextMenu=CleanupMenu023(new[]{show.Id},"Удалить показ окончательно");
                 var normal=past?Brushes.Gray:Brushes.SteelBlue;label.Foreground=normal;

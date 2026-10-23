@@ -15,13 +15,13 @@ static class Docs019Checks
             {
                 var info=s.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!;Require(info.SourceDocument is not null,"missing universal "+kind);
                 Require(!info.Body.Contains("Микуленко")&&!info.Body.Contains("Сбербанк")&&!info.Body.Contains("доверенности №74"),"sample recipient leaked "+kind);
-                Require(info.Body.Contains("Петров П.П."),"representative missing "+kind);
+                Require(info.Body.Replace('\u00a0',' ').Contains("Петров П.П."),"representative missing "+kind);
                 if(kind!="invoice")Require(info.Body.Contains("18-07/26")&&info.Body.Contains("20.07.2026"),"manual contract reference missing "+kind);
                 Require(!System.Text.RegularExpressions.Regex.IsMatch(info.Body,@"\{\w+\}"),"unfilled token "+kind);
                 var xml=InvoiceDocuments.IssueDocumentXml(info);AssertStructure(xml);
             }
             var other=Issue(s,recipient);s.SetContractRepresentative(invoice.EventId,invoice.Id,"Сидоров С.С.","Уполномоченный");
-            foreach(var kind in new[]{"contract","act","ttn","bill","specification","invoice"})Require(s.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!.Body.Contains("Сидоров С.С.")||kind=="bill","representative not synchronized "+kind);
+            foreach(var kind in new[]{"contract","act","ttn","bill","specification","invoice"})Require(s.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!.Body.Replace('\u00a0',' ').Contains("Сидоров С.С.")||kind=="bill","representative not synchronized "+kind);
             Require(s.Invoice(other.EventId,other.Id).RecipientDetails!.Signatory=="Петров П.П.","representative corrupted another invoice");
             Require(s.GetOrganizationDetails(recipient,false).Signatory=="Петров П.П.","representative corrupted directory");
         });

@@ -29,7 +29,7 @@ internal class EditorWindow : Window
     protected Window DialogOwner=>IsInline?Application.Current.MainWindow:this;
     protected void OnShown(Action action)=>shown+=action;
     internal void NotifyShown(){if(wasShown)return;wasShown=true;shown?.Invoke();}
-    public new bool? ShowDialog()=>Application.Current.MainWindow is MainWindow main?main.PresentEditor(this):base.ShowDialog();
+    public new bool? ShowDialog()=>Owner is EditorWindow {IsInline:false,IsVisible:true}?base.ShowDialog():Application.Current.MainWindow is MainWindow main?main.PresentEditor(this):base.ShowDialog();
     internal bool? ShowSeparateDialog()=>base.ShowDialog();
     protected void Finish(bool result){if(IsInline){InlineResult=result;Close();}else DialogResult=result;}
     protected void Try(Action action)

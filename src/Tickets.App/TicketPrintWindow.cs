@@ -19,7 +19,7 @@ internal sealed class TicketPrintWindow:EditorWindow
     private InvoiceInfo? issuedSnapshot;
     private Action? refreshPreview;
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
-    private readonly ComboBox blankChoice=new(){Width=200,MinHeight=44,DisplayMemberPath="Name",Margin=new Thickness(8,0,8,0),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
+    private readonly ComboBox blankChoice=new(){Width=200,MinHeight=44,DisplayMemberPath="Name",Margin=new Thickness(8,4,8,4),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
     private TicketBlank? SelectedBlank=>blankChoice.SelectedItem as TicketBlank;
     public long IssueId{get;private set;}
     public bool Printed{get;private set;}

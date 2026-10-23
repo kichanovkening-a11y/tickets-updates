@@ -55,12 +55,14 @@ internal static class Corrections025UiChecks
         ticket.Width=1000;ticket.Height=800;ticket.Show();Pump();
         try
         {
+            Capture(ticket,"025-ticket-toolbar");
             var print=Walk(ticket).OfType<Button>().Single(b=>Equals(b.Content,"Печать"));
+            var fields=Walk(ticket).OfType<ComboBox>().Cast<FrameworkElement>().Concat(Walk(ticket).OfType<TextBox>()).Append(print).ToArray();
+            var positions=fields.Select(f=>f.TranslatePoint(new Point(),ticket)).ToArray();
+            for(var i=0;i<fields.Length;i++)Console.WriteLine($"025 ticket field {i}: type={fields[i].GetType().Name}; position={positions[i]}; size={fields[i].ActualWidth}x{fields[i].ActualHeight}; margin={fields[i].Margin}");
             Check(print.Background is SolidColorBrush green&&green.Color==Color.FromRgb(27,122,67)&&print.FontSize==16.9&&print.ActualHeight==44,"ticket print action matches issuance green and preserves legible type");
-            var fields=Walk(ticket).OfType<ComboBox>().ToArray();var positions=fields.Select(f=>f.TranslatePoint(new Point(),ticket)).ToArray();
             Check(positions.Max(p=>p.Y)-positions.Min(p=>p.Y)<1&&fields.All(f=>Math.Abs(f.ActualHeight-print.ActualHeight)<1),"ticket settings fit one row at original field height");
             Check(print.TranslatePoint(new Point(print.ActualWidth,0),ticket).X<=ticket.ActualWidth,"ticket print action fits current window width");
-            Capture(ticket,"025-ticket-toolbar");
         }
         finally{ticket.Close();Pump();}
         CaptureEmbedded((Window)Activator.CreateInstance(ticketType,store,show.Id,new[]{seat.Id},"UI025","UI025",1L)!,"025-ticket-embedded");

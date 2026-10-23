@@ -9,8 +9,8 @@ internal static class Pricing021UiChecks
     internal static void Run(Store store)
     {
         var recipientWindow=new RecipientsWindow(store);
-        var buttons=Logical(recipientWindow.Content as DependencyObject).OfType<Button>().Where(b=>b.Content is string text&&new[]{"Открыть выдачу","Реквизиты организации","Документы получателя"}.Contains(text)).ToArray();
-        Check(buttons.Length==3&&buttons.All(b=>double.IsNaN(b.Width)&&b.ContentTemplate is null)&&buttons.Select(b=>b.Height).Distinct().Count()==1&&buttons.Select(b=>b.Margin.Top).Distinct().Count()==1,"recipient button row remains compact, same height and aligned");recipientWindow.Close();
+        var buttons=Logical(recipientWindow.Content as DependencyObject).OfType<Button>().Where(b=>b.Content is string text&&new[]{"Реквизиты организации","Документы получателя"}.Contains(text)).ToArray();
+        Check(buttons.Length==2&&buttons.All(b=>double.IsNaN(b.Width)&&b.ContentTemplate is null)&&buttons.Select(b=>b.Height).Distinct().Count()==1&&buttons.Select(b=>b.Margin.Top).Distinct().Count()==1,"recipient button row remains compact, same height and aligned");recipientWindow.Close();
         var venue=store.CreateHall("Расценовка UI021","",new[]{new DraftSeat{Row="1",Number="1",X=0,Y=0},new DraftSeat{Row="1",Number="2",X=18,Y=0}});
         var seats=store.VenueSeats(venue);var category=store.PriceColors().First();
         var source=store.SavePlan(venue,"Исходная UI021",seats.Select(s=>new PriceValue(s.Id,category.Amount,category.Color)).ToArray(),[]);

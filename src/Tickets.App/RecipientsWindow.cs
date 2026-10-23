@@ -129,7 +129,7 @@ internal sealed class RecipientsWindow:EditorWindow
                 foreach(var issue in showing.OrderByDescending(x=>x.Issue.IssuedAt).ThenByDescending(x=>x.Issue.Id))
                 {
                     var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
-                    var text=(TextBlock)row.Header;
+                    var text=(TextBlock)row.Header;row.Header=null;
                     var check=new CheckBox{Width=18,Height=18,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)};
                     check.Checked+=(_,_)=>packageSelection.Add((issue.Issue.EventId,issue.Issue.Id));check.Unchecked+=(_,_)=>packageSelection.Remove((issue.Issue.EventId,issue.Issue.Id));
                     var header=new DockPanel();DockPanel.SetDock(check,Dock.Left);header.Children.Add(check);header.Children.Add(text);row.Header=header;

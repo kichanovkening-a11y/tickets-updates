@@ -78,6 +78,8 @@ internal static class Ui020Checks
             IEnumerable<TreeViewItem> Nodes(ItemsControl parent){foreach(var child in parent.Items.OfType<TreeViewItem>()){yield return child;foreach(var nested in Nodes(child))yield return nested;}}
             var date=Nodes(history).Select(n=>n.Header).OfType<TextBlock>().First(t=>t.Inlines.OfType<System.Windows.Documents.Run>().Any(r=>r.Foreground==System.Windows.Media.Brushes.Red));
             Check(date.Inlines.OfType<System.Windows.Documents.Run>().First().FontSize==15,"recipient history event date and time are red and larger");
+            var issueHeader=Nodes(history).Where(n=>n.Tag is RecipientIssueInfo).Select(n=>n.Header).OfType<DockPanel>().First();
+            Check(issueHeader.Children.OfType<CheckBox>().Count()==1&&issueHeader.Children.OfType<TextBlock>().Count()==1,"recipient history has separate package checkbox and single-click issue text");
         }
         finally{window.Close();}
         store.Return(store.Invoice(show.Id,invoice).Tickets.Select(t=>t.Id).ToArray());main.SelectEvent(show.Id);Pump();

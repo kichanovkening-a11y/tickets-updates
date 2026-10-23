@@ -96,20 +96,22 @@ public sealed class HallView : FrameworkElement
         using(var dc=group.Open())
         {
             var sectorSeats=visible.ToLookup(s=>s.Sector);
-            var captionBounds=new List<Rect>();
-            // Row labels must stay at their real endpoints/aisles. Reserve their
-            // rendered ink before choosing a sector heading's collision fallback.
+            var seatBounds=visible.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
+            var rowLabels=new List<RowCaption>();
+            // Keep the logical anchors fixed; resolve only small rendered-ink
+            // collisions locally, before headings reserve the final row labels.
             foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
             {
                 var label=Text(row.Key.Row,14.3,Brushes.Black);
-                var glyph=label.BuildGeometry(new Point()).Bounds;if(glyph.IsEmpty)continue;
                 var native=new DrawingGroup();using(var context=native.Open())context.DrawText(label,new Point());
+                if(native.Bounds.IsEmpty)continue;
                 foreach(var anchor in HallEditing025.RowAnchors(row.ToArray()))
                 {
-                    var ink=native.Bounds;ink.Offset(anchor.X-glyph.Width/2-glyph.X,anchor.Y-glyph.Height/2-glyph.Y);
-                    captionBounds.Add(ink);
+                    var ink=new Rect(anchor.X-native.Bounds.Width/2,anchor.Y-native.Bounds.Height/2,native.Bounds.Width,native.Bounds.Height);
+                    rowLabels.Add(PlaceRowCaption(new(label,native.Bounds,ink,ink,row.Min(s=>s.Id)),seatBounds,rowLabels));
                 }
             }
+            var captionBounds=rowLabels.Select(label=>label.Ink).ToList();
             foreach(var sector in sectors)
             {
                 var wrapped=sector.Name.StartsWith("Ложа партера (",StringComparison.Ordinal)||sector.Name.StartsWith("Балкон №",StringComparison.Ordinal);
@@ -162,25 +164,48 @@ public sealed class HallView : FrameworkElement
                     dc.DrawGeometry(textColor,null,ink);
                 }
             }
-            // A logical row can curve through many Y coordinates. Draw its caption once,
-            // at the leftmost seat, rather than repeating it beside every curved seat.
-            var rowCaptions=captionBounds;
-            foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
+            foreach(var label in rowLabels)
             {
-                var first=row.OrderBy(s=>s.Id).First();
-                var label=Text(first.Row,14.3,Brushes.Black);
-                var glyph=label.BuildGeometry(new Point()).Bounds;if(glyph.IsEmpty)continue;
-                foreach(var anchor in HallEditing025.RowAnchors(row.ToArray()))
-                {
-                    var caption=new Rect(anchor.X-glyph.Width/2,anchor.Y-glyph.Height/2,glyph.Width,glyph.Height);
-                    dc.DrawText(label,new Point(caption.X-glyph.X,caption.Y-glyph.Y));
-                    rowHits.Add((caption,first.Id));rowCaptions.Add(caption);
-                }
+                dc.DrawText(label.Label,new Point(label.Ink.X-label.Glyph.X,label.Ink.Y-label.Glyph.Y));
+                rowHits.Add((label.Ink,label.Id));
             }
         }
         group.Freeze(); drawing=group;
         bounds=drawing.Bounds;
         if(bounds.IsEmpty) bounds=new Rect(0,0,100,100);
+    }
+
+    private sealed record RowCaption(FormattedText Label,Rect Glyph,Rect Anchor,Rect Ink,long Id);
+    private static RowCaption PlaceRowCaption(RowCaption label,IReadOnlyList<Rect> seats,List<RowCaption> prior)
+    {
+        const double limit=12,gap=.25;
+        static Rect Moved(Rect ink,Vector offset){ink.Offset(offset);return ink;}
+        static bool Clear(Rect ink,IEnumerable<Rect> obstacles)=>!obstacles.Any(ink.IntersectsWith);
+        static bool Local(Rect ink,Rect anchor)=>Math.Pow(ink.X-anchor.X,2)+Math.Pow(ink.Y-anchor.Y,2)<=limit*limit;
+        var obstacles=seats.Concat(prior.Select(p=>p.Ink)).ToArray();
+        if(Clear(label.Ink,obstacles))return label;
+        var area=label.Ink;area.Inflate(limit,limit);var nearby=obstacles.Where(area.IntersectsWith).ToArray();
+        var xs=nearby.SelectMany(r=>new[]{r.Left-gap-label.Ink.Right,r.Right+gap-label.Ink.Left}).Append(0).Where(x=>Math.Abs(x)<=limit).Distinct();
+        var ys=nearby.SelectMany(r=>new[]{r.Top-gap-label.Ink.Bottom,r.Bottom+gap-label.Ink.Top}).Append(0).Where(y=>Math.Abs(y)<=limit).Distinct().ToArray();
+        foreach(var offset in xs.SelectMany(x=>ys.Select(y=>new Vector(x,y))).Where(v=>v.LengthSquared<=limit*limit).OrderBy(v=>v.LengthSquared))
+        {var ink=Moved(label.Ink,offset);if(Clear(ink,nearby))return label with{Ink=ink};}
+        // Adjacent blocks can put two two-digit labels only 4px apart. Share
+        // their separation instead of pushing one label beyond its own row.
+        for(var i=0;i<prior.Count;i++)
+        {
+            var previous=prior[i];if(!label.Ink.IntersectsWith(previous.Ink))continue;
+            var others=seats.Concat(prior.Where((_,index)=>index!=i).Select(p=>p.Ink)).ToArray();
+            var offsets=new[]{new Vector((previous.Ink.Left-gap-label.Ink.Right)/2,0),new Vector((previous.Ink.Right+gap-label.Ink.Left)/2,0),new Vector(0,(previous.Ink.Top-gap-label.Ink.Bottom)/2),new Vector(0,(previous.Ink.Bottom+gap-label.Ink.Top)/2)};
+            foreach(var offset in offsets.OrderBy(v=>v.LengthSquared))
+            {
+                var ink=Moved(label.Ink,offset);var other=Moved(previous.Ink,-offset);
+                if(!Local(ink,label.Anchor)||!Local(other,previous.Anchor)||ink.IntersectsWith(other)||!Clear(ink,others)||!Clear(other,others))continue;
+                prior[i]=previous with{Ink=other};return label with{Ink=ink};
+            }
+        }
+        // A custom layout may have no free space within the local bound. Keep
+        // its logical anchor rather than drifting to an unrelated row.
+        return label;
     }
 
     private static Point SectorCaptionOrigin(Rect glyph,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback)

@@ -112,8 +112,25 @@ internal static class Ui020Checks
                 foreach(var seat in renderedSeats.Where(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16))))Console.WriteLine($"Caption collision: {caption.Bounds}; seat {seat.Sector}/{seat.Row}/{seat.Number} at {seat.X},{seat.Y}");
                 foreach(var heading in headings.Where(heading=>heading.Bounds.IntersectsWith(caption.Bounds)))Console.WriteLine($"Caption collision: {caption.Bounds}; heading {heading.Bounds}");
             }
+            CheckRowCaptionAnchors(diagram,captions);
             Check(captions.All(caption=>!renderedSeats.Any(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))&&!headings.Any(heading=>heading.Bounds.IntersectsWith(caption.Bounds))),"row captions remain clear of real seats and sector headings");
         }
+    }
+    internal static void CheckRowCaptionAnchors(HallView hall,System.Windows.Media.GlyphRunDrawing[] captions)
+    {
+        var hits=(List<(Rect Bounds,long Id)>)typeof(HallView).GetField("rowHits",Private)!.GetValue(hall)!;
+        var seats=((IReadOnlyList<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(hall)!).Where(seat=>!seat.IsHidden).ToArray();
+        var expected=seats.GroupBy(seat=>(seat.Sector,seat.Row)).SelectMany(row=>HallEditing025.RowAnchors(row.ToArray()).Select(anchor=>(Anchor:anchor,Seat:row.MinBy(seat=>seat.Id)!))).ToArray();
+        Check(hits.Count==captions.Length&&captions.Length==expected.Length,"each rendered row caption has its own hit target and logical anchor");
+        for(var i=0;i<captions.Length;i++)
+        {
+            var ink=captions[i].Bounds;var hit=hits[i];var (anchor,seat)=expected[i];
+            var delta=new Vector(ink.X+ink.Width/2-anchor.X,ink.Y+ink.Height/2-anchor.Y);
+            Console.WriteLine($"025 row {seat.Sector}/{seat.Row}: anchor={anchor.X},{anchor.Y}; ink={ink}; hit={hit.Bounds}; offset={delta}; distance={delta.Length}");
+            Check(delta.Length<=12.01&&hit.Id==seat.Id&&!captions[i].GlyphRun.IsSideways,"row caption stays upright within12px of its own logical anchor and retains row identity");
+            Check(Math.Abs(ink.X-hit.Bounds.X)<.001&&Math.Abs(ink.Y-hit.Bounds.Y)<.001&&Math.Abs(ink.Width-hit.Bounds.Width)<.001&&Math.Abs(ink.Height-hit.Bounds.Height)<.001,"row caption hit target matches its actual rendered ink");
+        }
+        Check(captions.All(caption=>!captions.Any(other=>!ReferenceEquals(caption,other)&&caption.Bounds.IntersectsWith(other.Bounds))),"rendered row captions do not overlap one another");
     }
     private static void Pump()=>Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool value,string message){if(!value)throw new Exception(message);Console.WriteLine("PASS "+message);}

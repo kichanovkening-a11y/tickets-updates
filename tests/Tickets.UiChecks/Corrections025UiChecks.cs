@@ -47,6 +47,7 @@ internal static class Corrections025UiChecks
                 var drawing=(DrawingGroup)typeof(HallView).GetField("drawing",Private)!.GetValue(hall)!;
                 var glyphs=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-14.3)<.01).ToArray();
                 Check(glyphs.Length==6&&glyphs.All(g=>g.GlyphRun.IsSideways==false),"rotated rows retain upright three captions");
+                Ui020Checks.CheckRowCaptionAnchors(hall,glyphs);
             }
         }
         finally{hallEditor.Close();Pump();}

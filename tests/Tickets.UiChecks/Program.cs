@@ -105,8 +105,11 @@ internal static class Program
             Check(((HallRowLayout)rowGrid.Items[9]).SeatCount==17,"intermediate row-count typing preserves customized row settings");
             var configurations=rowGrid.Items.Cast<HallRowLayout>().ToArray();
             foreach(var row in configurations){row.SeatCount=1;row.AisleAfter=0;}configurations[0].SeatCount=23;configurations[0].AisleAfter=10;
-            Click(hallEditor,"Добавить сектор");Pump();
-            var draftPreview=Logical(hallEditor).OfType<Tickets.App.HallView>().Single();draftPreview.Selected.UnionWith(new long[]{1,2,3});
+            // The configured live row draft is now accepted by its context actions;
+            // Add sector opens the explicit new-sector popup, covered separately in Ui023.
+            var draftPreview=Logical(hallEditor).OfType<Tickets.App.HallView>().Single();
+            var materialize=(Action<long,Point>)typeof(Tickets.App.HallView).GetField("SeatContextRequested",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(draftPreview)!;
+            materialize(1,new Point(10,10));draftPreview.ContextMenu!.IsOpen=false;Pump();draftPreview.SetSelection(new long[]{1,2,3});
             Click(hallEditor,"Удалить выбранные (Del)");Click(hallEditor,"Шаг назад");
             var draftSeats=(System.Collections.ICollection)hallType.GetField("seats",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(hallEditor)!;
             Check(draftSeats.Count==42,"hall undo restores deleted places");

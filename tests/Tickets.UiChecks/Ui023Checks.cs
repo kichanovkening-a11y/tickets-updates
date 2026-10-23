@@ -33,6 +33,21 @@ internal static class Ui023Checks
             var before=draft.Select(s=>s.X).ToArray();menu=preview.ContextMenu!;
             menu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Сделать проход")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));menu.IsOpen=false;
             Check(draft.Count==5&&draft.Select(s=>s.Number).SequenceEqual(new[]{"1","2","3","4","5"})&&draft[1].X-before[1]==20&&draft[3].X-before[3]==40,"aisles apply to both selected runs without renumbering");
+            Exception? popupError=null;
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                var popup=Application.Current.Windows.OfType<HallSectorWindow023>().Single();
+                try
+                {
+                    var inputs=Walk(popup).OfType<TextBox>().ToArray();Check(inputs.Length==3,"sector popup asks name rows and places");
+                    inputs[0].Text="Балкон023";inputs[1].Text="2";inputs[2].Text="3";
+                    Check(draft.Count==5,"sector is not added before Save");
+                    Walk(popup).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                }
+                catch(Exception ex){popupError=ex;popup.Close();}
+            }));
+            Walk(editor).OfType<Button>().Single(b=>Equals(b.Content,"Добавить сектор")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
+            if(popupError is not null)throw popupError;
+            Check(draft.Count==11&&draft.Count(s=>s.Sector=="Балкон023")==6,"saved sector joins the single editable hall canvas");
         }
         finally{editor.Close();}
         var dir=Path.Combine(Path.GetTempPath(),"Tickets-shortcut023-"+Guid.NewGuid());Directory.CreateDirectory(dir);

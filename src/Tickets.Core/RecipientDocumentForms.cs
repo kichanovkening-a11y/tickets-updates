@@ -172,8 +172,19 @@ public static class CustomDocumentForms
                 var rowText=string.Concat(row.Descendants(W+"t").Select(t=>t.Value));
                 var groups=kind=="bill"?new[]{new InvoiceLine("","","",invoice.Tickets.Count,invoice.Tickets.Select(t=>t.Amount).Distinct().Count()==1?invoice.Tickets[0].Amount:0,invoice.Total,"")}:rowText.Contains("{itemRow}")||rowText.Contains("{itemSection}")||rowText.Contains("{itemSeat}")?seatGroups:priceGroups;
                 var index=0;
-                foreach(var line in groups)
+                var packageSeats=invoice.PackageShows.Count>0&&(kind is "invoice" or "specification")&&groups==seatGroups;
+                var showLines=packageSeats?invoice.PackageShows.SelectMany(show=>InvoiceDocuments.Lines(show).Select((line,n)=>(Line:line,Show:n==0?show:null))).ToArray():groups.Select(line=>(Line:line,Show:(InvoiceInfo?)null)).ToArray();
+                foreach(var item in showLines)
                 {
+                    var line=item.Line;
+                    if(item.Show is {} show)
+                    {
+                        var cells=row.Elements(W+"tc").ToArray();var span=cells.Sum(c=>(int?)c.Element(W+"tcPr")?.Element(W+"gridSpan")?.Attribute(W+"val")??1);
+                        var width=cells.Sum(c=>(int?)c.Element(W+"tcPr")?.Element(W+"tcW")?.Attribute(W+"w")??0);
+                        var props=cells[0].Element(W+"tcPr") is {} cp?new XElement(cp):new XElement(W+"tcPr");props.Elements(W+"gridSpan").Remove();props.Elements(W+"tcW").Remove();props.Add(new XElement(W+"tcW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"gridSpan",new XAttribute(W+"val",span)));
+                        var paragraph=InvoiceDocuments.Paragraph($"{show.Title} · {show.EventDate} · {show.VenueWithAddress}",true,20);paragraph.Element(W+"pPr")!.Add(new XElement(W+"keepNext"));
+                        row.AddBeforeSelf(new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),new XElement(W+"tc",props,paragraph)));
+                    }
                     var copy=new XElement(row);copy.Element(W+"trPr")?.Elements(W+"trHeight").Remove();if(standard&&kind=="ttn"){var props=copy.Element(W+"trPr");if(props is null){props=new XElement(W+"trPr");copy.AddFirst(props);}props.Add(new XElement(W+"cantSplit"));}var rowValues=new Dictionary<string,string>(values){["itemNumber"]=(++index).ToString(),["itemSection"]=line.Sector,["itemRow"]=line.Row,["itemSeat"]=line.Seats,["itemCount"]=line.Count.ToString(),["itemPrice"]=kind=="bill"&&invoice.Tickets.Select(t=>t.Amount).Distinct().Count()>1?"—":DocumentTotals.Amount(line.Price),["itemTotal"]=DocumentTotals.Amount(line.Total),["itemDescriptionShort"]="Театральные билеты",["itemDescription"]=standard&&kind=="ttn"?"Театральные билеты":$"Театральные билеты на мероприятие «{invoice.Title}». {invoice.VenueWithAddress}. {invoice.EventDate}."};
                     foreach(var p in copy.Descendants(W+"p"))Replace(p,rowValues);row.AddBeforeSelf(copy);
                 }
@@ -186,6 +197,7 @@ public static class CustomDocumentForms
                 var nodes=paragraph.Descendants(W+"t").ToArray();
                 if(string.Concat(nodes.Select(t=>t.Value))=="Спектакль «{event}» {eventDate}"&&nodes.Length>0)nodes[^1].Value+=". {venue}.";
             }
+            if(standard)DocumentFormCorrections.SpaceSignatures(xml);
             foreach(var p in xml.Descendants(W+"p"))Replace(p,values);
             foreach(var text in xml.Descendants(W+"t").Where(t=>t.Value.Contains('\n')).ToArray())
             {
@@ -197,6 +209,7 @@ public static class CustomDocumentForms
                 xml.Descendants(W+"trHeight").Remove();
                 foreach(var row in xml.Descendants(W+"tr").Where(r=>!r.Descendants(W+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value))).ToArray())row.Remove();
                 foreach(var size in xml.Descendants(W+"sz"))size.SetAttributeValue(W+"val",16);
+                if(standard)DocumentFormCorrections.SpaceSignatures(xml);
             }
             if(kind=="contract"&&xml.Root?.Name==W+"ftr")foreach(var p in xml.Descendants(W+"p"))
             {

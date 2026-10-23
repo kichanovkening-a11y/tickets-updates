@@ -9,6 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="Assets/Tickets.ico" />
+    <EmbeddedResource Include="Assets/Tickets.ico" LogicalName="Tickets.App.ShortcutRed.ico" />
     <ProjectReference Include="../Tickets.Core/Tickets.Core.csproj" /><ProjectReference Include="../Tickets.Update/Tickets.Update.csproj" />
     <Content Condition="Exists('../../data/seed.db')" Include="../../data/seed.db" Link="Data/seed.db" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

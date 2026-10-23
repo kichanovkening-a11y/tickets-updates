@@ -32,6 +32,7 @@ public sealed record IssueInfo(long Id,long EventId,string Recipient,string Issu
 }
 public sealed record InvoiceInfo(long Id,long EventId,string Title,string Venue,string EventDate,string Recipient,string IssuedAt,IReadOnlyList<TicketInfo> Tickets,string Sender="ООО \"Альянс ТА\"")
 {
+    public IReadOnlyList<InvoiceInfo> PackageShows { get; init; }=Array.Empty<InvoiceInfo>();
     public string VenueAddress { get; init; }="";
     public string VenueWithAddress=>string.IsNullOrWhiteSpace(VenueAddress)?Venue:Venue+" ("+VenueAddress+")";
     public string ContractNumber { get; init; }="";

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
+using System.Windows.Input;
 using Tickets.Core;
 
 namespace Tickets.App;
@@ -43,7 +44,20 @@ internal sealed class LegacyHallGridWindow : EditorWindow
         {
             var item=new MenuItem{Header=caption};item.Click+=(_,_)=>Try(()=>Classify(kind));menu.Items.Add(item);
         }
-        table.ContextMenu=menu;ShowCells();
+        table.ContextMenu=menu;
+        var scale=1.0;
+        void Zoom(double factor)
+        {
+            scale=Math.Clamp(scale*factor,.25,2);
+            table.RowHeight=Math.Max(12,28*scale);table.FontSize=Math.Max(8,14*scale);
+            foreach(var column in table.Columns)column.Width=Math.Max(12,36*scale);
+            table.ColumnHeaderHeight=Math.Max(18,28*scale);
+        }
+        var zoomButtons=new WrapPanel();settings.Children.Add(zoomButtons);
+        Button(zoomButtons,"−",()=>Zoom(1/1.2));Button(zoomButtons,"+",()=>Zoom(1.2));
+        Button(settings,"Вся сетка",()=>{var cell=table.ActualWidth/Math.Max(1,draft.Columns);scale=1;Zoom(Math.Clamp(Math.Min(cell/36,table.ActualHeight/Math.Max(1,draft.Rows)/28),.25,2));});
+        table.PreviewMouseWheel+=(_,e)=>{Zoom(e.Delta>0?1.15:1/1.15);e.Handled=true;};
+        ShowCells();
     }
     private void Classify(LegacyHallCell kind)
     {

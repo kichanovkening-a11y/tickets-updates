@@ -96,9 +96,13 @@ internal sealed class IssueDocumentWindow:EditorWindow
     {
         var table=new Table{CellSpacing=0,Margin=new Thickness(0,32,0,0)};
         table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});
-        var group=new TableRowGroup();table.RowGroups.Add(group);var row=new TableRow();group.Rows.Add(row);
+        var group=new TableRowGroup();table.RowGroups.Add(group);
         var details=new[]{invoice.SenderDetails,invoice.RecipientDetails};var labels=new[]{left,right};
-        for(var i=0;i<2;i++)row.Cells.Add(new TableCell(new Paragraph(new Run(labels[i]+": "+details[i]?.Position+"\n________________ / "+details[i]?.Signatory+" /")){TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right,Margin=new Thickness(0)}){Padding=new Thickness(0)});
+        foreach(var stage in new[]{0,1,2})
+        {
+            var row=new TableRow();group.Rows.Add(row);
+            for(var i=0;i<2;i++)row.Cells.Add(new TableCell(new Paragraph(new Run(stage==0?labels[i]+": "+details[i]?.Position+" "+details[i]?.Signatory:stage==1?"":"________________")){TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right,Margin=new Thickness(0)}){Padding=new Thickness(0)});
+        }
         return table;
     }
     internal static Table RequisitesTable(InvoiceInfo invoice,string seller,string buyer,bool signatures=false,bool contract=false,double width=744)
@@ -114,8 +118,14 @@ internal sealed class IssueDocumentWindow:EditorWindow
             var cell=new TableCell{Padding=new Thickness(6),FontSize=contract?14.67:12};
             cell.Blocks.Add(new Paragraph(new Run(labels[index])){FontWeight=FontWeights.Bold,KeepWithNext=true,Margin=new Thickness(0,0,0,5)});
             foreach(var line in BusinessDocumentTemplates.Requisites(details[index]).Split('\n'))cell.Blocks.Add(new Paragraph(new Run(line)){Margin=new Thickness(0,0,0,4)});
-            if(signatures)cell.Blocks.Add(new Paragraph(new Run("Подпись: ______________ / "+BusinessDocumentTemplates.Missing(details[index].Signatory)+" /")){Margin=new Thickness(0,5,0,0)});
+
             row.Cells.Add(cell);
+        }
+        if(signatures)
+        {
+            for(var blank=0;blank<2;blank++){var gap=new TableRow();for(var i=0;i<2;i++)gap.Cells.Add(new TableCell(new Paragraph(new Run("")){Margin=new Thickness(0)}));group.Rows.Add(gap);}
+            foreach(var stage in new[]{0,1,2})
+            {var signature=new TableRow();for(var i=0;i<2;i++)signature.Cells.Add(new TableCell(new Paragraph(new Run(stage==0?details[i].Position+" "+details[i].Signatory:stage==1?"":"________________")){Margin=new Thickness(0),TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right}));group.Rows.Add(signature);}
         }
         return table;
     }

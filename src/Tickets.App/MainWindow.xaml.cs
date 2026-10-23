@@ -67,6 +67,7 @@ public partial class MainWindow : Window
             {
                 var label=new TextBlock{Text=show.Date+"\n"+show.Venue,TextWrapping=TextWrapping.Wrap,MaxWidth=180,Margin=new Thickness(0,6,0,6)};
                 var item=new TreeViewItem{Header=label,Tag=show};
+                if(past)item.ContextMenu=CleanupMenu023(new[]{show.Id},"Удалить показ окончательно");
                 var normal=past?Brushes.Gray:Brushes.SteelBlue;label.Foreground=normal;
                 item.Selected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.DarkSlateBlue;label.Foreground=Brushes.White;}};
                 item.Unselected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.Transparent;label.Foreground=normal;}};
@@ -85,12 +86,14 @@ public partial class MainWindow : Window
         var past=EventSchedule.Groups(filtered,true,now);if(past.Count>0)
         {
             var old=new TreeViewItem{Header=$"Прошедшие ({past.Sum(g=>g.Shows.Count)})",Foreground=Brushes.Gray,FontWeight=FontWeights.Bold};
+            old.ContextMenu=CleanupMenu023(past.SelectMany(g=>g.Shows).Select(e=>e.Id).ToArray(),"Удалить прошедшие окончательно");
             foreach(var group in past)old.Items.Add(Group(group,true));EventsList.Items.Add(old);
         }
         var deleted=archivedEvents.Where(x=>SearchText.Matches(x.Title+" "+x.Venue+" "+x.Date,q)).ToList();
         if(deleted.Count>0)
         {
             var archive=new TreeViewItem{Header=$"Удалённые из справочников ({deleted.Count})",Foreground=Brushes.Gray};
+            archive.ContextMenu=CleanupMenu023(deleted.Select(e=>e.Id).ToArray(),"Очистить удалённые окончательно");
             foreach(var group in deleted.GroupBy(x=>CatalogText.Key(x.Title)).OrderBy(g=>g.First().Title))archive.Items.Add(Group(new PerformanceShows(group.First().Title,group.OrderBy(x=>x.SortDate).ToList()),true));
             EventsList.Items.Add(archive);
         }

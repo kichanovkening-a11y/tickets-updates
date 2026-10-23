@@ -19,6 +19,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private readonly TextBlock count=new(){Margin=new Thickness(0,5,0,10)};
     private List<RecipientDirectoryInfo> directory=[];
     private readonly Button open;
+    private readonly HashSet<(long EventId,long IssueId)> packageSelection=[];
     private readonly MenuItem delete;
 
     public RecipientsWindow(Store store):base(store,"Получатели / организации",1100,780)
@@ -54,6 +55,16 @@ internal sealed class RecipientsWindow:EditorWindow
         Button(actions,"Документы получателя",()=>Try(()=>{
             if(organizations.SelectedItem is RecipientDirectoryInfo organization)new RecipientFormsWindow(Store,organization.Name).ShowDialog();
         }));
+        Button(actions,"Общий комплект отмеченных выдач",()=>Try(()=>{
+            if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
+            var package=Store.CreateRecipientPackage(organization.Name,packageSelection);
+            new RecipientPackageWindow(Store,package.Id).ShowDialog();
+        }));
+        Button(actions,"Сохранённые комплекты",()=>Try(()=>{
+            if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
+            var packages=Store.RecipientPackages(organization.Name);
+            var menu=new ContextMenu();foreach(var package in packages){var item=new MenuItem{Header=$"Комплект № {package.Id} · выдач: {package.Issues.Count} · билетов: {package.Invoice.Tickets.Count}"};item.Click+=(_,_)=>Try(()=>new RecipientPackageWindow(Store,package.Id).ShowDialog());menu.Items.Add(item);}if(packages.Count==0)menu.Items.Add(new MenuItem{Header="Комплектов пока нет",IsEnabled=false});menu.IsOpen=true;
+        }));
         organizations.MouseDoubleClick+=(_,_)=>{if(edit.IsEnabled)edit.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));};
         delete=new MenuItem{Header="Удалить"};
         delete.Click+=(_,_)=>Try(()=>{
@@ -86,7 +97,7 @@ internal sealed class RecipientsWindow:EditorWindow
 
     private void ShowHistory()
     {
-        history.Items.Clear();open.IsEnabled=false;requisites.Text="";
+        packageSelection.Clear();history.Items.Clear();open.IsEnabled=false;requisites.Text="";
         var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};edit.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
@@ -117,8 +128,10 @@ internal sealed class RecipientsWindow:EditorWindow
                 var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){Foreground=Brushes.Red,FontSize=15});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
                 foreach(var issue in showing.OrderByDescending(x=>x.Issue.IssuedAt).ThenByDescending(x=>x.Issue.Id))
                 {
-                    var row=new TreeViewItem{Tag=issue,Header=new TextBlock{Text=$"№ {issue.Issue.Id} · {issue.Issue.Date}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
-                    row.PreviewMouseLeftButtonUp+=(_,e)=>{e.Handled=true;row.IsSelected=true;Try(OpenSelected);};date.Items.Add(row);
+                    var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
+                    var text=row.Header;var check=new CheckBox{Content=text,VerticalContentAlignment=VerticalAlignment.Center};
+                    check.Checked+=(_,_)=>packageSelection.Add((issue.Issue.EventId,issue.Issue.Id));check.Unchecked+=(_,_)=>packageSelection.Remove((issue.Issue.EventId,issue.Issue.Id));row.Header=check;
+                    row.MouseDoubleClick+=(_,e)=>{e.Handled=true;row.IsSelected=true;Try(OpenSelected);};date.Items.Add(row);
                 }
             }
         }

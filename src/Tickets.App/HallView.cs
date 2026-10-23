@@ -41,10 +41,18 @@ public sealed class HallView : FrameworkElement
     public HashSet<long> Selected { get; }=[];
     public bool AllowUnavailableSelection{get;set;}
     public bool AllowOccupiedSelection{get;set;}
-    private bool CanSelect(SeatInfo seat)=>AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked));
+    public bool ShowInactivePlaceholders{get;set;}=true;
+    private bool CanSelect(SeatInfo seat)=>seat.Id>0&&(AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked)));
     private void ExcludeOccupiedFromMixedSelection()
     {if(!AllowUnavailableSelection&&SelectedSeats.Any(SeatSelection.CanSelect))Selected.ExceptWith(seats.Where(s=>!SeatSelection.CanSelect(s)).Select(s=>s.Id));}
     public event Action? SelectionChanged;
+    public event Action<IReadOnlyList<SeatInfo>>? SectorTransformCompleted;
+    private string? transformSector;
+    private bool rotateSector,transformDragging;
+    private SeatInfo[] transformStart=[];
+    public bool SectorEditingEnabled{get;set;}
+    public void EditSector(string sector,bool rotate){if(!SectorEditingEnabled)return;transformSector=sector;rotateSector=rotate;Cursor=rotate?Cursors.Cross:Cursors.SizeAll;}
+
     public event EventHandler? EmptySpaceClicked;
     public event Action<long,Point>? SeatContextRequested;
     public event Action<SeatInfo>? SeatSelectionRejected;
@@ -70,7 +78,7 @@ public sealed class HallView : FrameworkElement
 
     public void Load(IReadOnlyList<SeatInfo> source,IReadOnlyList<SectorInfo> sectors,bool fit)
     {
-        EndGesture(); CloseTip(); rejectionPopup.IsOpen=false; seats=source.ToList(); this.sectors=sectors.ToList(); Selected.Clear(); hoverId=null;
+        EndGesture(); transformSector=null; CloseTip(); rejectionPopup.IsOpen=false; seats=(ShowInactivePlaceholders?HallEditing023.WithEstradaPlaceholders(source):source).ToList(); this.sectors=sectors.ToList(); Selected.Clear(); hoverId=null;
         RebuildDrawing();
         if(fit) Fit(); else InvalidateVisual();
         SelectionChanged?.Invoke();
@@ -112,7 +120,7 @@ public sealed class HallView : FrameworkElement
                 var occupied=s.TicketId.HasValue || s.IsReserved;
                 var printed=occupied && s.IsPrinted && !s.IsReserved;
                 var dimmed=focusPrice.HasValue && s.Amount!=focusPrice.Value;
-                var brush=dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
+                var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
                 if(occupied && !s.IsBlocked && !dimmed)
                 {
@@ -153,6 +161,7 @@ public sealed class HallView : FrameworkElement
             foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)))
             {
                 var first=row.MinBy(s=>s.X)!;
+                var final=row.MaxBy(s=>s.X)!;
                 var label=Text(first.Row,14.3,Brushes.Black);
                 var ink=label.BuildGeometry(new Point());var glyph=ink.Bounds;
                 if(glyph.IsEmpty)continue;
@@ -165,6 +174,14 @@ public sealed class HallView : FrameworkElement
                     caption.X=collisions.Min(rect=>rect.Left)-glyph.Width-8;
                 }
                 dc.DrawText(label,new Point(caption.X-glyph.X,caption.Y-glyph.Y));rowCaptions.Add(caption);
+                var rightCaption=new Rect(final.X+24,final.Y+(16-glyph.Height)/2,glyph.Width,glyph.Height);
+                for(var attempt=0;attempt<seats.Count+rowCaptions.Count;attempt++)
+                {
+                    var collisions=seatBounds.Concat(rowCaptions).Where(rect=>rect.IntersectsWith(rightCaption)).ToArray();
+                    if(collisions.Length==0)break;
+                    rightCaption.X=collisions.Max(rect=>rect.Right)+8;
+                }
+                dc.DrawText(label,new Point(rightCaption.X-glyph.X,rightCaption.Y-glyph.Y));rowCaptions.Add(rightCaption);
             }
         }
         group.Freeze(); drawing=group;
@@ -233,6 +250,11 @@ public sealed class HallView : FrameworkElement
         rightGesture=e.ChangedButton==MouseButton.Right;panMoved=false;
         marquee=false;gestureSelection=Selected.ToHashSet();
         worldAnchor=World(start);
+        if(e.ChangedButton==MouseButton.Left&&transformSector is not null)
+        {
+            transformStart=seats.Where(s=>s.Sector==transformSector&&s.Id>0).ToArray();
+            transformDragging=transformStart.Length>0;panning=false;
+        }
         removing=SeatSelection.RemoveOnDrag(seats,gestureSelection,worldAnchor.X,worldAnchor.Y);
         CaptureMouse(); if(panning) Cursor=Cursors.Hand; e.Handled=true;
     }
@@ -241,6 +263,18 @@ public sealed class HallView : FrameworkElement
         var p=e.GetPosition(this);
         if(dragging)
         {
+            if(transformDragging)
+            {
+                var world=World(p);var cx=transformStart.Average(s=>s.X);var cy=transformStart.Average(s=>s.Y);
+                var angle=Math.Atan2(world.Y-cy,world.X-cx)-Math.Atan2(worldAnchor.Y-cy,worldAnchor.X-cx);
+                foreach(var seat in transformStart)
+                {
+                    var index=seats.FindIndex(s=>s.Id==seat.Id);var x=seat.X-cx;var y=seat.Y-cy;
+                    seats[index]=rotateSector?seat with{X=cx+x*Math.Cos(angle)-y*Math.Sin(angle),Y=cy+x*Math.Sin(angle)+y*Math.Cos(angle)}:
+                        seat with{X=seat.X+world.X-worldAnchor.X,Y=seat.Y+world.Y-worldAnchor.Y};
+                }
+                RebuildDrawing();last=p;InvalidateVisual();return;
+            }
             if(panning)
             {
                 // A stationary right click opens seat actions without nudging the hall.
@@ -259,7 +293,7 @@ public sealed class HallView : FrameworkElement
         var emptyClick=false;
         SeatInfo? rejected=null;
         var contextSeat=rightGesture && e.ChangedButton==MouseButton.Right && !panMoved && (p-start).Length<3?Hit(p):null;
-        if(!panning)
+        if(!panning&&!transformDragging)
         {
             if(marquee || (p-start).Length>=6)
             {
@@ -279,7 +313,7 @@ public sealed class HallView : FrameworkElement
         }
         EndGesture(); e.Handled=true;
         if(rejected is not null){SeatSelectionRejected?.Invoke(rejected);ShowSeatRejection(rejected,p);}
-        if(contextSeat is not null) SeatContextRequested?.Invoke(contextSeat.Id,p);
+        if(contextSeat is {Id:>0}) SeatContextRequested?.Invoke(contextSeat.Id,p);
         if(emptyClick)EmptySpaceClicked?.Invoke(this,EventArgs.Empty);
     }
     private (SeatInfo? Context,SeatInfo? Rejected) ClickSeat(SeatInfo seat)
@@ -287,7 +321,7 @@ public sealed class HallView : FrameworkElement
         // Left click always toggles a place; actions belong exclusively to right click.
         if(CanSelect(seat))SeatSelection.Toggle(Selected,seat.Id);else Selected.Remove(seat.Id);
         var mixed=SelectedSeats.Any(SeatSelection.CanSelect)&&SelectedSeats.Any(s=>!SeatSelection.CanSelect(s));
-        var rejected=mixed?SelectedSeats.First(s=>!SeatSelection.CanSelect(s)):!CanSelect(seat)?seat:null;
+        var rejected=seat.Id<0?null:mixed?SelectedSeats.First(s=>!SeatSelection.CanSelect(s)):!CanSelect(seat)?seat:null;
         ExcludeOccupiedFromMixedSelection();
         return (null,rejected);
     }
@@ -310,7 +344,7 @@ public sealed class HallView : FrameworkElement
         if(left>=right||top>=bottom)return [];
         var touched=seats.Where(s=>s.X<right&&s.X+SeatSelection.SeatSize>left&&s.Y<bottom&&s.Y+SeatSelection.SeatSize>top).ToArray();
         if(AllowOccupiedSelection&&!touched.Any(SeatSelection.CanSelect)&&!SelectedSeats.Any(SeatSelection.CanSelect))return [];
-        return touched.Where(s=>!SeatSelection.CanSelect(s)).ToArray();
+        return touched.Where(s=>s.Id>0&&!SeatSelection.CanSelect(s)).ToArray();
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
@@ -322,10 +356,13 @@ public sealed class HallView : FrameworkElement
     private void EndGesture()
     {
         scrollTimer.Stop();
+        var transformed=transformDragging?seats.Where(s=>s.Sector==transformSector&&s.Id>0).ToArray():null;
+        transformDragging=false;if(transformed is not null){transformSector=null;transformStart=[];}
         dragging=panning=marquee=rightGesture=panMoved=false;
         Cursor=Cursors.Arrow;
         if(IsMouseCaptured)ReleaseMouseCapture();
         InvalidateVisual();
+        if(transformed is not null)SectorTransformCompleted?.Invoke(transformed);
     }
 
     private void AutoScroll()
@@ -388,7 +425,7 @@ public sealed class HallView : FrameworkElement
         if(s.Id!=hoverId)
         {
             hoverId=s.Id;
-            seatTip.Content=$"{s.Label}\n{(s.Amount.HasValue?s.Amount+" ₽":"Цена не назначена")}\n{s.Status}";
+            seatTip.Content=s.Id<0?$"{s.Label}\nНеактивное место":$"{s.Label}\n{(s.Amount.HasValue?s.Amount+" ₽":"Цена не назначена")}\n{s.Status}";
         }
         seatTip.MaxWidth=Math.Max(20,ActualWidth-8);
         seatTip.MaxHeight=Math.Max(20,ActualHeight-8);

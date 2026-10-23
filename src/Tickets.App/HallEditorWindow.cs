@@ -15,7 +15,7 @@ internal sealed class HallEditorWindow : EditorWindow
 {
     public long CreatedId{get;private set;}
     private readonly ObservableCollection<DraftSeat> seats=[];
-    private readonly HallView preview=new();
+    private readonly HallView preview=new(){ShowInactivePlaceholders=false,SectorEditingEnabled=true};
     private readonly DataGrid table=new(){IsReadOnly=false,AutoGenerateColumns=false,SelectionMode=DataGridSelectionMode.Extended,CanUserAddRows=false,CanUserDeleteRows=false};
     private readonly ObservableCollection<HallRowLayout> rowLayouts=[];
     private readonly DataGrid rowTable=new(){IsReadOnly=false,AutoGenerateColumns=false,CanUserAddRows=false,CanUserDeleteRows=false,Margin=new Thickness(0,10,0,0)};
@@ -66,7 +66,7 @@ internal sealed class HallEditorWindow : EditorWindow
         var form=new StackPanel{Margin=new Thickness(6)};
         settings.Items.Add(new TabItem{Header="Сектор",Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}});
         var movement=new StackPanel{Margin=new Thickness(6)};
-        settings.Items.Add(new TabItem{Header="Сдвиг",Content=new ScrollViewer{Content=movement,VerticalScrollBarVisibility=ScrollBarVisibility.Auto}});
+
         var rowPanel=new DockPanel{Margin=new Thickness(0,0,0,6),Height=170};
         var rowHeader=new StackPanel();form.Children.Add(rowHeader);
         var builtSector=seats.Count>0;
@@ -182,15 +182,16 @@ internal sealed class HallEditorWindow : EditorWindow
             Remember();foreach(var seat in added)seats.Add(seat);
             showingDraft=false;Refresh();tabs.SelectedIndex=0;builtSector=true;
         }
-        Button(footer,"Добавить сектор",()=>Try(AddSector));
-        var dx=Field(movement,"Сдвиг выбранных по X","0"); var dy=Field(movement,"Сдвиг выбранных по Y","0");
-        Button(movement,"Сдвинуть выбранные места",()=>Try(()=>{
-            if(!double.TryParse(dx.Text,out var x)||!double.TryParse(dy.Text,out var y)||!double.IsFinite(x)||!double.IsFinite(y)) throw new TicketException("Введите числовой сдвиг.");
-            var selected=Selection(); if(selected.Count==0) throw new TicketException("Выберите места на схеме или в таблице.");
-            Remember();foreach(var s in selected){s.X+=x;s.Y+=y;} Refresh();
+        Button(footer,"Добавить сектор",()=>Try(()=>{
+            if(!CommitEdits())return;
+            var dialog=new HallSectorWindow023(Store);if(dialog.ShowDialog()!=true)return;
+            if(seats.Count+dialog.Result.Count>50000)throw new TicketException("Максимум 50 000 мест.");
+            if(dialog.Result.Any(s=>seats.Any(p=>p.Sector==s.Sector)))throw new TicketException("Сектор с таким названием уже есть.");
+            var y=seats.Count==0?26:seats.Max(s=>s.Y)+50;
+            Remember();foreach(var mark in dialog.Result){mark.Y+=y;seats.Add(mark);}
+            showingDraft=false;builtSector=true;Refresh();tabs.SelectedIndex=0;
         }));
-        Button(movement,"Удалить выбранные места",()=>Try(DeleteSelected));
-        undo=Button(movement,"Шаг назад",()=>Try(Undo));undo.IsEnabled=false;
+        undo=Button(footer,"Шаг назад",()=>Try(Undo));undo.IsEnabled=false;
         grid.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Z&&Keyboard.Modifiers==ModifierKeys.Control&&Keyboard.FocusedElement is not TextBox){Try(Undo);e.Handled=true;}};
         Button(footer,"Сохранить как новый зал",()=>Try(()=>{
             if(!CommitEdits())return;
@@ -223,6 +224,30 @@ internal sealed class HallEditorWindow : EditorWindow
         }));
         Button(toolbar,"Весь зал",()=>preview.Fit()); Button(toolbar,"Обновить схему",()=>Try(()=>Refresh()));
         Button(toolbar,"Удалить выбранные (Del)",()=>Try(DeleteSelected));
+        preview.SeatContextRequested+=(id,position)=>Try(()=>{
+            if(showingDraft)
+            {
+                var selectedDraft=preview.Selected.ToArray();
+                if(!CommitEdits())return;
+                var generated=HallLayout.Generate(sector.Text,rowLayouts.ToArray(),firstSeat.Text,reverse.IsChecked==true,26);
+                Remember();foreach(var mark in generated)seats.Add(mark);showingDraft=false;builtSector=true;Refresh(false);preview.SetSelection(selectedDraft);
+            }
+            if(id<1||id>seats.Count)return;
+            if(!preview.Selected.Contains(id))preview.SetSelection(new[]{id});
+            var target=seats[(int)id-1];var menu=new ContextMenu{PlacementTarget=preview};
+            void Item(string title,Action action){var item=new MenuItem{Header=title};item.Click+=(_,_)=>Try(action);menu.Items.Add(item);}
+            Item("Сделать проход",()=>{if(!CommitEdits())return;Remember();HallEditing023.MakeAisle(seats,Selection());Refresh(false);});
+            Item("Удалить места",DeleteSelected);
+            menu.Items.Add(new Separator());
+            Item("Переместить сектор",()=>{summary.Text="Тяните мышкой сектор «"+target.Sector+"».";preview.EditSector(target.Sector,false);});
+            Item("Повернуть сектор",()=>{summary.Text="Тяните мышкой вокруг центра сектора «"+target.Sector+"».";preview.EditSector(target.Sector,true);});
+            preview.ContextMenu=menu;menu.IsOpen=true;
+        });
+        preview.SectorTransformCompleted+=changed=>Try(()=>{
+            if(changed.Count==0)return;Remember();
+            foreach(var mark in changed)if(mark.Id>0&&mark.Id<=seats.Count){seats[(int)mark.Id-1].X=mark.X;seats[(int)mark.Id-1].Y=mark.Y;}
+            Refresh(false);
+        });
         preview.KeyDown+=(_,e)=>{if(e.Key==Key.Delete){Try(DeleteSelected);e.Handled=true;}};
         table.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Delete&&Keyboard.FocusedElement is not TextBox){Try(DeleteSelected);e.Handled=true;}};
         foreach(var (header,path,width) in new[]{("Сектор","Sector",150),("Ряд","Row",60),("Место","Number",70),("X","X",80),("Y","Y",80)})
@@ -247,7 +272,8 @@ internal sealed class HallEditorWindow : EditorWindow
             };
         }
         table.ItemsSource=seats;
-        var liveEditor=new DockPanel();DockPanel.SetDock(rowPanel,Dock.Top);liveEditor.Children.Add(rowPanel);liveEditor.Children.Add(preview);
+        var liveEditor=new DockPanel();DockPanel.SetDock(rowPanel,Dock.Top);var rowOptions=new Expander{Header="Настройки рядов",Content=rowPanel,IsExpanded=seats.Count==0};
+        DockPanel.SetDock(rowOptions,Dock.Top);liveEditor.Children.Add(rowOptions);liveEditor.Children.Add(preview);
         tabs.Items.Add(new TabItem{Header="Ряды и схема",Content=liveEditor});tabs.Items.Add(new TabItem{Header="Места — редактирование",Content=table});area.Children.Add(tabs);
         tabs.SelectedIndex=0;
         OnShown(()=>{if(seats.Count==0)showLiveRows();else Refresh();});

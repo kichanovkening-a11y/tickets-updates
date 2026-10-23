@@ -12,7 +12,7 @@ public static class InvoiceDocuments
     private static readonly CultureInfo Ru=CultureInfo.GetCultureInfo("ru-RU");
     public static string Money(decimal amount)=>amount.ToString("N0",Ru)+" ₽";
     public static string[] Headers=>["Сектор","Ряд","Места","Кол-во","Цена, ₽","Сумма, ₽"];
-    public static IReadOnlyList<InvoiceLine> Lines(InvoiceInfo invoice)=>invoice.Tickets
+    public static IReadOnlyList<InvoiceLine> Lines(InvoiceInfo invoice)=>invoice.PackageShows.Count>0?invoice.PackageShows.SelectMany(Lines).ToArray():invoice.Tickets
         .GroupBy(t=>new{t.Sector,t.Row,t.Amount})
         .Select(group=>new InvoiceLine(group.Key.Sector,group.Key.Row,
             string.Join(", ",group.Select(t=>t.Seat).OrderBy(s=>s,NaturalComparer.Instance)),group.Count(),group.Key.Amount,
@@ -104,7 +104,7 @@ public static class InvoiceDocuments
     {
         var details=new[]{invoice.SenderDetails??new OrganizationDetails(Name:invoice.Sender),invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient)};
         var labels=new[]{seller,buyer};
-        return new XElement(W+"tbl",new XElement(W+"tblPr",
+        var table=new XElement(W+"tbl",new XElement(W+"tblPr",
             new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),
             new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),
             new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(edge=>new XElement(W+edge,new XAttribute(W+"w",100),new XAttribute(W+"type","dxa"))))),
@@ -112,7 +112,13 @@ public static class InvoiceDocuments
             new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),details.Select((detail,index)=>
                 new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa")),new XElement(W+"vAlign",new XAttribute(W+"val","top"))),
                     Paragraph(labels[index],true,20),BusinessDocumentTemplates.Requisites(detail).Split('\n').Select(line=>Paragraph(line,false,19)),
-                    signatures?Paragraph("Подпись: ______________ / "+BusinessDocumentTemplates.Missing(detail.Signatory)+" /",false,19):null))));
+                    null))));
+        if(signatures)
+        {
+            for(var blank=0;blank<2;blank++)table.Add(new XElement(W+"tr",Enumerable.Range(0,2).Select(_=>new XElement(W+"tc",Paragraph("")))));
+            table.Add(SignaturesTable(invoice,seller,buyer,width).Elements(W+"tr"));
+        }
+        return table;
     }
     public static bool IsBusinessHeading(string line)=>System.Text.RegularExpressions.Regex.IsMatch(line,@"^\d+\. [^\d]")
         ||line.StartsWith("Реквизиты ",StringComparison.Ordinal)||line is "Продавец" or "Покупатель" or "Поставщик и получатель платежа" or "Покупатель и плательщик" or "Грузоотправитель и поставщик" or "Грузополучатель и плательщик";
@@ -156,10 +162,10 @@ public static class InvoiceDocuments
         var labels=new[]{left,right};var seller=DocumentParties.Sender(invoice);
         var identities=new[]{string.Join(" ",new[]{seller.Position,seller.Signatory}.Where(x=>!string.IsNullOrWhiteSpace(x))),DocumentParties.ReceivedBy(invoice)};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(e=>new XElement(W+e,new XAttribute(W+"w",0),new XAttribute(W+"type","dxa"))))),new XElement(W+"tblGrid",Enumerable.Range(0,2).Select(_=>new XElement(W+"gridCol",new XAttribute(W+"w",width/2)))));
-        foreach(var signatureRow in new[]{false,true})
+        foreach(var signatureRow in new[]{0,1,2})
             table.Add(new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),Enumerable.Range(0,2).Select(i=>{
-                var paragraph=Paragraph(signatureRow?"________________":labels[i]+": "+identities[i],false,20);
-                paragraph.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")),!signatureRow?new XElement(W+"keepNext"):null);
+                var paragraph=Paragraph(signatureRow==2?"________________":signatureRow==1?"":labels[i]+": "+identities[i],false,20);
+                paragraph.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")),signatureRow<2?new XElement(W+"keepNext"):null);
                 return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),paragraph);
             })));
         return table;

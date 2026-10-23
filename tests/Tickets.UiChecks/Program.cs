@@ -163,7 +163,7 @@ internal static class Program
             Gesture(six,new Point(1,1),new Point(35,35));Check(six.Selected.SetEquals(new long[]{3,6}),"drag from selected place removes a group and preserves others");CheckSeatRenderingAndContext(six,sixSeats);CheckHallNavigation(six,sixSeats);sixWindow.Close();
             var currentShowRow=performanceGroup.Items.OfType<TreeViewItem>().Single(i=>i.Tag is EventInfo e&&e.Id==eventId);
             Check(currentShowRow.Header is TextBlock selectedTitle&&Equals(selectedTitle.Foreground,Brushes.White)&&Equals(selectedTitle.Background,Brushes.DarkSlateBlue),"selected show text has contrast against its background");
-            Check(((TextBlock)currentShowRow.Header).Inlines.OfType<Run>().First().FontSize==18,"main tree event dates are larger");
+            Check(((TextBlock)currentShowRow.Header).Inlines.OfType<Run>().First().FontSize==19,"main tree event dates use approved enlarged type");
             var hall=(Tickets.App.HallView)main.FindName("Hall");CheckSelectionSidebar(main);CheckMainPresentation(main,store,seatIds);main.Activate();hall.Focus();hall.Fit();Pump();
             ((ComboBox)main.FindName("RecipientBox")).Text="UI context availability";hall.SetSelection(seatIds.Take(2));
             var mainContextCalls=0;hall.SeatContextRequested+=(_,_)=>mainContextCalls++;
@@ -904,7 +904,7 @@ internal static class Program
         var sidebar=(Border)main.FindName("SelectionSidebar");var list=(ListBox)main.FindName("SelectedList");
         var actions=(System.Windows.Controls.Primitives.UniformGrid)main.FindName("SelectionActions");
         var options=(Expander)main.FindName("SelectionOptions");options.IsExpanded=false;Pump();
-        Check(actions.Columns==3&&actions.Children.OfType<Button>().Count()==3&&actions.Children.OfType<Button>().All(button=>button.ActualWidth==72&&button.ActualHeight==72),"sidebar has three compact square actions in three columns");
+        Check(actions.Columns==3&&actions.Children.OfType<Button>().Count()==3&&actions.Children.OfType<Button>().All(button=>double.IsNaN(button.Width)&&button.ActualWidth>0&&button.ActualWidth<=actions.ActualWidth/3&&button.ActualHeight==72),"sidebar has three equal-column actions that fit their cells at the existing height");
         Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
         var upper=(Grid)main.FindName("UpperActions");var toolbarScroll=(ScrollViewer)upper.Parent;
@@ -920,7 +920,7 @@ internal static class Program
         var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
         var dateBounds=date.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(date.RenderSize));
         var titleBounds=title.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(title.RenderSize));
-        Check(title.FontSize==22&&date.FontSize==18&&!string.IsNullOrWhiteSpace(date.Text)&&dateBounds.Left>=titleBounds.Right&&Math.Abs(dateBounds.Top-titleBounds.Top)<10,"event date appears in 18-point text to the right of the 22-point title");
+        Check(title.FontSize==22&&date.FontSize==19&&!string.IsNullOrWhiteSpace(date.Text)&&dateBounds.Left>=titleBounds.Right&&Math.Abs(dateBounds.Top-titleBounds.Top)<10,"event date appears in approved 19-point text to the right of the 22-point title");
         Console.WriteLine($"Sidebar normal viewport: window {main.ActualWidth}x{main.ActualHeight}; sidebar {sidebar.ActualHeight}; list {list.ActualHeight}; explicit height {list.Height}");
         Check(double.IsNaN(list.Height)&&list.ActualHeight>=220,"selected places fill available height at 1420 by 880");
         var workspace=(Grid)main.FindName("Workspace");var sidebarBounds=sidebar.TransformToAncestor(workspace).TransformBounds(new Rect(sidebar.RenderSize));

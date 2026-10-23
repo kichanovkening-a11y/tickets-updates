@@ -6,6 +6,26 @@ internal static class RecipientPackage023Checks
 {
     public static void Register(Action<string,Action<Store>> test)
     {
+        test("023 all six standard forms preserve filled data after ordinary text edits",s=>{
+            var choice=s.Events().Select(e=>(Event:e,Seat:s.Seats(e.Id).FirstOrDefault(x=>x.Available))).First(x=>x.Seat is not null);
+            var issue=s.Issue(choice.Event.Id,[choice.Seat!.Id],"Edited standard bill","EDITBILL023",1);
+            var invoice=s.Invoice(choice.Event.Id,issue);
+            foreach(var kind in new[]{"invoice","contract","act","bill","ttn","specification"})
+            {
+            var template=Store.DefaultRecipientForm(kind)!.Content;
+            var before=CustomDocumentForms.Text(CustomDocumentForms.Fill(template,invoice,kind,DateTime.Today));
+            using var output=new MemoryStream();output.Write(template);output.Position=0;const string marker=" OrdinaryEdit023";XNamespace w="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
+            using(var z=new ZipArchive(output,ZipArchiveMode.Update,true))
+            {
+                var entry=z.GetEntry("word/document.xml")!;XDocument xml;using(var stream=entry.Open())xml=XDocument.Load(stream);
+                xml.Descendants(w+"t").First(t=>!string.IsNullOrWhiteSpace(t.Value)&&!t.Value.Contains('{')).Value+=marker;
+                entry.Delete();using var target=z.CreateEntry("word/document.xml").Open();xml.Save(target);
+            }
+            var after=CustomDocumentForms.Text(CustomDocumentForms.Fill(output.ToArray(),invoice,kind,DateTime.Today));
+            string Normalize(string value)=>System.Text.RegularExpressions.Regex.Replace(value,@"\s+"," ").Trim();
+            Check(after.Contains(marker),"ordinary edit missing "+kind);Check(Normalize(after.Replace(marker,""))==Normalize(before),"edited form changes filled data "+kind);
+            }
+        });
         test("023 custom bill preserves distinct identities legal text borders and image",s=>{
             var choice=s.Events().Select(e=>(Event:e,Seat:s.Seats(e.Id).FirstOrDefault(x=>x.Available))).First(x=>x.Seat is not null);
             var issue=s.Issue(choice.Event.Id,[choice.Seat!.Id],"Custom bill recipient","CUSTOM023",1);
@@ -35,6 +55,16 @@ internal static class RecipientPackage023Checks
             Check(final.Descendants(w+"drawing").Single().Descendants().Any(x=>(string?)x.Attribute(r+"embed")=="customStamp023"),"custom drawing changed");
             using var stamp=new MemoryStream();using(var stream=result.GetEntry("word/media/stamp023.png")!.Open())stream.CopyTo(stamp);Check(stamp.ToArray().SequenceEqual(image),"custom image changed");
             using var relStream=result.GetEntry("word/_rels/document.xml.rels")!.Open();Check(XDocument.Load(relStream).Descendants().Any(x=>(string?)x.Attribute("Id")=="customStamp023"),"image relationship lost");
+            // Same shape and protected fields, but approved literal signature text differs.
+            using var literalEdit=new MemoryStream();literalEdit.Write(original);literalEdit.Position=0;
+            using(var z=new ZipArchive(literalEdit,ZipArchiveMode.Update,true))
+            {
+                var entry=z.GetEntry("word/document.xml")!;XDocument xml;using(var stream=entry.Open())xml=XDocument.Load(stream);
+                var role=xml.Root!.Element(w+"body")!.Elements(w+"tbl").Last().Descendants(w+"t").First(t=>t.Value=="Руководитель");role.Value+=" — особое условие подписания";
+                entry.Delete();using var streamOut=z.CreateEntry("word/document.xml").Open();xml.Save(streamOut);
+            }
+            var literalResult=CustomDocumentForms.Fill(literalEdit.ToArray(),s.Invoice(choice.Event.Id,issue),"bill",DateTime.Today);
+            Check(CustomDocumentForms.Text(literalResult).Contains("Руководитель — особое условие подписания"),"same-layout custom signature wording lost");
         });
         test("023 packages use active tickets reject returned-only and preserve return history",s=>{
             var choice=s.Events().Select(e=>(Event:e,Seats:s.Seats(e.Id).Where(x=>x.Available).Take(2).ToArray())).First(x=>x.Seats.Length==2);

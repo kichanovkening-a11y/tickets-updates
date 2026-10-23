@@ -153,7 +153,7 @@ public static class CustomDocumentForms
     public static byte[] Fill(byte[] content,InvoiceInfo invoice,string kind,DateTime contractDate)
     {
         content=StandardDocumentForms.Resolve(kind,content)??content;
-        var standard=StandardDocumentForms.IsStandard(content);
+        var standard=StandardDocumentForms.IsStandard(content,kind);
         var values=SourceBusinessForms.Values(invoice,kind);
         values["items"]=BusinessDocumentTemplates.Items(invoice,kind);values["title"]=invoice.Title;
         if(standard&&kind=="ttn"){values["senderDetails"]=values["senderDetails"].Replace("\n",", ");values["recipientDetails"]=values["recipientDetails"].Replace("\n",", ");}

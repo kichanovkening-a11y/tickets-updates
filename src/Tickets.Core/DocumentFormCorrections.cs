@@ -26,13 +26,13 @@ internal static class DocumentFormCorrections
             offset=next;
         }
     }
-    // Called only for byte-identical built-in forms; uploaded layouts retain all cells and drawing content.
+    // Called for known standard layouts; bill restructuring additionally requires its exact original table.
     internal static void SpaceSignatures(XDocument xml)
     {
         var body=xml.Root?.Element(W+"body");if(body is null)return;
         var table=body.Elements(W+"tbl").LastOrDefault();if(table is null)return;
         var text=string.Concat(table.Descendants(W+"t").Select(t=>t.Value));
-        if(text.Contains("Руководитель")&&text.Contains("Бухгалтер")&&table.Elements(W+"tr").FirstOrDefault()?.Elements(W+"tc").Count()==3)
+        if(text.Contains("Руководитель")&&text.Contains("Бухгалтер")&&StandardDocumentForms.HasOriginalBillSignatures(table))
         {
             var replacement=new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",9600),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed"))),new XElement(W+"tblGrid",new XElement(W+"gridCol",new XAttribute(W+"w",4800)),new XElement(W+"gridCol",new XAttribute(W+"w",4800))));
             foreach(var values in new[]{new[]{"Руководитель: {senderSignatory}","Бухгалтер: {senderSignatory}"},new[]{"________________________","________________________"}})

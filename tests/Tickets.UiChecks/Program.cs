@@ -240,7 +240,7 @@ internal static class Program
                     Check(text.Contains(DocumentTotals.Summary(3,369))&&text.Contains(DocumentTotals.Total(3,369)),"invoice totals use shared two-line format");
                     Exception? documentError=null;
                     app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
-                        var form=app.Windows.Cast<Window>().Single(w=>w.Title.StartsWith("Договор · выдача №"));
+                        var form=app.Windows.Cast<Window>().Single(w=>w.IsVisible&&(w.GetType().Name is "CustomIssueDocumentWindow" or "IssueDocumentWindow"));
                         try{
                             Check(Equals(Logical(form).OfType<Button>().Single(b=>Equals(b.Content,"Договор")).Background,Brushes.SteelBlue)&&Logical(form).OfType<Button>().Any(b=>Equals(b.Content,"Накладная")),"contract toolbar marks active document and offers invoice");
                             var rendered=Logical(form).OfType<FlowDocumentScrollViewer>().Single().Document;var contractText=new TextRange(rendered.ContentStart,rendered.ContentEnd).Text;

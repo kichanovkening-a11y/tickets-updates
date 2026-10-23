@@ -159,12 +159,6 @@ public partial class MainWindow : Window
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;EventDate.Text=current.Date;
         EventVenue.Text=current.Venue;
-        // Keep the two square actions at their approved coordinates while using
-        // the vacated venue line for the ordinary commands and tab headings.
-        var venueLine=EventSubtitle.FontSize*EventSubtitle.FontFamily.LineSpacing;
-        EventSummaryHeader.Margin=new Thickness(8,0,0,4+venueLine);
-        OrdinaryActionsScroll.RenderTransform=new System.Windows.Media.TranslateTransform(0,-venueLine);
-        WorkspaceTabs.Margin=new Thickness(0,-venueLine+5,0,0);
         EventSubtitle.Text=$"Всего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
         EventTitle.ToolTip=EventSubtitle.Text;UpdateCompactLayout();
         PriceBox.Clear();

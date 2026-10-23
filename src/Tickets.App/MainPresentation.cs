@@ -14,6 +14,11 @@ public partial class MainWindow
     private void UpdateCompactLayout()
     {
         EventSubtitle.Visibility=Workspace.ActualHeight>0&&Workspace.ActualHeight<550?Visibility.Collapsed:Visibility.Visible;
+        var venueLine=EventSubtitle.FontSize*EventSubtitle.FontFamily.LineSpacing;
+        var visible=EventSubtitle.Visibility==Visibility.Visible;
+        EventSummaryHeader.Margin=new Thickness(8,0,0,4+(visible?venueLine:0));
+        OrdinaryActionsScroll.Margin=new Thickness(8,EventTitle.FontSize*EventTitle.FontFamily.LineSpacing+4+(visible?5+venueLine:0),0,5);
+        SquareShowActions.Margin=new Thickness(0,visible?venueLine:0,3,0);
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
             var navigation=layout.ActualWidth<1050?236d:280d;

@@ -35,6 +35,7 @@ public static class SignatureBlocks
         if(!Regex.IsMatch(invoice.Sender.Trim(),@"^ИП(?:\s|$)",RegexOptions.IgnoreCase))return;
         foreach(var table in xml.Descendants(W+"tbl").ToArray())
         {
+            if(table.Elements(W+"tr").Any(r=>r.Elements(W+"tc").Count()!=2))continue;
             var names=table.Descendants(W+"t").Count(t=>t.Value.Contains("{senderSignatory}")||t.Value==Sender(invoice).Name);
             var text=string.Concat(table.Descendants(W+"t").Select(t=>t.Value));
             if(names!=2||!text.Contains("Руководитель")||!text.Contains("Бухгалтер",StringComparison.OrdinalIgnoreCase))continue;

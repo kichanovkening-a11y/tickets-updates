@@ -909,8 +909,8 @@ internal static class Program
         Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
         var upper=(Grid)main.FindName("UpperActions");var toolbarScroll=(ScrollViewer)upper.Parent;
-        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,toolbarScroll.Parent)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
-        Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==1&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
+        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,upper)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
+        Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==3&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
         Check(toolbarScroll.HorizontalScrollBarVisibility==ScrollBarVisibility.Auto&&toolbarScroll.VerticalScrollBarVisibility==ScrollBarVisibility.Disabled&&Grid.GetColumnSpan(toolbarScroll)==1,"show toolbar scrolls horizontally within the hall column");
         Check(print.ActualWidth==72&&print.ActualHeight==72&&issue.ActualWidth==72&&issue.ActualHeight==72&&Equals(print.Style,issue.Style),"main printing and issuance use the same compact square style");
         var whiteActions=upper.Children.OfType<Button>().ToArray();

@@ -9,6 +9,7 @@ internal static class Corrections026Checks
             var show=store.Events().First(e=>store.Seats(e.Id).Any(s=>s.Available));var seat=store.Seats(show.Id).First(s=>s.Available);
             var issue=store.Issue(show.Id,new[]{seat.Id},"Получатель026","T026",1);
             var invoice=store.Invoice(show.Id,issue) with {Sender="ИП Баринов А.С.",SenderDetails=new(Name:"ИП Баринов А.С.",Signatory:"Баринов А.С.")};
+            using(var resource=typeof(Store).Assembly.GetManifestResourceStream("Tickets.Core.Resources.BusinessForms.bill.docx")!){using var form=new MemoryStream();resource.CopyTo(form);var filled=CustomDocumentForms.Text(CustomDocumentForms.Fill(form.ToArray(),invoice,"bill",DateTime.Today));if(!filled.Contains("Поставщик")||!filled.Contains("Покупатель")||!filled.Contains("Наименование")||!filled.Contains("Театральные билеты"))throw new Exception("IP correction erased non-signature contents of custom bill");}
             foreach(var sender in new[]{"ИП Баринов А.С.","ООО Альянс"}){
                 using var source=typeof(Store).Assembly.GetManifestResourceStream("Tickets.Core.Resources.UniversalForms.bill.docx")!;using var input=new MemoryStream();source.CopyTo(input);
                 var bytes=CustomDocumentForms.Fill(input.ToArray(),invoice with {Sender=sender,SenderDetails=new(Name:sender,Signatory:"Баринов А.С.")},"bill",DateTime.Today);

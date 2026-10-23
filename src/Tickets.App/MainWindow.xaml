@@ -41,19 +41,17 @@
       <Grid x:Name="Workspace" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <StackPanel x:Name="EventSummaryHeader" Margin="8,0,0,4"><ScrollViewer x:Name="EventHeaderScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="EventDate" FontSize="19" Margin="10,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventVenue" FontSize="19" Foreground="#64748B" Margin="10,3,0,0"/></StackPanel></ScrollViewer>
           <TextBlock x:Name="EventSubtitle" FontSize="19" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
-        <Grid Grid.Row="1" Grid.Column="0" Margin="8,0,0,5" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-        <ScrollViewer x:Name="OrdinaryActionsScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Top">
+        <ScrollViewer x:Name="OrdinaryActionsScroll" Grid.Row="0" Grid.RowSpan="2" Grid.Column="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Top" Margin="8,0,0,5">
           <Grid x:Name="UpperActions" HorizontalAlignment="Left"><Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-            <Button x:Name="ChangePriceButton" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Изменить цену" Click="TogglePriceClick" Margin="0,3,6,3"/>
-            <Button x:Name="UndoPriceButton" Grid.Column="1" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Отменить изменение цены" Click="UndoPriceClick" IsEnabled="False" Margin="0,3,6,3"/>
-            <Button x:Name="ExtendInvoiceButton" Grid.Column="2" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Дополнить накладную" Click="ExtendInvoiceClick" IsEnabled="False" Margin="0,3,6,3"/>
-          </Grid>
-        </ScrollViewer>
-            <StackPanel Grid.Column="1" Orientation="Horizontal" Margin="0,0,3,0">
+            <Button x:Name="ChangePriceButton" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Изменить цену" Click="TogglePriceClick" Margin="0,3,5,3"/>
+            <Button x:Name="UndoPriceButton" Grid.Column="1" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Отменить изменение цены" Click="UndoPriceClick" IsEnabled="False" Margin="0,3,5,3"/>
+            <Button x:Name="ExtendInvoiceButton" Grid.Column="2" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Дополнить накладную" Click="ExtendInvoiceClick" IsEnabled="False" Margin="0,3,8,3"/>
+            <StackPanel x:Name="SquareShowActions" Grid.Column="3" Orientation="Horizontal" Margin="0,0,3,0">
               <Button x:Name="PrintTicketsButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Style="{StaticResource SeatActionStyle}" Content="Печать билетов" Click="PrintTicketsClick" Background="#1B7A43" Foreground="White" IsEnabled="False"/>
               <Button x:Name="IssueButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Style="{StaticResource SeatActionStyle}" Content="Выдать накладную" Click="IssueClick" Background="#2466A8" Foreground="White" IsEnabled="False"/>
             </StackPanel>
           </Grid>
+        </ScrollViewer>
         <TabControl x:Name="WorkspaceTabs" SelectionChanged="WorkspaceTabChanged" Grid.Row="2" BorderBrush="#CBD5E1" Background="White">
           <TabItem><TabItem.Header><TextBlock Text="Схема зала" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>
             <Grid>

@@ -217,7 +217,7 @@ internal static class Program
                     Check(text.Contains("UI recipient")&&text.Contains("369"),"invoice opens immediately with actual prices and correct total");
                     Check(!Logical(window).OfType<ListBox>().Any(),"invoice has no return-ticket list");
                     Check(!text.Contains("UI-REQUISITES-MUST-NOT-APPEAR")&&!text.Contains("Банковские реквизиты")&&!text.Contains("ИНН")&&!text.Contains("Состояние"),"invoice preview omits party requisites and ticket state");
-                    Check(text.Contains("UI invoice signatory"),"invoice retains the actual recipient signatory");
+                    Check(text.Replace('\u00a0',' ').Contains("UI invoice signatory"),"invoice retains the actual recipient signatory on an unbroken line");
                     Check(Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Открыть в Word")),"invoice offers opening the saved Word document");
                     CheckDocumentTableLayout(Logical(window).OfType<FlowDocumentScrollViewer>().Single(),"invoice");
                     Check(!Logical(window).OfType<Button>().Any(b=>Equals(b.Content,"Сохранить как…")),"invoice has no duplicate Save As action");

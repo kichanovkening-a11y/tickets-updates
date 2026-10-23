@@ -71,7 +71,7 @@ internal static class Ui019Checks
         var curved=new HallView();
         curved.Load(Enumerable.Range(0,20).Select(i=>seat with{Id=10000+i,Number="",Row="7",Sector="Дуга",X=i*20,Y=(i-10)*(i-10)}).ToArray(),[],true);
         var curvedDrawing=(DrawingGroup)typeof(HallView).GetField("drawing",Private)!.GetValue(curved)!;
-        Check(GlyphRuns(curvedDrawing)==1,"a curved logical row draws one row caption despite distinct seat Y coordinates");
+        Check(GlyphRuns(curvedDrawing)==2,"a curved logical row draws one caption on each side despite distinct seat Y coordinates");
 
         var mixed=new HallView();
         mixed.Load([seat with{Id=20000,X=0,Y=0},seat with{Id=20001,X=20,Y=0,TicketId=999},seat with{Id=20002,X=40,Y=0,IsBlocked=true}],[],true);

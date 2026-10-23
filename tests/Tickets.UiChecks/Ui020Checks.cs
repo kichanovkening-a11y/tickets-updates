@@ -57,7 +57,7 @@ internal static class Ui020Checks
             Check(headings.Length>=sectors.Length,"actual hall drawing contains each sector heading");
             Check(headings.All(heading=>!diagramSeats.Any(seat=>heading.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))),"actual sector heading glyph bounds do not intersect any seat");
             var captions=Glyphs(drawing).Where(g=>Math.Abs(g.GlyphRun.FontRenderingEmSize-14.3)<.01&&g.ForegroundBrush==System.Windows.Media.Brushes.Black).ToArray();
-            Check(captions.Length==layout.GroupBy(s=>(s.Sector,s.Row)).Count(),"each logical row has one separate black text caption");
+            Check(captions.Length==2*layout.GroupBy(s=>(s.Sector,s.Row)).Count(),"each logical row has two separate black text captions");
             Check(captions.All(caption=>!diagramSeats.Any(seat=>caption.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))&&!headings.Any(heading=>heading.Bounds.IntersectsWith(caption.Bounds))),"row captions remain clear of real seats and sector headings");
         }
         var type=typeof(MainWindow).Assembly.GetType("Tickets.App.RecipientsWindow")!;

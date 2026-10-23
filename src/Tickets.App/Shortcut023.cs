@@ -1,11 +1,32 @@
 using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
+using System.Text;
 namespace Tickets.App;
 
 internal static class Shortcut023
 {
     [DllImport("shell32.dll")]private static extern void SHChangeNotify(uint eventId,uint flags,IntPtr item1,IntPtr item2);
+    // Use the Unicode ShellLink API. WScript.Shell can convert a Cyrillic filename
+    // through the system ANSI codepage on an English Windows installation.
+    [ComImport,Guid("000214F9-0000-0000-C000-000000000046"),InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IShellLinkW
+    {
+        void GetPath([Out,MarshalAs(UnmanagedType.LPWStr)]StringBuilder path,int count,IntPtr data,uint flags);
+        void GetIDList(out IntPtr list);void SetIDList(IntPtr list);
+        void GetDescription([Out,MarshalAs(UnmanagedType.LPWStr)]StringBuilder value,int count);
+        void SetDescription([MarshalAs(UnmanagedType.LPWStr)]string value);
+        void GetWorkingDirectory([Out,MarshalAs(UnmanagedType.LPWStr)]StringBuilder value,int count);
+        void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)]string value);
+        void GetArguments([Out,MarshalAs(UnmanagedType.LPWStr)]StringBuilder value,int count);
+        void SetArguments([MarshalAs(UnmanagedType.LPWStr)]string value);
+        void GetHotkey(out short value);void SetHotkey(short value);void GetShowCmd(out int value);void SetShowCmd(int value);
+        void GetIconLocation([Out,MarshalAs(UnmanagedType.LPWStr)]StringBuilder value,int count,out int index);
+        void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)]string value,int index);
+        void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)]string value,uint reserved);
+        void Resolve(IntPtr window,uint flags);void SetPath([MarshalAs(UnmanagedType.LPWStr)]string value);
+    }
     internal static void Ensure(string directory)
     {
         if(!OperatingSystem.IsWindows())return;
@@ -19,25 +40,19 @@ internal static class Shortcut023
             {File.WriteAllBytes(icon+".tmp",current);File.Move(icon+".tmp",icon,true);}
         }
         var path=Path.Combine(directory,"! Билеты.lnk");
-        object? shell=null,shortcut=null;
+        var type=Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"))!;
+        var instance=Activator.CreateInstance(type)!;
         try
         {
-            var type=Type.GetTypeFromProgID("WScript.Shell")??throw new IOException("Ярлыки Windows недоступны.");
-            shell=Activator.CreateInstance(type)!;
-            shortcut=type.InvokeMember("CreateShortcut",BindingFlags.InvokeMethod,null,shell,new object[]{path})!;
-            var link=shortcut.GetType();
-            var previous=link.InvokeMember("TargetPath",BindingFlags.GetProperty,null,shortcut,null) as string;
-            // Never repoint a user shortcut that launches a different installed copy.
-            if(File.Exists(path)&&!string.IsNullOrWhiteSpace(previous)&&!string.Equals(Path.GetFullPath(previous),Path.GetFullPath(target),StringComparison.OrdinalIgnoreCase))return;
-            void Set(string name,object value)=>link.InvokeMember(name,BindingFlags.SetProperty,null,shortcut,new[]{value});
-            Set("TargetPath",target);Set("WorkingDirectory",directory);Set("IconLocation",icon+",0");Set("Description","Билеты");
-            link.InvokeMember("Save",BindingFlags.InvokeMethod,null,shortcut,null);
+            var link=(IShellLinkW)instance;var file=(IPersistFile)instance;
+            if(File.Exists(path))
+            {
+                file.Load(path,0);var previous=new StringBuilder(32768);link.GetPath(previous,previous.Capacity,IntPtr.Zero,0);
+                if(previous.Length>0&&!string.Equals(Path.GetFullPath(previous.ToString()),Path.GetFullPath(target),StringComparison.OrdinalIgnoreCase))return;
+            }
+            link.SetPath(target);link.SetWorkingDirectory(directory);link.SetIconLocation(icon,0);link.SetDescription("Билеты");file.Save(path,true);
             SHChangeNotify(0x08000000,0,IntPtr.Zero,IntPtr.Zero);
         }
-        finally
-        {
-            if(shortcut is not null&&Marshal.IsComObject(shortcut))Marshal.FinalReleaseComObject(shortcut);
-            if(shell is not null&&Marshal.IsComObject(shell))Marshal.FinalReleaseComObject(shell);
-        }
+        finally{if(Marshal.IsComObject(instance))Marshal.FinalReleaseComObject(instance);}
     }
 }

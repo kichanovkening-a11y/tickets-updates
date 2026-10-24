@@ -11,7 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
-    if(args.Contains("--hall027")&&!name.StartsWith("027 hall"))return;
+    if(args.Contains("--hall027")&&!(name.StartsWith("027")&&(name.Contains("hall")||name.Contains("sector")||name.Contains("aisle"))))return;
     if(args.Contains("--corrections027")&&!name.StartsWith("027"))return;
     if(args.Contains("--corrections026")&&!name.StartsWith("026"))return;
     total++;

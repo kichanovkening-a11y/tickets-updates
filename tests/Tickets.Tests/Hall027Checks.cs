@@ -31,6 +31,15 @@ internal static class Hall027Checks
             draft[1].Hidden=true;var snapshot=draft.Select(s=>(s.Sector,s.Row,s.Number,s.X,s.Y,s.Hidden)).ToArray();HallEditing027.MoveRow(draft,"Амфитеатр","1",35);
             for(var i=0;i<draft.Count;i++){var s=draft[i];var old=snapshot[i];Check(s.Hidden==old.Hidden&&s.Y==old.Y&&s.Number==old.Number&&s.X==old.X+(s.Sector=="Амфитеатр"?35:0),"row shift changed another value");}
         });
+        run("027 reloaded seat records compare aisle metadata by value",store=>{
+            var draft=HallLayout.Generate("Партер",new[]{new HallRowLayout{Label="1",SeatCount=6,AisleAfter=3}},"1",false,0).ToList();
+            var id=store.CreateHall("027 seat value equality","",draft);var first=store.VenueSeats(id);var reloaded=new Store(store.Path).VenueSeats(id);
+            Check(first.SequenceEqual(reloaded)&&first.Select(s=>s.GetHashCode()).SequenceEqual(reloaded.Select(s=>s.GetHashCode())),"equal reloaded aisle metadata changed seat equality or hash codes");
+            var original=first[0];var changed=original with{RowAisleAnchors=original.RowAisleAnchors!.Select(a=>a with{X=a.X+1}).ToArray()};
+            Check(original!=changed,"different aisle metadata compared equal");
+            var input=original.RowAisleAnchors!.ToArray();var copied=original with{RowAisleAnchors=input};input[0]=input[0] with{X=input[0].X+1};
+            Check(copied==original,"caller mutation changed immutable seat metadata");
+        });
         run("027 aisle labels survive uneven deletion and saving reopening",store=>{
             var draft=HallLayout.Generate("Партер",new[]{new HallRowLayout{Label="1",SeatCount=10,AisleAfter=5}},"1",false,0).ToList();
             var before=Anchors(draft).Where(a=>a.Centre).ToArray();

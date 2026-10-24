@@ -30,3 +30,17 @@ public sealed partial class Store
     private static IReadOnlyList<HallEditing025.RowAnchor>? ReadRowAnchors027(SqliteDataReader reader,int ordinal)
         =>reader.IsDBNull(ordinal)?null:JsonSerializer.Deserialize<HallEditing025.RowAnchor[]>(reader.GetString(ordinal));
 }
+
+/// <summary>SeatInfo is a value record; its immutable anchor metadata uses the same semantics.</summary>
+internal sealed class RowAisleAnchorList027:IReadOnlyList<HallEditing025.RowAnchor>,IEquatable<RowAisleAnchorList027>
+{
+    private readonly HallEditing025.RowAnchor[] anchors;
+    public RowAisleAnchorList027(IEnumerable<HallEditing025.RowAnchor> source)=>anchors=source.ToArray();
+    public int Count=>anchors.Length;
+    public HallEditing025.RowAnchor this[int index]=>anchors[index];
+    public bool Equals(RowAisleAnchorList027? other)=>other is not null&&anchors.SequenceEqual(other.anchors);
+    public override bool Equals(object? other)=>other is RowAisleAnchorList027 list&&Equals(list);
+    public override int GetHashCode(){var hash=new HashCode();foreach(var anchor in anchors)hash.Add(anchor);return hash.ToHashCode();}
+    public IEnumerator<HallEditing025.RowAnchor> GetEnumerator()=>((IEnumerable<HallEditing025.RowAnchor>)anchors).GetEnumerator();
+    System.Collections.IEnumerator System.Collections.IEnumerable.GetEnumerator()=>GetEnumerator();
+}

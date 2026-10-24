@@ -5,6 +5,7 @@ using System.Windows.Controls;
 using System.Windows.Threading;
 using Tickets.App;
 using Tickets.Core;
+using Microsoft.Data.Sqlite;
 
 internal static class HallCaption029UiChecks
 {
@@ -12,10 +13,11 @@ internal static class HallCaption029UiChecks
     internal static void Run(Store store,MainWindow main)
     {
         var name="Балкон длинное название";var suffix=Guid.NewGuid().ToString("N");
-        var id=store.CreateHall("029 caption UI "+suffix,"",[new(){Sector=name,Row="7",Number="1",X=20,Y=40},new(){Sector=name,Row="7",Number="2",X=60,Y=40}]);
+        var id=store.CreateHall("029 caption UI "+suffix,"",[new(){Sector=name,Row="7",Number="1",X=20,Y=40},new(){Sector=name,Row="7",Number="2",X=60,Y=40},new(){Sector=name,Row="8",Number="1",X=-80,Y=-20,Hidden=true}]);
+        using(var c=new SqliteConnection(new SqliteConnectionStringBuilder{DataSource=store.Path,Pooling=false}.ToString())){c.Open();using var q=c.CreateCommand();q.CommandText="UPDATE sector SET x=0,y=-200 WHERE venue_id=$v";q.Parameters.AddWithValue("$v",id);q.ExecuteNonQuery();}
         var before=store.VenueSeats(id);var plan=store.SavePlan(id,"029 caption UI",before.Select(s=>new PriceValue(s.Id,500,"#ABCDEF")).ToArray());
         var evt=store.CreateEvent(store.SavePerformance("029 caption UI "+suffix),id,plan,DateTime.Today.AddDays(30));store.Issue(evt,[before[0].Id],"029 caption UI","CU029",1);
-        var editor=new HallEditorWindow(store,store.Venues().Single(v=>v.Id==id),true);Exception? failure=null;SectorCaption029? expected=null;
+        var editor=new HallEditorWindow(store,store.Venues().Single(v=>v.Id==id),true);Exception? failure=null;SectorCaption029? expected=null;Rect expectedWorldBounds=Rect.Empty;
         var body=(DependencyObject)editor.Content;
         Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
             try
@@ -48,7 +50,7 @@ internal static class HallCaption029UiChecks
                 Check(expected is {Angle:37,Text:"Балкон\nдлинное название"}&&draft.All(s=>s.Sector==name),"multiline rotated caption keeps single-line logical sector key");
                 Check(draft.Select(s=>(s.X,s.Y,s.Row,s.Number)).SequenceEqual(coordinates),"caption rotation and text preserve seat geometry");
                 var bounds=(Rect)typeof(HallView).GetField("bounds",Private)!.GetValue(hall)!;var hit=CaptionBounds(hall,name);
-                Check(bounds.Contains(hit),"fit bounds include rotated caption hit region");
+                Check(bounds.Contains(hit),"fit bounds include rotated caption hit region");expectedWorldBounds=hit;
                 Corrections025UiChecks.Capture(editor,"029-movable-two-line-sector-caption");
                 Logical(body).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить изменения")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }
@@ -58,6 +60,8 @@ internal static class HallCaption029UiChecks
         {
             var result=editor.ShowDialog();if(failure is not null)throw failure;Check(result==true,"caption edits save successfully");
             Check(editor.CreatedId==id&&new Store(store.Path).Sectors(id).Single().Caption==expected,"used hall saves and reloads caption under original identity");
+            var rendered=new HallView{ShowInactivePlaceholders=false};rendered.Load(store.Seats(evt),store.Sectors(id),false);
+            Check(CaptionBounds(rendered,name)==expectedWorldBounds,"legacy sector anchor and hidden leftmost seat preserve caption world position after save");
             Check(store.VenueSeats(id).SequenceEqual(before)&&!store.Seats(evt).Single(s=>s.Id==before[0].Id).Available,"saving caption preserves seats and issuance");
             Check(!((HallView)main.FindName("Hall")).SectorEditingEnabled,"sale hall keeps caption dragging disabled");
         }

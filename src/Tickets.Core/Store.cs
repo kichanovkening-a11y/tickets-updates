@@ -66,7 +66,7 @@ public sealed partial class Store
     public List<SectorInfo> Sectors(long venueId)
     {
         using var c=Open();
-        using var cmd=Command(c,"SELECT name,x,y,(SELECT caption FROM hall_sector_caption_029 cap WHERE cap.venue_id=sector.venue_id AND cap.sector_id=sector.id) FROM sector WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(sector.venue_id AS TEXT)||':'||CAST(sector.id AS TEXT)) ORDER BY y,x","$v",venueId);
+        using var cmd=Command(c,"SELECT sector.name,CASE WHEN cap.caption IS NULL THEN sector.x ELSE coalesce((SELECT min(s.x) FROM seat s WHERE s.venue_id=sector.venue_id AND s.sector_id=sector.id),sector.x) END,CASE WHEN cap.caption IS NULL THEN sector.y ELSE coalesce((SELECT min(s.y)-26 FROM seat s WHERE s.venue_id=sector.venue_id AND s.sector_id=sector.id),sector.y) END,cap.caption FROM sector LEFT JOIN hall_sector_caption_029 cap ON cap.venue_id=sector.venue_id AND cap.sector_id=sector.id WHERE sector.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(sector.venue_id AS TEXT)||':'||CAST(sector.id AS TEXT)) ORDER BY y,x","$v",venueId);
         using var r=cmd.ExecuteReader(); var result=new List<SectorInfo>();
         while(r.Read()) result.Add(new(r.GetString(0),r.GetDouble(1),r.GetDouble(2)){Caption=ReadSectorCaption029(r,3)});
         return result;

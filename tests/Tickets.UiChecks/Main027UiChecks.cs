@@ -61,6 +61,9 @@ internal static class Main027UiChecks
             var labels=(System.Collections.ICollection)typeof(HallView).GetField("rowHits",Private)!.GetValue(hall)!;Check(labels.Count==6,"both edge numbers and every aisle number are drawn");
             var captionMethod=typeof(HallView).GetMethod("SectorCaptionOrigin",BindingFlags.Static|BindingFlags.NonPublic)!;
             var point=(Point)captionMethod.Invoke(null,[new Rect(0,0,40,15),seats,seats,Array.Empty<Rect>(),new Point()])!;Check(point.Y+15==-5,"sector title is exactly five units above first row");
+            var obstacle=new SeatInfo(99,"Другой","1","1",75,-20,0,"#ABCDEF",null,"","",null);
+            var clear=(Point)captionMethod.Invoke(null,[new Rect(0,0,40,15),seats,seats.Append(obstacle).ToArray(),Array.Empty<Rect>(),new Point()])!;
+            var ink=new Rect(clear,new Size(40,15));Check(clear.Y+15==-5&&!ink.IntersectsWith(new Rect(obstacle.X,obstacle.Y,16,16)),"dense hall caption keeps five pixel gap without covering a neighboring sector");
             Move(hall,new Point(200,150));hall.EditRow("Партер","7");Pump();IReadOnlyList<SeatInfo>? changed=null;hall.RowTransformCompleted+=value=>changed=value;
             Move(hall,new Point(240,210));Click();
             Console.WriteLine("027 row move result: "+(changed is null?"no completion":string.Join("; ",changed.Select(s=>$"{s.Id}: X={s.X:R} Y={s.Y:R} dx={s.X-seats[(int)s.Id-1].X:R}"))));

@@ -238,7 +238,15 @@ public sealed class HallView : FrameworkElement
     {
         if(own.Count==0)return fallback;
         var left=own.Min(s=>s.X);var right=own.Max(s=>s.X)+16;
-        return new Point((left+right)/2-(glyph.Left+glyph.Width/2),own.Min(s=>s.Y)-5-glyph.Bottom);
+        var centre=(left+right)/2-(glyph.Left+glyph.Width/2);var y=own.Min(s=>s.Y)-5-glyph.Bottom;
+        var obstacles=all.Select(s=>new Rect(s.X,s.Y,16,16)).Concat(captions).ToArray();
+        bool Clear(double x){var ink=glyph;ink.Offset(x,y);return !obstacles.Any(ink.IntersectsWith);}
+        // Keep the requested vertical gap even in dense existing halls. If another
+        // sector occupies the caption band, resolve the collision horizontally.
+        if(Clear(centre))return new Point(centre,y);
+        var candidates=obstacles.SelectMany(r=>new[]{r.Left-1-glyph.Right,r.Right+1-glyph.Left})
+            .OrderBy(x=>Math.Abs(x-centre));
+        return new Point(candidates.First(Clear),y);
     }
 
     public void Fit()

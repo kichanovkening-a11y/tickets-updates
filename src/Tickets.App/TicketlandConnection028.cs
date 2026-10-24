@@ -46,6 +46,11 @@ public partial class MainWindow
     }
     private void SetTicketlandStatus028(string text)
     {
+        if(!Dispatcher.CheckAccess())
+        {
+            if(!Dispatcher.HasShutdownStarted)Dispatcher.Invoke(()=>SetTicketlandStatus028(text));
+            return;
+        }
         TicketlandStatus028=text;
         if(ready)StatusText.Text=text;
         TicketlandStatusChanged028?.Invoke();
@@ -87,14 +92,17 @@ public partial class MainWindow
             linked.Token.ThrowIfCancellationRequested();
             var summary=await Task.Run(()=>store.ApplyTicketlandReport028(report,replace:true),linked.Token);
             applied=true;
-            if(current is not null){var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();LoadEvent(false);Hall.SetSelection(ids);}
-            if(connect)
+            await Dispatcher.InvokeAsync(()=>
             {
-                TicketlandCredentials028.Save(ticketlandSettings028.ConnectionId,login);
-                SaveTicketlandSettings028(ticketlandSettings028 with{Enabled=true});
-                ticketlandTimer028?.Start();
-            }
-            SetTicketlandStatus028($"Ticketland: {report.FetchedAt.LocalDateTime:dd.MM.yyyy HH:mm} · Мест: {summary.Matched} · Не сопоставлено: {summary.Unmatched} · Совпадений с выдачами: {summary.Conflicts} · Без мест: {summary.GeneralAdmission}");
+                if(current is not null){var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();LoadEvent(false);Hall.SetSelection(ids);}
+                if(connect)
+                {
+                    TicketlandCredentials028.Save(ticketlandSettings028.ConnectionId,login);
+                    SaveTicketlandSettings028(ticketlandSettings028 with{Enabled=true});
+                    ticketlandTimer028?.Start();
+                }
+                SetTicketlandStatus028($"Ticketland: {report.FetchedAt.LocalDateTime:dd.MM.yyyy HH:mm} · Мест: {summary.Matched} · Не сопоставлено: {summary.Unmatched} · Совпадений с выдачами: {summary.Conflicts} · Без мест: {summary.GeneralAdmission}");
+            });
         }
         catch(OperationCanceledException){SetTicketlandStatus028("Ticketland: получение отчёта остановлено. Предыдущие данные сохранены.");throw;}
         catch(TicketException ex){SetTicketlandStatus028(ex.Message);throw;}

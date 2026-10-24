@@ -59,7 +59,7 @@ internal static class Ui020Checks
             var date=Nodes(history).Select(n=>n.Header).OfType<TextBlock>().First(t=>t.Inlines.OfType<System.Windows.Documents.Run>().Any(r=>r.FontSize==19));
             Check(date.Inlines.OfType<System.Windows.Documents.Run>().First().FontSize==19,"recipient history event date and time are larger");
             var issueHeader=Nodes(history).Where(n=>n.Tag is RecipientIssueInfo).Select(n=>n.Header).OfType<DockPanel>().First();
-            Check(issueHeader.Children.OfType<CheckBox>().Count()==1&&issueHeader.Children.OfType<TextBlock>().Count()==1,"recipient history has separate package checkbox and single-click issue text");
+            Check(issueHeader.Children.OfType<CheckBox>().Count()==1&&issueHeader.Children.OfType<StackPanel>().Single().Children.OfType<TextBlock>().Count()==2,"recipient history has separate package checkbox issue text and inline return count");
         }
         finally{window.Close();}
         store.Return(store.Invoice(show.Id,invoice).Tickets.Select(t=>t.Id).ToArray());main.SelectEvent(show.Id);Pump();

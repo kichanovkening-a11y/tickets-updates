@@ -6,6 +6,7 @@ public static class HallEditing024
 {
     public static void Delete(IList<DraftSeat> seats,IReadOnlyList<DraftSeat> selected)
     {
+        HallAnchors027.Capture(seats.ToArray());
         var chosen=selected.ToHashSet();
         foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)).Where(g=>g.Any(chosen.Contains)).ToArray())
         {
@@ -50,7 +51,7 @@ public static class HallEditing024
             var chosenRows=sector.Select(s=>s.Row).ToHashSet();var ordered=rows.OrderBy(r=>r.X*dx+r.Y*dy).ToArray();var shift=0d;
             foreach(var row in ordered)
             {
-                foreach(var seat in row.Seats){seat.X+=dx*shift;seat.Y+=dy*shift;}
+                foreach(var seat in row.Seats){seat.X+=dx*shift;seat.Y+=dy*shift;seat.RowAisleAnchors=HallAnchors027.Move(seat.RowAisleAnchors,dx*shift,dy*shift);}
                 if(chosenRows.Contains(row.Label))shift+=gap;
             }
         }

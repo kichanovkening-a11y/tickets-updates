@@ -6,8 +6,9 @@ namespace Tickets.Core;
 /// <summary>The same separate title and unbroken name used by Word and fallback printing.</summary>
 public static class SignatureBlocks
 {
+    public static bool IsIndividualEntrepreneur(InvoiceInfo invoice)=>Regex.IsMatch(invoice.Sender.Trim(),@"^ИП(?:\s|$)",RegexOptions.IgnoreCase);
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
-    public static (string Position,string Name) Sender(InvoiceInfo invoice)=>Identity(DocumentParties.Sender(invoice));
+    public static (string Position,string Name) Sender(InvoiceInfo invoice)=>Identity(IsIndividualEntrepreneur(invoice)?DocumentParties.Sender(invoice) with {Position=""}:DocumentParties.Sender(invoice));
     public static (string Position,string Name) Recipient(InvoiceInfo invoice)=>Identity(invoice.RecipientDetails??new(),invoice.Recipient);
     private static (string Position,string Name) Identity(OrganizationDetails details,string fallback="")=>(details.Position,Name(string.IsNullOrWhiteSpace(details.Signatory)?fallback:details.Signatory));
     public static string Name(string value)
@@ -32,7 +33,7 @@ public static class SignatureBlocks
     }
     internal static void KeepRightBillSignature(XDocument xml,InvoiceInfo invoice)
     {
-        if(!Regex.IsMatch(invoice.Sender.Trim(),@"^ИП(?:\s|$)",RegexOptions.IgnoreCase))return;
+        if(!IsIndividualEntrepreneur(invoice))return;
         foreach(var table in xml.Descendants(W+"tbl").ToArray())
         {
             if(table.Elements(W+"tr").Any(r=>r.Elements(W+"tc").Count()!=2))continue;
@@ -53,7 +54,7 @@ public static class SignatureBlocks
             // Only the identity row immediately above a signature baseline is a signature block.
             // This leaves full names in legal clauses, requisites, and bespoke bill grids intact.
             var next=row.ElementsAfterSelf(W+"tr").FirstOrDefault(r=>r.Descendants(W+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value)));
-            if(next is null||!next.Elements(W+"tc").All(c=>Regex.IsMatch(string.Concat(c.Descendants(W+"t").Select(t=>t.Value)).Trim(),@"^_{8,}$")))continue;
+            if(next is null||!next.Elements(W+"tc").All(c=>Regex.IsMatch(string.Concat(c.Descendants(W+"t").Select(t=>t.Value)).Trim(),@"^(?:_{8,})?$")))continue;
             foreach(var cell in row.Elements(W+"tc"))foreach(var p in cell.Elements(W+"p").ToArray())
             {
                 var text=string.Concat(p.Descendants(W+"t").Select(t=>t.Value));
@@ -65,6 +66,7 @@ public static class SignatureBlocks
                 if(!text.Contains("Position}")&&!string.IsNullOrWhiteSpace(identity.Position))prefix+=" "+identity.Position;
                 var suffix=text[(token.Index+token.Length)..];
                 if(!string.IsNullOrWhiteSpace(suffix))continue; // A custom legal sentence is not an identity block.
+                if(sender&&IsIndividualEntrepreneur(invoice))prefix=Regex.Replace(prefix,@"(?i)(?:главный\s*\(старший\)\s*)?(?:бухгалтер|руководитель(?: предприятия)?|директор)\s*:?","").Trim();
                 var name=NameParagraph(identity.Name,p);
                 var props=p.Element(W+"pPr");var format=p.Descendants(W+"rPr").FirstOrDefault();
                 p.ReplaceNodes(props is null?null:new XElement(props),new XElement(W+"r",format is null?null:new XElement(format),new XElement(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),prefix.Trim())));

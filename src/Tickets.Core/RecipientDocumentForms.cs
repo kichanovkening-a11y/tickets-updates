@@ -198,8 +198,8 @@ public static class CustomDocumentForms
                 if(string.Concat(nodes.Select(t=>t.Value))=="Спектакль «{event}» {eventDate}"&&nodes.Length>0)nodes[^1].Value+=". {venue}.";
             }
             if(standard)DocumentFormCorrections.SpaceSignatures(xml);
-            SignatureBlocks.FillTemplateSignatures(xml,invoice);
             if(kind=="bill")SignatureBlocks.KeepRightBillSignature(xml,invoice);
+            SignatureBlocks.FillTemplateSignatures(xml,invoice);
             foreach(var p in xml.Descendants(W+"p"))Replace(p,values);
             foreach(var text in xml.Descendants(W+"t").Where(t=>t.Value.Contains('\n')).ToArray())
             {

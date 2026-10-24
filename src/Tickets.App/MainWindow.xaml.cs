@@ -24,6 +24,13 @@ public partial class MainWindow : Window
         InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
+        UpperActions.SizeChanged+=(_,_)=>UpdateCompactLayout();
+        SquareShowActions.RequestBringIntoView+=(_,e)=>{
+            if(e.OriginalSource is FrameworkElement target){
+                var right=UpperActions.ActualWidth-156+target.TranslatePoint(new Point(target.ActualWidth,0),SquareShowActions).X;
+                OrdinaryActionsScroll.ScrollToHorizontalOffset(Math.Max(0,right-OrdinaryActionsScroll.ViewportWidth));e.Handled=true;
+            }
+        };
         PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientTypography.Apply(RecipientBox);
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
@@ -142,12 +149,16 @@ public partial class MainWindow : Window
             if(e.OriginalSource is not DependencyObject source||ItemsControl.ContainerFromElement(list,source) is not ListBoxItem {Content:VenueInfo venue})return;
             e.Handled=true;Run(()=>{new HallEditorWindow(store,venue).ShowDialog();list.ItemsSource=store.Venues();});
         };
+        var edit=new MenuItem{Header="Редактировать зал"};edit.Click+=(_,_)=>Run(()=>{
+            if(list.SelectedItem is not VenueInfo selected)throw new TicketException("Выберите площадку.");
+            new HallEditorWindow(store,selected,true).ShowDialog();list.ItemsSource=store.Venues();
+        });
         var delete=new MenuItem{Header="Удалить"};delete.Click+=(_,_)=>Run(()=>{
             if(list.SelectedItem is not VenueInfo selected)throw new TicketException("Выберите площадку.");
             if(MessageBox.Show(window.DialogOwnerForHost,$"Удалить «{selected.Name}» из справочника? Выдачи и документы сохранятся в истории.","Удаление площадки",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
             store.DeleteVenue(selected.Id);list.ItemsSource=store.Venues();
         });
-        list.ContextMenu=new ContextMenu();list.ContextMenu.Items.Add(delete);
+        list.ContextMenu=new ContextMenu();list.ContextMenu.Items.Add(edit);list.ContextMenu.Items.Add(delete);
         list.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject source&&ItemsControl.ContainerFromElement(list,source) is ListBoxItem item)item.IsSelected=true;else e.Handled=true;};
         list.ContextMenuOpening+=(_,e)=>{if(list.SelectedItem is not VenueInfo)e.Handled=true;};
         panel.Children.Add(list);window.ShowDialog();RefreshCatalogNavigation();
@@ -304,6 +315,7 @@ public partial class MainWindow : Window
     private void HistoryRowClick(object sender,System.Windows.Input.MouseButtonEventArgs e)
     {
         var source=e.OriginalSource as DependencyObject;
+        if(ReturnedTicketDetails027.IsToggleSource(source))return;
         for(var node=source;node is not null&&node!=HistoryGrid;node=node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
             if(node is CheckBox)return;
         var row=source is null?null:ItemsControl.ContainerFromElement(HistoryGrid,source) as DataGridRow;

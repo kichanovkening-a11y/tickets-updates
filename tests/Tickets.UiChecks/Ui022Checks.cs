@@ -60,20 +60,27 @@ internal static class Ui022Checks
         var editor=new HallEditorWindow(store);editor.Show();Pump();
         try
         {
-            var rows=(DataGrid)typeof(HallEditorWindow).GetField("rowTable",Private)!.GetValue(editor)!;
             var preview=(HallView)typeof(HallEditorWindow).GetField("preview",Private)!.GetValue(editor)!;
-            rows.SelectedItem=rows.Items[0];rows.CurrentCell=new DataGridCellInfo(rows.Items[0],rows.Columns[1]);rows.ScrollIntoView(rows.Items[0],rows.Columns[1]);rows.Focus();
-            Check(rows.BeginEdit(),"first row starts editing in an empty hall");Pump();
-            var edit=(TextBox)rows.Columns[1].GetCellContent(rows.Items[0]);edit.Text="12";edit.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
-            // The view owns EditItem here. Calling a refresh from a focus/commit callback must not terminate the app.
-            typeof(HallEditorWindow).GetMethod("RefreshRows",Private)!.Invoke(editor,null);Pump();
-            Check(rows.CommitEdit(DataGridEditingUnit.Cell,true)&&rows.CommitEdit(DataGridEditingUnit.Row,true),"first-row cell and row commit after a refresh request");Pump();
+            var draft=(IEnumerable<DraftSeat>)typeof(HallEditorWindow).GetField("seats",Private)!.GetValue(editor)!;
+            var initialHallCount=store.Venues().Count;Exception? error=null;
+            Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                var popup=Application.Current.Windows.OfType<HallSectorWindow023>().Single();
+                try
+                {
+                    var inputs=Logical(popup).OfType<TextBox>().ToArray();inputs[0].Text="Партер022";inputs[1].Text="1";inputs[2].Text="12";
+                    Check(!draft.Any(),"first sector remains unmaterialized until explicit acceptance");
+                    Logical(popup).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+                }
+                catch(Exception ex){error=ex;popup.Close();}
+            }));
+            Logical(editor).OfType<Button>().Single(b=>Equals(b.Content,"Добавить сектор")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(error is not null)throw error;
             var seats=(List<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(preview)!;
-            Check(seats.Count==12&&seats.Select(s=>s.Number).SequenceEqual(Enumerable.Range(1,12).Select(n=>n.ToString())),"first row preview contains twelve correctly numbered places");
-            Check(((System.Collections.ICollection)typeof(HallEditorWindow).GetField("seats",Private)!.GetValue(editor)!).Count==0,"editing first row does not persist seats before confirmation");
+            Check(seats.Count==12&&seats.Select(s=>s.Number).SequenceEqual(Enumerable.Range(1,12).Select(n=>n.ToString())),"accepted first sector contains twelve correctly numbered places");
+            Check(store.Venues().Count==initialHallCount,"draft sector acceptance does not persist a hall before Save");
         }
         finally{editor.Close();Pump();}
     }
+    private static IEnumerable<DependencyObject> Logical(DependencyObject node){yield return node;foreach(var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>())foreach(var item in Logical(child))yield return item;}
     private static void Pump()=>Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Check(bool value,string message){if(!value)throw new Exception(message);Console.WriteLine("PASS 022 "+message);}
 }

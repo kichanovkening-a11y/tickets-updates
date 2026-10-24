@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureHallRowAnchors027(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); }
 
     private SqliteConnection Open()
     {
@@ -46,7 +46,7 @@ public sealed partial class Store
         using var c=Open();
         using var cmd=Command(c,"""
             SELECT s.id,z.name,s.row_label,s.number,s.x,s.y,coalesce(t.amount,p.amount),coalesce(pc.color,p.color,'#CBD5E1'),
-              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number,b.seat_id IS NOT NULL,t.issue_id,ts.printed_at,coalesce(ts.state,'issued')
+              t.id,coalesce(t.recipient,''),coalesce(t.series,''),t.number,b.seat_id IS NOT NULL,t.issue_id,ts.printed_at,coalesce(ts.state,'issued'),(SELECT anchors FROM hall_row_anchors a WHERE a.seat_id=s.id)
             FROM event e JOIN seat s ON s.venue_id=e.venue_id
             JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id
             LEFT JOIN event_price p ON p.event_id=e.id AND p.seat_id=s.id
@@ -59,7 +59,7 @@ public sealed partial class Store
         using var r=cmd.ExecuteReader(); var result=new List<SeatInfo>();
         while(r.Read()) result.Add(new(r.GetInt64(0),r.GetString(1),r.GetString(2),r.GetString(3),
             r.GetDouble(4),r.GetDouble(5),r.IsDBNull(6)?null:r.GetInt64(6),r.GetString(7),
-            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11),r.GetBoolean(12),r.IsDBNull(13)?null:r.GetInt64(13),!r.IsDBNull(14),r.GetString(15)=="reserved"));
+            r.IsDBNull(8)?null:r.GetInt64(8),r.GetString(9),r.GetString(10),r.IsDBNull(11)?null:r.GetInt64(11),r.GetBoolean(12),r.IsDBNull(13)?null:r.GetInt64(13),!r.IsDBNull(14),r.GetString(15)=="reserved"){RowAisleAnchors=ReadRowAnchors027(r,16)});
         return result;
     }
 

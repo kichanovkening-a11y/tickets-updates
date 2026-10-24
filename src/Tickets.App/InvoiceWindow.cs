@@ -9,7 +9,7 @@ namespace Tickets.App;
 internal sealed class InvoiceWindow : EditorWindow
 {
     private readonly long eventId,issueId;
-    private readonly ComboBox senderBox=new(){FontSize=18,IsEditable=true,IsTextSearchEnabled=true,Height=34,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
+    private readonly ComboBox senderBox=new(){Width=300,HorizontalAlignment=HorizontalAlignment.Left,FontSize=18,IsEditable=true,IsTextSearchEnabled=true,Height=34,MinHeight=34,VerticalContentAlignment=VerticalAlignment.Center};
     private readonly TextBlock savedStatus=new(){TextTrimming=TextTrimming.CharacterEllipsis,Margin=new Thickness(0,3,0,3),FontSize=12};
     private string persistedSender="";
     private bool confirmingSender;
@@ -34,7 +34,7 @@ internal sealed class InvoiceWindow : EditorWindow
                 if(path is not null){savedStatus.Text="Сохранено: "+path;Refresh();}
             }),()=>Try(Print),()=>Try(PrintInvoiceTickets)));
         var senderRow=new Grid();senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(90)});senderRow.ColumnDefinitions.Add(new ColumnDefinition());senderRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});header.Children.Add(senderRow);
-        senderRow.Children.Add(new TextBlock{Text="От кого",VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
+        senderRow.Children.Add(new TextBlock{Text="От кого",FontSize=18,FontWeight=FontWeights.Bold,VerticalAlignment=VerticalAlignment.Center});Grid.SetColumn(senderBox,1);senderRow.Children.Add(senderBox);
         var senderActions=new WrapPanel{Margin=new Thickness(8,0,0,0)};Grid.SetColumn(senderActions,2);senderRow.Children.Add(senderActions);
         Button(senderActions,"+ Отправитель",()=>Try(()=>EditSender(false)));
         Button(senderActions,"Реквизиты",()=>Try(()=>EditSender(true))).ToolTip="Реквизиты выбранного отправителя";

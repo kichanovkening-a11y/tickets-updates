@@ -38,9 +38,10 @@ internal static class Program
             DocumentEditor019Checks.Run();
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--corrections027",StringComparer.Ordinal)){Hall027UiChecks.Run(store);ScheduleReturns027UiChecks.Run(store);Document027UiChecks.Run(store,main);Main027UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections025",StringComparer.Ordinal)){Corrections025UiChecks.Run(store);Corrections026UiChecks.Run(store,main);main.Close();return 0;}
             var actions=Logical(main).OfType<Button>().ToList();
-            Check(actions.Count>=15,"main actions found");
+            Check(actions.Count>=9,"main navigation actions found without duplicate home buttons");
             Check(!actions.Any(b=>Equals(b.Content,"Спецификации")||Equals(b.Content,"Свернуть")||Equals(b.Content,"В окно")),"main toolbar omits duplicate window controls and specifications");
             Check(actions.Where(b=>b.IsVisible).All(b=>b.ActualWidth==200&&b.ActualHeight==44),"home and navigation actions keep the shared rendered size");
             foreach(var button in actions.Where(b=>b.IsVisible))
@@ -55,7 +56,7 @@ internal static class Program
             var combos=Logical(editor).OfType<ComboBox>().ToList();
             Check(combos.All(c=>c.SelectedIndex==-1&&string.IsNullOrEmpty(c.Text))&&Logical(editor).OfType<DatePicker>().Single().SelectedDate is null,"new show opens with every selection date and time empty");
             var fromPerformance=(Window)Activator.CreateInstance(type,store,(long?)store.Performances().First().Id)!;
-            try{Check(Logical(fromPerformance).OfType<ComboBox>().All(c=>c.SelectedIndex==-1&&string.IsNullOrEmpty(c.Text)),"new show opened from a performance also requires explicit choices");}finally{fromPerformance.Close();}
+            try{Check(Logical(fromPerformance).OfType<ComboBox>().First().SelectedItem is PerformanceInfo selectedPerformance&&selectedPerformance.Id==store.Performances().First().Id,"new show opened from a performance uses the known choice");}finally{fromPerformance.Close();}
             Check(combos[0].IsEditable,"performance selection allows typed search");
             combos[0].ApplyTemplate();var performanceEdit=(TextBox)combos[0].Template.FindName("PART_EditableTextBox",combos[0]);performanceEdit.Focus();performanceEdit.Text="поиск";Pump();
             Check(combos[0].Items.Cast<PerformanceInfo>().Any(p=>p.Title=="ТЕАТР Поисковый спектакль UI")&&combos[0].Items.Cast<PerformanceInfo>().All(p=>SearchText.Matches(p.Title,"поиск")),"performance search uses beginning of significant word");
@@ -85,57 +86,10 @@ internal static class Program
             }));
             Click(editor,"Создать");Pump();if(nestedError is not null)throw nestedError;
             Check(combos[2].SelectedItem is PlanInfo plan&&plan.Name=="UI test pricing","new pricing selected after nested editor saves");
-            date.SelectedDate=DateTime.Today.AddDays(3);combos[3].Text="19";combos[4].Text="00";combos[5].Text="00";Click(editor,"Добавить дату");date.SelectedDate=date.SelectedDate!.Value.AddDays(1);combos[3].Text="20";combos[4].Text="45";combos[5].Text="12";Click(editor,"Добавить дату");
+            date.SelectedDate=DateTime.Today.AddDays(3);combos[3].Text="19";combos[4].Text="00";combos[5].Text="00";Click(editor,"Добавить дату");date.SelectedDate=DateTime.Today.AddDays(4);combos[3].Text="20";combos[4].Text="45";combos[5].Text="12";Click(editor,"Добавить дату");
             var dateList=Logical(editor).OfType<ListBox>().Single();Check(dateList.Items.Count==2,"multiple showing dates accumulate in one editor");
             Check(dateList.Items.Cast<DateTime>().Any(d=>d.Hour==20&&d.Minute==45&&d.Second==12),"each added date retains its own hours minutes and seconds");editor.Close();
-            var hallType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.HallEditorWindow")!;
-            var hallEditor=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;
-            Exception? hallError=null;
-            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
-            var hallFields=Logical(hallEditor).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
-            hallFields[0].Text="UI row hall";var rowCount=Field(hallEditor,"Количество рядов (1–200)");rowCount.Text="20";Field(hallEditor,"Ряды: начало или А, 1").Text="А";
-            Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Сектор")).IsSelected=true;
-            var rowsTab=Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Ряды и схема"));rowsTab.IsSelected=true;Pump();
-            Check(rowCount.IsVisible&&Field(hallEditor,"Мест в каждом ряду (1–300)").IsVisible,"row and seat counts are visible above the editable row table");
-            Logical(hallEditor).OfType<TabItem>().Single(tab=>Equals(tab.Header,"Ряды и схема")).IsSelected=true;Pump();
-            var rowGrid=Logical(hallEditor).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
-            Check(!rowGrid.IsReadOnly,"per-row seats and aisles are editable");
-            Check(rowGrid.Columns.OfType<DataGridTextColumn>().Any(column=>Equals(column.Header,"Промежуток после ряда")&&column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path=="RowGapAfter"),"per-row extra aisle spacing is editable in the hall row table");
-            Check(rowGrid.Items.Count==20,"row count produces a configuration row for every hall row");
-            ((HallRowLayout)rowGrid.Items[9]).SeatCount=17;rowCount.Text="2";rowCount.Text="20";
-            Check(((HallRowLayout)rowGrid.Items[9]).SeatCount==17,"intermediate row-count typing preserves customized row settings");
-            var configurations=rowGrid.Items.Cast<HallRowLayout>().ToArray();
-            foreach(var row in configurations){row.SeatCount=1;row.AisleAfter=0;}configurations[0].SeatCount=23;configurations[0].AisleAfter=10;
-            // The configured live row draft is now accepted by its context actions;
-            // Add sector opens the explicit new-sector popup, covered separately in Ui023.
-            var draftPreview=Logical(hallEditor).OfType<Tickets.App.HallView>().Single();
-            var materialize=(Action<long,Point>)typeof(Tickets.App.HallView).GetField("SeatContextRequested",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(draftPreview)!;
-            materialize(1,new Point(10,10));draftPreview.ContextMenu!.IsOpen=false;Pump();draftPreview.SetSelection(new long[]{1,2,3});
-            hallType.GetMethod("DeleteSelected",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(hallEditor,null);Click(hallEditor,"Шаг назад");
-            var draftSeats=(System.Collections.ICollection)hallType.GetField("seats",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(hallEditor)!;
-            Check(draftSeats.Count==42,"hall undo restores deleted places");
-            hallType.GetMethod("DeleteSelected",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(hallEditor,null);Click(hallEditor,"Сохранить как новый зал");
-            }catch(Exception ex){hallError=ex;hallEditor.Close();}}));
-            hallEditor.ShowDialog();Pump();if(hallError is not null)throw hallError;
-            var editedHall=store.Venues().Single(v=>v.Name=="UI row hall");var remaining=store.HallDraft(editedHall.Id);
-            Check(remaining.Count==39&&remaining.Where(x=>x.Row=="А").Select(x=>int.Parse(x.Number)).Order().SequenceEqual(Enumerable.Range(1,20)),"drawing deletion renumbers surviving places sequentially");
-            Check(remaining.Single(x=>x.Row=="А"&&x.Number=="1").X==60,"drawing deletion preserves original seat coordinates");
-            var automaticHall=(Window)Activator.CreateInstance(hallType,new object?[]{store,null})!;
-            Exception? automaticError=null;
-            app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{try{
-                var inputs=Logical(automaticHall).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToList();
-                inputs[0].Text="UI mixed automatic hall";Field(automaticHall,"Количество рядов (1–200)").Text="3";Field(automaticHall,"Ряды: начало или А, 1").Text="А, 1";Field(automaticHall,"Места: начало или А, 1").Text="А, 1";
-                var layoutGrid=Logical(automaticHall).OfType<DataGrid>().First(g=>g.Columns.Any(c=>Equals(c.Header,"Проход")));
-                foreach(var row in layoutGrid.Items.Cast<HallRowLayout>()){row.SeatCount=3;row.AisleAfter=0;}
-                var save=Logical(automaticHall).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить как новый зал"));
-                Check(save.IsVisible,"save hall is visible without scrolling");
-                Click(automaticHall,"Сохранить как новый зал");
-            }catch(Exception ex){automaticError=ex;automaticHall.Close();}}));
-            automaticHall.ShowDialog();Pump();if(automaticError is not null)throw automaticError;
-            var mixedHall=store.Venues().Single(v=>v.Name=="UI mixed automatic hall");
-            var mixedSeats=store.HallDraft(mixedHall.Id);
-            Check(mixedSeats.Count==9&&mixedSeats.Select(x=>x.Row).Distinct().OrderBy(x=>x).SequenceEqual(new[]{"1","2","А"}),"save builds configured first sector without a separate add action");
-            Check(mixedSeats.Where(x=>x.Row=="А").OrderBy(x=>x.X).Select(x=>x.Number).SequenceEqual(new[]{"А","1","2"}),"mixed seat labels preserve drawing order");
+            Hall027UiChecks.Run(store);
             var specType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.SpecificationWindow")!;
             var specWindow=(Window)Activator.CreateInstance(specType,store,"UI organization")!;specWindow.Show();Pump();
             var specFields=Logical(specWindow).OfType<TextBox>().Where(t=>t.Parent is StackPanel).ToArray();specFields[^1].Text="Билеты: Партер, ряд А. Условия согласованы.";
@@ -304,6 +258,9 @@ internal static class Program
             Isolated("docs021",Docs021UiChecks.Run);
             Isolated("pricing021",Pricing021UiChecks.Run);
             Isolated("hall021",HallEditor021Checks.Run);
+            Isolated("schedule-returns027",ScheduleReturns027UiChecks.Run);
+            Document027UiChecks.Run(store,main);
+            Main027UiChecks.Run(store,main);
             Isolated("hall024",Hall024Checks.Run);
             Isolated("corrections025",Corrections025UiChecks.Run);
             Isolated("recipients024",Recipients024Checks.Run);
@@ -909,8 +866,8 @@ internal static class Program
         Check(actions.Children.OfType<Button>().Select(button=>button.Name).ToHashSet().SetEquals(new[]{"ReserveButton","SaleStateButton","ReturnButton"}),"sidebar actions are reservation sale and return");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var extend=(Button)main.FindName("ExtendInvoiceButton");
         var upper=(Grid)main.FindName("UpperActions");var toolbarScroll=(ScrollViewer)upper.Parent;
-        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&ReferenceEquals(((FrameworkElement)print.Parent).Parent,upper)&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
-        Check(Grid.GetColumn(extend)==2&&Grid.GetColumn((UIElement)print.Parent)==3&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
+        Check(ReferenceEquals(print.Parent,issue.Parent)&&print.Parent is StackPanel {Orientation:Orientation.Horizontal}&&((FrameworkElement)print.Parent).Parent is Canvas&&!Logical(sidebar).Contains(print)&&!Logical(sidebar).Contains(issue),"printing and issuance share one row in the show toolbar");
+        Check(Grid.GetColumn(extend)==2&&upper.ColumnDefinitions.All(column=>column.Width.IsAuto),"three content-sized show actions precede the colored action stack");
         Check(toolbarScroll.HorizontalScrollBarVisibility==ScrollBarVisibility.Auto&&toolbarScroll.VerticalScrollBarVisibility==ScrollBarVisibility.Disabled&&Grid.GetColumnSpan(toolbarScroll)==1,"show toolbar scrolls horizontally within the hall column");
         Check(print.ActualWidth==72&&print.ActualHeight==72&&issue.ActualWidth==72&&issue.ActualHeight==72&&Equals(print.Style,issue.Style),"main printing and issuance use the same compact square style");
         var whiteActions=upper.Children.OfType<Button>().ToArray();

@@ -69,7 +69,7 @@ public partial class MainWindow
         var previous=Keyboard.FocusedElement;if(editorStack.TryPeek(out var prior))prior.IsEnabled=false;
         editorStack.Push(page);hostedEditors[page]=editor;DialogLayer.Children.Add(page);DialogLayer.Visibility=Visibility.Visible;MainContent.IsEnabled=false;
         KeyboardNavigation.SetTabNavigation(page,KeyboardNavigationMode.Cycle);
-        page.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Escape){e.Handled=true;editor.Close();}};
+        page.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Escape){e.Handled=true;if(Keyboard.FocusedElement is HallView hall&&hall.CancelPendingRowMove())return;editor.Close();}};
         var frame=new DispatcherFrame();EventHandler closed=(_,_)=>frame.Continue=false;editor.Closed+=closed;
         try
         {

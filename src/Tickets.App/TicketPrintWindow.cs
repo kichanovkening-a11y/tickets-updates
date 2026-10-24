@@ -35,9 +35,9 @@ internal sealed class TicketPrintWindow:EditorWindow
         if(draftSeatIds.Length==0)throw new TicketException("Для ранее выданных мест откройте печать существующих билетов.");
         Store.TicketPrintPreview(eventId,draftSeatIds,recipient,series,firstNumber);Initialize();
     }
-    public TicketPrintWindow(Store store,long eventId,IReadOnlyCollection<long> seatIds):base(store,"Повторная печать билетов",1000,850)
+    public TicketPrintWindow(Store store,long eventId,IReadOnlyCollection<long> seatIds):base(store,"Печать билетов",1000,850)
     {
-        this.eventId=eventId;this.seatIds=seatIds.ToArray();issuedSnapshot=Store.TicketReprint(eventId,this.seatIds);Initialize();
+        this.eventId=eventId;this.seatIds=seatIds.ToArray();issuedSnapshot=Store.TicketReprint(eventId,this.seatIds);Title=issuedSnapshot.Tickets.Any(t=>t.IsPrinted)?"Повторная печать билетов":"Печать билетов";Initialize();
     }
     private void Initialize()
     {
@@ -74,19 +74,21 @@ internal sealed class TicketPrintWindow:EditorWindow
             var info=issuedSnapshot!;
             var current=Store.TicketReprint(eventId,seatIds);
             if(!current.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id).SequenceEqual(info.Tickets.OrderBy(t=>t.SeatId).Select(t=>t.Id)))
-                throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для повторной печати.");
+                throw new TicketException("Билеты были возвращены или заменены. Закройте окно и выберите актуальные билеты для печати.");
             // Recreate from the issued snapshot with the exact preview settings.
             var size=UnifiedPrintPreview.PageSize(dialog);var document=BuildWithSources(info,size.Width,size.Height,dialog,true);
+            var previouslyPrinted=Printed||current.Tickets.Any(t=>t.IsPrinted);
             dialog.PrintDocument(document.DocumentPaginator,"Билеты · "+info.Title);submitted=true;Printed=true;
             try{Store.MarkTicketsPrinted(eventId,info.Tickets.Select(t=>t.Id).ToArray());}
             catch(Exception ex){MessageBox.Show(DialogOwner,"Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);}
-            status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":"Билеты повторно отправлены на печать.";
+            status.Text=draft?$"Выдача № {IssueId} сохранена. Билеты отправлены на печать.":previouslyPrinted?"Билеты повторно отправлены на печать.":"Билеты отправлены на печать.";
+            Title="Повторная печать билетов";
             refreshPreview?.Invoke();
         }
         catch(Exception ex)
         {
             if(submitted){status.Text="Задание уже отправлено принтеру. Не удалось отметить печать в базе: "+ex.Message;MessageBox.Show(DialogOwner,status.Text+" Проверьте очередь принтера перед повторной печатью.","Состояние печати",MessageBoxButton.OK,MessageBoxImage.Warning);return;}
-            if(IssueId>0)status.Text=$"Выдача № {IssueId} сохранена. Повторная печать использует те же серии и номера.";
+            if(IssueId>0)status.Text=$"Выдача № {IssueId} сохранена. Новая попытка печати использует те же серии и номера.";
             MessageBox.Show(DialogOwner,ex.Message,"Печать билетов",MessageBoxButton.OK,MessageBoxImage.Warning);
         }
     }

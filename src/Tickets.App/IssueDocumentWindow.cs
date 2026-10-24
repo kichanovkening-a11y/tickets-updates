@@ -99,14 +99,15 @@ internal sealed class IssueDocumentWindow:EditorWindow
         var table=new Table{CellSpacing=0,Margin=new Thickness(0,32,0,0)};
         table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});table.Columns.Add(new TableColumn{Width=new GridLength(width/2)});
         var group=new TableRowGroup();table.RowGroups.Add(group);
-        var identities=new[]{SignatureBlocks.Sender(invoice),SignatureBlocks.Recipient(invoice)};var labels=new[]{left,right};
+        var identities=new[]{SignatureBlocks.Sender(invoice),SignatureBlocks.Recipient(invoice)};if(SignatureBlocks.IsIndividualEntrepreneur(invoice)&&System.Text.RegularExpressions.Regex.IsMatch(left,@"(?i)руководитель|бухгалтер|директор"))left="";
+        var labels=new[]{left,right};
         foreach(var stage in new[]{0,1,2})
         {
             var row=new TableRow();group.Rows.Add(row);
             for(var i=0;i<2;i++)
             {
                 var cell=new TableCell{Padding=new Thickness(0)};
-                cell.Blocks.Add(new Paragraph(new Run(stage==0?labels[i]+": "+identities[i].Position:stage==1?"":"________________")){TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right,Margin=new Thickness(0),KeepWithNext=stage<2});
+                cell.Blocks.Add(new Paragraph(new Run(stage==0?(string.IsNullOrWhiteSpace(labels[i])?"":labels[i]+": ")+identities[i].Position:stage==1?"":"________________")){TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right,Margin=new Thickness(0),KeepWithNext=stage<2});
                 if(stage==0)cell.Blocks.Add(new Paragraph(new Run(identities[i].Name)){TextAlignment=i==0?TextAlignment.Left:TextAlignment.Right,Margin=new Thickness(0),KeepWithNext=true});
                 row.Cells.Add(cell);
             }

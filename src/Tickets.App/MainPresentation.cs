@@ -14,11 +14,12 @@ public partial class MainWindow
     private void UpdateCompactLayout()
     {
         EventSubtitle.Visibility=Workspace.ActualHeight>0&&Workspace.ActualHeight<550?Visibility.Collapsed:Visibility.Visible;
-        var venueLine=EventSubtitle.FontSize*EventSubtitle.FontFamily.LineSpacing;
-        var visible=EventSubtitle.Visibility==Visibility.Visible;
-        EventSummaryHeader.Margin=new Thickness(8,0,0,4+(visible?venueLine:0));
-        OrdinaryActionsScroll.Margin=new Thickness(8,EventTitle.FontSize*EventTitle.FontFamily.LineSpacing+4+(visible?5+venueLine:0),0,5);
-        SquareShowActions.Margin=new Thickness(0,visible?venueLine:0,3,0);
+        EventSummaryHeader.Margin=new Thickness(8,0,0,5);
+        OrdinaryActionsScroll.Margin=new Thickness(8,0,0,0);
+        Canvas.SetLeft(SquareShowActions,8+ChangePriceButton.ActualWidth+ChangePriceButton.Margin.Left+ChangePriceButton.Margin.Right+
+            UndoPriceButton.ActualWidth+UndoPriceButton.Margin.Left+UndoPriceButton.Margin.Right+
+            ExtendInvoiceButton.ActualWidth+ExtendInvoiceButton.Margin.Left+ExtendInvoiceButton.Margin.Right-OrdinaryActionsScroll.HorizontalOffset);
+        Canvas.SetTop(SquareShowActions,0);
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
             var navigation=layout.ActualWidth<1050?236d:280d;
@@ -27,6 +28,7 @@ public partial class MainWindow
             if(Workspace.ColumnDefinitions[1].Width.Value!=selection)Workspace.ColumnDefinitions[1].Width=new GridLength(selection);
         }
     }
+    private void ActionScrollChanged027(object sender,ScrollChangedEventArgs e)=>UpdateCompactLayout();
     private static TreeViewItem? NearestTreeItem(DependencyObject? source)
     {
         while(source is not null)

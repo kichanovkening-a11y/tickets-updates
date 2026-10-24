@@ -11,7 +11,9 @@ internal static class Ui023Checks
     {
         void Check(bool ok,string message){if(!ok)throw new Exception(message);Console.WriteLine("PASS 023 "+message);}
         var hall=new HallView();Check(!hall.SectorEditingEnabled,"issuance hall cannot move or rotate sectors");
-        var editor=new HallEditorWindow(store);editor.Show();Pump();
+        var initial=HallLayout.Generate("Партер",new[]{new HallRowLayout{Label="1",SeatCount=5}},"1",false,0);
+        var venue=store.CreateHall("UI023 context draft","",initial);
+        var editor=new HallEditorWindow(store,store.Venues().Single(v=>v.Id==venue));editor.Show();Pump();
         try
         {
             var flags=BindingFlags.NonPublic|BindingFlags.Instance;
@@ -19,11 +21,10 @@ internal static class Ui023Checks
             Check(preview.SectorEditingEnabled,"sector transforms exist only in hall editor");
             var tabs=Walk(editor.Content as DependencyObject).OfType<TabItem>().ToArray();
             Check(!tabs.Any(t=>Equals(t.Header,"Сдвиг")),"obsolete Shift tab is removed");
-            var places=(TextBox)typeof(HallEditorWindow).GetField("placesInput",flags)!.GetValue(editor)!;places.Text="5";Pump();
             preview.SetSelection(new long[]{1,2,3});
             var context=(Action<long,Point>)typeof(HallView).GetField("SeatContextRequested",flags)!.GetValue(preview)!;
             context(2,new Point(10,10));Pump();
-            Check(preview.Selected.Count==3,"right-click preserves selected group when materializing new draft");
+            Check(preview.Selected.Count==3,"right-click preserves selected group in copied draft");
             var menu=preview.ContextMenu!;
             var remove=menu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Удалить места"));remove.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));menu.IsOpen=false;
             var draft=(System.Collections.ObjectModel.ObservableCollection<DraftSeat>)typeof(HallEditorWindow).GetField("seats",flags)!.GetValue(editor)!;

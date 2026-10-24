@@ -77,7 +77,7 @@ internal sealed class RecipientsWindow:EditorWindow
         right.Children.Add(history);
         search.TextChanged+=(_,_)=>Try(Filter);
         organizations.SelectionChanged+=(_,_)=>Try(ShowHistory);
-        history.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Enter&&history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo}){e.Handled=true;Try(OpenSelected);}};
+        history.PreviewKeyDown+=(_,e)=>{if(ReturnedTicketDetails027.IsToggleSource(e.OriginalSource as DependencyObject))return;if(e.Key==Key.Enter&&history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo}){e.Handled=true;Try(OpenSelected);}};
         directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
     }
 
@@ -124,11 +124,17 @@ internal sealed class RecipientsWindow:EditorWindow
                 var item=showing.First();var caption=new TextBlock();caption.Inlines.Add(new System.Windows.Documents.Run(item.EventDate){FontSize=19});caption.Inlines.Add(new System.Windows.Documents.Run($" · {item.Venue}"));var date=new TreeViewItem{Header=caption,IsExpanded=true};node.Items.Add(date);
                 foreach(var issue in showing.OrderByDescending(x=>x.Issue.IssuedAt).ThenByDescending(x=>x.Issue.Id))
                 {
-                    var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date} · {issue.Issue.Sender}\nБилетов: {issue.Issue.Count} · возврат: {issue.Issue.ReturnedCount} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
+                    var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date} · {issue.Issue.Sender}\nБилетов: {issue.Issue.Count} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
                     var text=(TextBlock)row.Header;row.Header=null;
                     var check=new CheckBox{Width=18,Height=18,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)};
                     check.Checked+=(_,_)=>packageSelection.Add((issue.Issue.EventId,issue.Issue.Id));check.Unchecked+=(_,_)=>packageSelection.Remove((issue.Issue.EventId,issue.Issue.Id));
-                    var header=new DockPanel();DockPanel.SetDock(check,Dock.Left);header.Children.Add(check);header.Children.Add(text);row.Header=header;
+                    var header=new DockPanel();DockPanel.SetDock(check,Dock.Left);header.Children.Add(check);
+                    var body=new StackPanel();header.Children.Add(body);body.Children.Add(text);
+                    FrameworkElement? returned=null;
+                    var returnCount=ReturnedTicketDetails027.CreateToggle(issue.Issue.ReturnedCount,()=>Try(()=>{
+                        if(returned is null){returned=ReturnedTicketDetails027.CreateTable(Store,issue.Issue.EventId,issue.Issue.Id);body.Children.Add(returned);}
+                        else returned.Visibility=returned.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;
+                    }));returnCount.FontSize=17;body.Children.Add(returnCount);row.Header=header;
                     // Only the issue text opens its invoice; the sibling square only selects package membership.
                     text.PreviewMouseLeftButtonUp+=(_,e)=>{e.Handled=true;row.IsSelected=true;Try(OpenSelected);};date.Items.Add(row);
                 }

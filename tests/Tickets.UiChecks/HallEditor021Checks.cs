@@ -16,23 +16,12 @@ internal static class HallEditor021Checks
         try
         {
             editor.Show();Pump();
-            var rows=(DataGrid)type.GetField("rowTable",Private)!.GetValue(editor)!;
             var preview=(HallView)type.GetField("preview",Private)!.GetValue(editor)!;
-            var drawn=typeof(HallView).GetField("seats",Private)!;
-            Check(((List<SeatInfo>)drawn.GetValue(preview)!).Count==1,"new hall shows live draft without adding a sector");
-            Check(rows.IsVisible&&preview.IsVisible,"row editor and scheme are visible together");
-            rows.SelectedItem=rows.Items[0];rows.CurrentCell=new DataGridCellInfo(rows.Items[0],rows.Columns[1]);
-            rows.ScrollIntoView(rows.Items[0],rows.Columns[1]);rows.Focus();
-            Check(rows.BeginEdit(),"can begin an actual hall row cell transaction");Pump();
-            var cell=rows.Columns[1].GetCellContent(rows.Items[0]);
-            var text=cell as TextBox??Visual(cell!).OfType<TextBox>().First();text.Text="5";
-            text.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
-            Check(rows.CommitEdit(DataGridEditingUnit.Cell,true),"hall cell commits before its row transaction");
-            // This pump used to run the deferred Items.Refresh while EditItem was active.
-            Pump();
-            Check(rows.CommitEdit(DataGridEditingUnit.Row,true),"hall row commits without Refresh/EditItem exception");Pump();
-            Check(((List<SeatInfo>)drawn.GetValue(preview)!).Count==5,"committed row count updates the live scheme");
-            Check(((System.Collections.ICollection)type.GetField("seats",Private)!.GetValue(editor)!).Count==0,"live draft does not silently create hall seats");
+            var drawn=(List<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(preview)!;
+            Check(drawn.Count==0,"new hall starts empty until a creation method is accepted");
+            Check(Logical(editor).OfType<Button>().Any(b=>Equals(b.Content,"Загрузить скан — проба"))&&Logical(editor).OfType<Button>().Any(b=>Equals(b.Content,"Сетка как в старой программе")),"new hall offers scan and legacy grid creation");
+            Check(!Logical(editor).OfType<Expander>().Any(e=>Equals(e.Header,"Настройки рядов")),"obsolete manual row settings are absent");
+            Check(((System.Collections.ICollection)type.GetField("seats",Private)!.GetValue(editor)!).Count==0,"opening an empty hall never silently creates seats");
         }
         finally{editor.Close();Pump();}
         ScanReview(store);

@@ -39,8 +39,10 @@ public static class HallEditing025
         var vx=last.X-first.X;var vy=last.Y-first.Y;var len=Math.Sqrt(vx*vx+vy*vy);if(len<.001){vx=1;vy=0;len=1;}
         var ux=vx/len;var uy=vy/len;var result=new List<RowAnchor>{new(first.X+8-ux*24,first.Y+8-uy*24)};
         var gaps=points.Zip(points.Skip(1),(a,b)=>new{A=a,B=b,Distance=Math.Sqrt(Math.Pow(a.X-b.X,2)+Math.Pow(a.Y-b.Y,2))}).ToArray();
-        var standard=gaps.Length==0?20:gaps.Min(g=>g.Distance);var gap=gaps.Where(g=>g.Distance>=standard+12&&g.Distance>=32).MaxBy(g=>g.Distance);
-        if(gap is not null)result.Add(new((gap.A.X+gap.B.X)/2+8,(gap.A.Y+gap.B.Y)/2+8,true));
+        var standard=gaps.Length==0?20:Math.Min(20,gaps.Min(g=>g.Distance));
+        var stored=row.Select(s=>s.RowAisleAnchors).FirstOrDefault(a=>a is not null);
+        if(stored is not null)result.AddRange(stored.Where(a=>a.Centre));
+        else foreach(var gap in gaps.Where(g=>g.Distance>=standard+12&&g.Distance>=32))result.Add(new((gap.A.X+gap.B.X)/2+8,(gap.A.Y+gap.B.Y)/2+8,true));
         result.Add(new(last.X+8+ux*24,last.Y+8+uy*24));return result;
     }
     internal static SeatInfo[] LogicalSeats(IReadOnlyList<SeatInfo> row)

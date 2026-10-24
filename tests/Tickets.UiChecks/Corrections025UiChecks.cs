@@ -88,7 +88,7 @@ internal static class Corrections025UiChecks
         var bill=(Window)Activator.CreateInstance(billType,BindingFlags.Instance|BindingFlags.NonPublic,null,[store,show.Id,issue,IssueDocumentKinds.Bill],null)!;bill.Width=1030;bill.Show();Pump();
         try
         {
-            Check(bill.Title==recipient&&Walk(bill).OfType<TextBlock>().Any(t=>t.Text==$"Счёт — выдача № {issue}"&&t.LayoutTransform is RotateTransform{Angle:90}),"bill uses recipient header and vertical issue flag");
+            Check(bill.Title==recipient&&Walk(bill).OfType<TextBlock>().Any(t=>t.Text.Replace("\n","")==$"Выдача №{issue}"&&t.LayoutTransform is not RotateTransform),"bill uses recipient header and upright stacked issue flag");
             var date=Walk(bill).OfType<DatePicker>().Single();Check(date.Width==140&&date.FontSize==19&&date.FontWeight==FontWeights.Bold,"contract metadata date stays fixed width and larger bold");Capture(bill,"025-bill-metadata");
         }
         finally{bill.Close();Pump();}
@@ -131,9 +131,9 @@ internal static class Corrections025UiChecks
             var formatted=(FormattedText)typeof(HallView).GetMethod("Text",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,["Бельэтаж",15.6,Brushes.SlateGray])!;formatted.TextAlignment=TextAlignment.Center;
             var outlines=formatted.BuildGeometry(new Point()).Bounds;var native=new DrawingGroup();using(var context=native.Open())context.DrawText(formatted,new Point());
             Console.WriteLine($"025 caption metrics: rendered={ink}; upper={upper}; clearance={upper-ink.Bottom}; outlineRelative={outlines}; nativeRelative={native.Bounds}");
-            Check(ink.Top>253&&ink.Top>240&&ink.Left>=0&&ink.Right<=816,"slanted sector heading moves below old title into own inter-zone gap");
-            Check(seats.All(s=>!ink.IntersectsWith(new Rect(s.X,s.Y,16,16))),"local sector heading does not overlap either zone seats");
-            Check(upper-ink.Bottom>=43.9,"local upper-envelope keeps two standard spacings above own seats");
+            Check(ink.Left>=0&&ink.Right<=816&&Math.Abs((ink.Left+ink.Right)/2-408)<.1,"slanted sector heading stays centered over its own sector");
+            Check(seats.Where(s=>s.Sector=="Бельэтаж").All(s=>!ink.IntersectsWith(new Rect(s.X,s.Y,16,16))),"local sector heading stays above its own seats");
+            Check(Math.Abs(seats.Where(s=>s.Sector=="Бельэтаж").Min(s=>s.Y)-ink.Bottom-5)<.1,"sector heading sits five pixels above first row");
         }
         finally{window.Close();}
     }
@@ -145,13 +145,23 @@ internal static class Corrections025UiChecks
             var hall=(HallView)type.GetField("preview",Private)!.GetValue(editor)!;
             var notify=(Action<long,Point>)typeof(HallView).GetField("SeatContextRequested",Private)!.GetValue(hall)!;
             int CountDrawn()=>((IEnumerable<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(hall)!).Count();
-            notify(1,new Point());hall.ContextMenu!.IsOpen=false;type.GetMethod("Undo",Private)!.Invoke(editor,null);Pump();
-            Check(((IEnumerable<DraftSeat>)type.GetField("seats",Private)!.GetValue(editor)!).Count()==0&&CountDrawn()==1,"undo materialization restores initial live draft");
-            var places=(TextBox)type.GetField("placesInput",Private)!.GetValue(editor)!;places.Text="3";Pump();
-            Check(CountDrawn()==3,"row edits after undo regenerate the live initial-sector preview");
-            notify(1,new Point());hall.ContextMenu!.IsOpen=false;
+            void AddFirstSector()
+            {
+                Exception? error=null;
+                editor.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
+                    var popup=Application.Current.Windows.OfType<HallSectorWindow023>().Single();
+                    try{var inputs=Walk(popup).OfType<TextBox>().ToArray();inputs[0].Text="Партер";inputs[1].Text="1";inputs[2].Text="3";Walk(popup).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}
+                    catch(Exception ex){error=ex;popup.Close();}
+                }));
+                Walk(editor).OfType<Button>().Single(b=>Equals(b.Content,"Добавить сектор")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();if(error is not null)throw error;
+            }
+            Check(CountDrawn()==0,"new hall has no implicit manual sector");AddFirstSector();Check(CountDrawn()==3,"explicit sector acceptance creates the draft");
+            type.GetMethod("Undo",Private)!.Invoke(editor,null);Pump();
+            Check(!((IEnumerable<DraftSeat>)type.GetField("seats",Private)!.GetValue(editor)!).Any()&&CountDrawn()==0,"undo first sector restores the empty hall");
+            AddFirstSector();
             var rowNotify=(Action<long,Point>)typeof(HallView).GetField("RowContextRequested",Private)!.GetValue(hall)!;rowNotify(1,new Point());hall.ContextMenu!.IsOpen=false;
-            hall.ContextMenu.Items.OfType<MenuItem>().Single(m=>Equals(m.Header,"Сделать проход")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Pump();places.Text="4";Pump();
+            hall.ContextMenu.Items.OfType<MenuItem>().Single(m=>Equals(m.Header,"Сделать проход")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));Pump();
+            typeof(HallEditorWindow).GetMethod("Refresh",Private)!.Invoke(editor,[false]);Pump();
             Check(CountDrawn()==0,"deliberately deleting last row never regenerates draft seats");
         }
         finally{editor.Close();Pump();}

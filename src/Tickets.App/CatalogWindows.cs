@@ -267,7 +267,7 @@ internal sealed class EventEditorWindow : EditorWindow
         var form=new StackPanel{Margin=new Thickness(25)};Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         var performances=store.Performances();
         var performance=Combo(form,"Спектакль — введите начало значимого слова",performances,"Title");
-        performance.SelectedIndex=-1;performance.Text="";
+        performance.SelectedItem=performances.FirstOrDefault(p=>p.Id==performanceId);performance.Text=(performance.SelectedItem as PerformanceInfo)?.Title??"";
         performance.FontWeight=FontWeights.SemiBold;performance.IsEditable=true;performance.IsTextSearchEnabled=false;performance.StaysOpenOnEdit=true;
         var filtering=false;
         performance.AddHandler(TextBox.TextChangedEvent,new TextChangedEventHandler((_,e)=>{
@@ -294,6 +294,7 @@ internal sealed class EventEditorWindow : EditorWindow
         var planRow=new Grid();planRow.ColumnDefinitions.Add(new ColumnDefinition());planRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         plan.Margin=new Thickness(0,0,10,0);plan.VerticalAlignment=VerticalAlignment.Center;planRow.Children.Add(plan);
         var createPlan=new Button{Content="Создать",Margin=new Thickness(0)};Grid.SetColumn(createPlan,1);planRow.Children.Add(createPlan);form.Children.Add(planRow);
+        plan.SetBinding(FrameworkElement.HeightProperty,new Binding(nameof(FrameworkElement.ActualHeight)){Source=createPlan});
         void LoadPlans(){plan.ItemsSource=venue.SelectedItem is VenueInfo v?store.Plans(v.Id):Array.Empty<PlanInfo>();plan.SelectedIndex=-1;}
         createPlan.Click+=(_,_)=>Try(()=>{
             if(venue.SelectedItem is not VenueInfo v)throw new TicketException("Выберите зал.");
@@ -304,7 +305,16 @@ internal sealed class EventEditorWindow : EditorWindow
         form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});
         var dateRow=new Grid();dateRow.ColumnDefinitions.Add(new ColumnDefinition());dateRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});form.Children.Add(dateRow);
         var date=new DatePicker{SelectedDate=null,CalendarStyle=new Style(typeof(Calendar),(Style)Application.Current.FindResource(typeof(Calendar))){Setters={new Setter(FrameworkElement.LayoutTransformProperty,new ScaleTransform(1.3,1.3))}},FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
-        date.Loaded+=(_,_)=>{date.ApplyTemplate();if(date.Template.FindName("PART_Button",date) is UIElement button)button.Visibility=Visibility.Collapsed;};dateRow.Children.Add(date);
+        date.Loaded+=(_,_)=>{
+            date.ApplyTemplate();if(date.Template.FindName("PART_Button",date) is UIElement button)button.Visibility=Visibility.Collapsed;
+            if(date.Template.FindName("PART_TextBox",date) is System.Windows.Controls.Primitives.DatePickerTextBox input)
+            {
+                // Keep the DatePicker's outer field; its editable part needs neither a second frame nor a watermark.
+                var content=new FrameworkElementFactory(typeof(ScrollViewer),"PART_ContentHost");
+                input.Template=new ControlTemplate(typeof(System.Windows.Controls.Primitives.DatePickerTextBox)){VisualTree=content};
+                input.BorderThickness=new Thickness(0);input.Background=Brushes.Transparent;
+            }
+        };dateRow.Children.Add(date);
         var calendarButton=new Button{Content="Календарь",Margin=new Thickness(0)};Grid.SetColumn(calendarButton,1);dateRow.Children.Add(calendarButton);calendarButton.Click+=(_,_)=>date.IsDropDownOpen=!date.IsDropDownOpen;
         form.Children.Add(new TextBlock{Text="Время",Margin=new Thickness(0,12,0,5)});
         var timeRow=new WrapPanel();form.Children.Add(timeRow);
@@ -321,6 +331,8 @@ internal sealed class EventEditorWindow : EditorWindow
             var showing=date.SelectedDate.Value.Date+CatalogText.Time(hours.Text,minutes.Text,seconds.Text);
             if(dates.Contains(showing))throw new TicketException("Такая дата и время уже добавлены.");
             dates.Add(showing);dateList.SelectedItem=showing;
+            date.SelectedDate=null;date.Text="";
+            foreach(var part in new[]{hours,minutes,seconds}){part.SelectedIndex=-1;part.Text="";}
         }));
         form.Children.Add(dateList);
         var removeDate=new MenuItem{Header="Удалить дату"};removeDate.Click+=(_,_)=>{if(dateList.SelectedItem is DateTime d)dates.Remove(d);};

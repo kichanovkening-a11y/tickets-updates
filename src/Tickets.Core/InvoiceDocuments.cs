@@ -164,11 +164,12 @@ public static class InvoiceDocuments
     }
     internal static XElement SignaturesTable(InvoiceInfo invoice,string left,string right,int width=9600)
     {
+        if(SignatureBlocks.IsIndividualEntrepreneur(invoice)&&System.Text.RegularExpressions.Regex.IsMatch(left,@"(?i)руководитель|бухгалтер|директор"))left="";
         var labels=new[]{left,right};var parties=new[]{SignatureBlocks.Sender(invoice),SignatureBlocks.Recipient(invoice)};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",new XElement(W+"tblW",new XAttribute(W+"w",width),new XAttribute(W+"type","dxa")),new XElement(W+"tblLayout",new XAttribute(W+"type","fixed")),new XElement(W+"tblCellMar",new[]{"top","left","bottom","right"}.Select(e=>new XElement(W+e,new XAttribute(W+"w",0),new XAttribute(W+"type","dxa"))))),new XElement(W+"tblGrid",Enumerable.Range(0,2).Select(_=>new XElement(W+"gridCol",new XAttribute(W+"w",width/2)))));
         foreach(var signatureRow in new[]{0,1,2})
             table.Add(new XElement(W+"tr",new XElement(W+"trPr",new XElement(W+"cantSplit")),Enumerable.Range(0,2).Select(i=>{
-                var paragraph=Paragraph(signatureRow==2?"________________":signatureRow==1?"":labels[i]+": "+parties[i].Position,false,20);
+                var paragraph=Paragraph(signatureRow==2?"________________":signatureRow==1?"":(string.IsNullOrWhiteSpace(labels[i])?"":labels[i]+": ")+parties[i].Position,false,20);
                 paragraph.Element(W+"pPr")!.Add(new XElement(W+"jc",new XAttribute(W+"val",i==0?"left":"right")),signatureRow<2?new XElement(W+"keepNext"):null);
                 return new XElement(W+"tc",new XElement(W+"tcPr",new XElement(W+"tcW",new XAttribute(W+"w",width/2),new XAttribute(W+"type","dxa"))),signatureRow==0?new[]{paragraph,SignatureBlocks.NameParagraph(parties[i].Name,paragraph)}:new[]{paragraph});
             })));

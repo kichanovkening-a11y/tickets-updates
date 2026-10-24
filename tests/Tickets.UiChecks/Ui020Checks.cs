@@ -100,7 +100,7 @@ internal static class Ui020Checks
                 var nearest=own.Min(Distance);var upper=own.Where(seat=>Distance(seat)<=nearest+.001).Min(seat=>seat.Y);
                 var left=own.Min(seat=>seat.X);var right=own.Max(seat=>seat.X)+16;
                 Console.WriteLine($"025 {name} sector '{sector.Name}': ink={ink}; ownX={left}..{right}; localUpper={upper}; clearance={upper-ink.Bottom}; sideExtension={Math.Max(0,Math.Max(left-ink.Left,ink.Right-right))}");
-                Check(upper-ink.Bottom>=43.9,"real sector heading retains two standard spacings above its local seats");
+                Check(Math.Abs(own.Min(seat=>seat.Y)-ink.Bottom-5)<.1,"real sector heading stays five pixels above first row");
             }
             Check(headings.Length>=sectors.Length,"actual hall drawing contains each sector heading");
             Check(headings.All(heading=>!renderedSeats.Any(seat=>heading.Bounds.IntersectsWith(new Rect(seat.X,seat.Y,16,16)))),"actual sector heading glyph bounds do not intersect any seat");

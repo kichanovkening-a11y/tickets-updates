@@ -48,12 +48,13 @@ internal static class SignatureBlocksChecks
     private static void Check(XDocument xml,string kind)
     {
         var table=xml.Root!.Element(W+"body")!.Elements(W+"tbl").Last();
-        var line=table.Elements(W+"tr").First(r=>r.Elements(W+"tc").All(c=>Text(c).StartsWith("________")));
+        var line=table.Elements(W+"tr").First(r=>r.Elements(W+"tc").All(c=>string.IsNullOrWhiteSpace(Text(c))||Text(c).StartsWith("________"))&&r.Descendants(W+"t").Any(t=>t.Value.StartsWith("________")));
         if(line.Elements(W+"tc").Count()!=2)throw new Exception("two baseline columns "+kind);
         var gap=line.PreviousNode as XElement;if(gap is null||gap.Descendants(W+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value)))throw new Exception("blank below identities "+kind);
         var names=(XElement)gap.PreviousNode!;
         foreach(var cell in names.Elements(W+"tc"))
         {
+            if(string.IsNullOrWhiteSpace(Text(cell)))continue;
             var paragraphs=cell.Elements(W+"p").ToArray();
             if(paragraphs.Length<2)throw new Exception("position and name must be separate paragraphs "+kind);
             var expectedAlignment=cell==names.Elements(W+"tc").First()?"left":"right";

@@ -11,6 +11,8 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--hall027")&&!name.StartsWith("027 hall"))return;
+    if(args.Contains("--corrections027")&&!name.StartsWith("027"))return;
     if(args.Contains("--corrections026")&&!name.StartsWith("026"))return;
     total++;
     var caseDirectory=System.IO.Path.Combine(root,total.ToString());
@@ -39,6 +41,10 @@ void Reject(Action action)
 Hall024Checks.Register(Test);
 Corrections025Checks.Register(Test);
 Corrections026Checks.Register(Test);
+Corrections027HallDrawingChecks.Register(Test);
+Corrections027DocumentChecks.Register(Test);
+Hall027Checks.Register(Test);
+ScheduleReturns027Checks.Register(Test);
 Hall023Checks.Register(Test);
 Cleanup023Checks.Register(Test);
 RecipientPackage023Checks.Register(Test);

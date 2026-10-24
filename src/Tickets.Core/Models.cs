@@ -8,6 +8,7 @@ public sealed record EventInfo(long Id, long VenueId, string Title, string Venue
 public sealed record SeatInfo(long Id, string Sector, string Row, string Number, double X, double Y,
     long? Amount, string Color, long? TicketId, string Recipient, string Series, long? TicketNumber, bool IsBlocked=false, long? IssueId=null, bool IsPrinted=false, bool IsReserved=false, bool IsHidden=false)
 {
+    public IReadOnlyList<HallEditing025.RowAnchor>? RowAisleAnchors {get;init;}
     public bool Available => !IsHidden && Amount.HasValue && !TicketId.HasValue && !IsBlocked;
     public string Label => $"{Sector} · ряд {Row}, место {Number}";
     public string Status => TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";

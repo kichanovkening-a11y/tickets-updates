@@ -31,7 +31,7 @@ internal static class SourceBusinessForms
     internal static bool CanUseSource(string kind,string template)=>template.Replace("\r\n","\n").Replace('\r','\n').Split('\n').Length==DefaultText(kind).Split('\n').Length;
     public static Dictionary<string,string> Values(InvoiceInfo invoice,string kind="")
     {
-        var seller=DocumentParties.Sender(invoice);var buyer=invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient);
+        var seller=DocumentParties.Sender(invoice);if(SignatureBlocks.IsIndividualEntrepreneur(invoice))seller=seller with {Position=""};var buyer=invoice.RecipientDetails??new OrganizationDetails(Name:invoice.Recipient);
         string Representative(OrganizationDetails details)=>string.IsNullOrWhiteSpace(details.Signatory)?"":"в лице "+string.Join(" ",new[]{details.Position,details.Signatory}.Where(v=>!string.IsNullOrWhiteSpace(v)));
         var values=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase){["contractNumber"]=string.IsNullOrWhiteSpace(invoice.ContractNumber)?invoice.Id.ToString():invoice.ContractNumber,["contractDate"]=(invoice.ContractDate??DateTimeOffset.Parse(invoice.IssuedAt).Date).ToString("dd.MM.yyyy"),["receivedBy"]=DocumentParties.ReceivedBy(invoice),["issueId"]=invoice.Id.ToString(),["date"]=invoice.Date,["sender"]=string.IsNullOrWhiteSpace(seller.LegalName)?invoice.Sender:seller.LegalName,["recipient"]=string.IsNullOrWhiteSpace(buyer.LegalName)?invoice.Recipient:buyer.LegalName,["event"]=invoice.Title,["venue"]=invoice.VenueWithAddress,["venueAddress"]=invoice.VenueAddress,["eventDate"]=invoice.EventDate,["count"]=invoice.Tickets.Count.ToString(),["amount"]=DocumentTotals.Amount(invoice.Total),["amountWords"]=RussianWords.Money(invoice.Total),["countWords"]=RussianWords.Number(invoice.Tickets.Count),["summary"]=DocumentTotals.Summary(invoice.Tickets.Count,invoice.Total),["total"]=DocumentTotals.Total(invoice.Tickets.Count,invoice.Total),["lineCountWords"]=RussianWords.Number(kind==IssueDocumentKinds.Bill?1:BusinessLines(invoice).Count),["sellerRepresentative"]=Representative(seller),["buyerRepresentative"]=Representative(buyer)};
         foreach(var (prefix,details) in new[]{("sender",seller),("recipient",buyer)})
@@ -204,7 +204,7 @@ internal static class SourceBusinessForms
         if(document.Kind==IssueDocumentKinds.Contract)foreach(var font in table.Descendants(W+"rFonts")){font.SetAttributeValue(W+"ascii","Times New Roman");font.SetAttributeValue(W+"hAnsi","Times New Roman");}
         if(document.Kind==IssueDocumentKinds.Waybill)
         {
-            table.Add(new XElement(W+"tr",new XElement(W+"tc",InvoiceDocuments.Paragraph("Главный (старший) бухгалтер: ________________\nОтпуск груза произвел: ________________\nМ.П.",false,16)),new XElement(W+"tc",InvoiceDocuments.Paragraph("Груз принял: ________________\nМ.П.",false,16))));
+            table.Add(new XElement(W+"tr",new XElement(W+"tc",InvoiceDocuments.Paragraph((SignatureBlocks.IsIndividualEntrepreneur(document.Invoice)?"":"Главный (старший) бухгалтер: ________________\n")+"Отпуск груза произвел: ________________\nМ.П.",false,16)),new XElement(W+"tc",InvoiceDocuments.Paragraph("Груз принял: ________________\nМ.П.",false,16))));
         }
         if(section is null)body.Add(InvoiceDocuments.Paragraph(""),InvoiceDocuments.Paragraph(""),table);
         else section.AddBeforeSelf(InvoiceDocuments.Paragraph(""),InvoiceDocuments.Paragraph(""),table);

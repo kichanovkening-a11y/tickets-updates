@@ -20,7 +20,7 @@ internal static class Corrections026UiChecks
             Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                 var editor=Application.Current.Windows.OfType<Window>().Single(w=>w!=main&&w.IsVisible&&(w.GetType().Name is "CustomIssueDocumentWindow" or "IssueDocumentWindow" or "SpecificationWindow"));
                 try{
-                    var elements=Walk(editor).ToArray();var label=elements.OfType<TextBlock>().Where(t=>t.LayoutTransform is RotateTransform{Angle:90}).ToArray();
+                    var elements=Walk(editor).ToArray();var label=elements.OfType<TextBlock>().Where(t=>t.Text.Replace("\n","")=="Выдача №"+issue&&t.LayoutTransform is not RotateTransform).ToArray();
                     Check(editor.Title==recipient&&label.Length==1,"026 "+kind+" has recipient header and one external tab");
                     Check(!elements.OfType<TextBlock>().Any(t=>t.Text=="Получатель: "+recipient),"026 no duplicated recipient label");
                     var commands=elements.OfType<Button>().Where(b=>b.Content is string text&&(text=="Открыть в Word"||text=="Печать"||text=="Накладная"||text=="Спецификация")).ToArray();

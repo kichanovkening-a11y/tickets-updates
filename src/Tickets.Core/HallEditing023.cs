@@ -6,14 +6,14 @@ public static class HallEditing023
     public static void Move(IReadOnlyList<DraftSeat> seats,double dx,double dy)
     {
         if(!double.IsFinite(dx)||!double.IsFinite(dy))throw new TicketException("Некорректное перемещение.");
-        foreach(var s in seats){s.X+=dx;s.Y+=dy;}
+        foreach(var s in seats){s.X+=dx;s.Y+=dy;s.RowAisleAnchors=HallAnchors027.Move(s.RowAisleAnchors,dx,dy);}
     }
     public static void Rotate(IReadOnlyList<DraftSeat> seats,double degrees)
     {
         if(!double.IsFinite(degrees))throw new TicketException("Некорректный угол.");
         if(seats.Count==0)return;
         var cx=seats.Average(s=>s.X);var cy=seats.Average(s=>s.Y);var a=degrees*Math.PI/180;
-        foreach(var s in seats){var x=s.X-cx;var y=s.Y-cy;s.X=cx+x*Math.Cos(a)-y*Math.Sin(a);s.Y=cy+x*Math.Sin(a)+y*Math.Cos(a);}
+        foreach(var s in seats){var x=s.X-cx;var y=s.Y-cy;s.X=cx+x*Math.Cos(a)-y*Math.Sin(a);s.Y=cy+x*Math.Sin(a)+y*Math.Cos(a);s.RowAisleAnchors=HallAnchors027.Rotate(s.RowAisleAnchors,cx,cy,a);}
     }
     // Insert one chair-width gap before each selected run, following the stored row order,
     // including rotated rows. No place is removed or renumbered by this operation.
@@ -30,13 +30,38 @@ public static class HallEditing023
             if(Math.Abs(dy)>Math.Abs(dx)&&dy<0){dx=-dx;dy=-dy;}
             // Curved rows are stored by Y/X, often interleaving their left and right
             // ends. Sort on their geometric major axis instead of database order.
-            var ordered=points.OrderBy(s=>s.X*dx+s.Y*dy).ToArray();var length=1d;
-            var gaps=0;var previous=false;
-            foreach(var s in ordered)
+            var ordered=points.OrderBy(s=>s.X*dx+s.Y*dy).ToArray();
+            HallAnchors027.Capture(points);
+            var anchors=points[0].RowAisleAnchors!;
+            var original=ordered.Select(s=>(s.X+8)*dx+(s.Y+8)*dy).ToArray();
+            var shifts=new double[ordered.Length];var starts=new List<int>();var gaps=0;var previous=false;
+            for(var i=0;i<ordered.Length;i++)
             {
-                var active=chosen.Contains(s);if(active&&!previous)gaps++;
-                s.X+=dx/length*20*gaps;s.Y+=dy/length*20*gaps;previous=active;
+                var seat=ordered[i];var active=chosen.Contains(seat);
+                if(active&&!previous){gaps++;starts.Add(i);}
+                shifts[i]=20*gaps;seat.X+=dx*shifts[i];seat.Y+=dy*shifts[i];previous=active;
             }
+            // Carry saved centres by this explicit geometry edit only. Never derive
+            // previous aisle positions from the surviving seats after deletions.
+            double Shift(double position)
+            {
+                if(position<=original[0])return shifts[0];
+                for(var i=1;i<original.Length;i++)if(position<=original[i])
+                {
+                    var span=original[i]-original[i-1];var t=span<.001?0:(position-original[i-1])/span;
+                    return shifts[i-1]+(shifts[i]-shifts[i-1])*t;
+                }
+                return shifts[^1];
+            }
+            var updated=anchors.Select(a=>{var shift=Shift(a.X*dx+a.Y*dy);return a with{X=a.X+dx*shift,Y=a.Y+dy*shift};}).ToList();
+            foreach(var i in starts.Where(i=>i>0))
+            {
+                // Widening an existing aisle keeps its saved caption; only a new
+                // selected-run boundary introduces an additional aisle number.
+                if(anchors.Any(a=>{var p=a.X*dx+a.Y*dy;return p>=original[i-1]&&p<=original[i];}))continue;
+                updated.Add(new((ordered[i-1].X+ordered[i].X)/2+8,(ordered[i-1].Y+ordered[i].Y)/2+8,true));
+            }
+            foreach(var seat in points)seat.RowAisleAnchors=updated.ToArray();
         }
     }
     public static IReadOnlyList<SeatInfo> WithEstradaPlaceholders(IReadOnlyList<SeatInfo> source)

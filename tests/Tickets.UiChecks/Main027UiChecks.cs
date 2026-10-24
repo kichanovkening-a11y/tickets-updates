@@ -70,6 +70,11 @@ internal static class Main027UiChecks
             Check(changed is {Count:6}&&changed.All(s=>s.Y==0)&&changed.All(s=>Math.Abs(s.X-seats[(int)s.Id-1].X-changed[0].X)<.00001)&&changed[0].X>0,"row move changes only horizontal coordinates of its own places");
             changed=null;Move(hall,new Point(200,150));hall.EditRow("Партер","7");Move(hall,new Point(250,220));hall.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(hall),0,Key.Escape){RoutedEvent=Keyboard.KeyDownEvent});Pump();Check(changed is null,"Escape cancels pending row move");
             Corrections025UiChecks.Capture(window,"027-hall-caption-and-aisles");
+            var fixedAnchor=new HallEditing025.RowAnchor(108,8,true);
+            hall.Load(new[]{120d,140,160}.Select((x,i)=>new SeatInfo(i+1,"Партер","7",(i+1).ToString(),x,0,0,"#ABCDEF",null,"","",null){RowAisleAnchors=new[]{fixedAnchor}}).ToArray(),[new SectorInfo("Партер",120,-26)],true);Pump();
+            var targets=(List<(Rect Bounds,long Id)>)typeof(HallView).GetField("rowHits",Private)!.GetValue(hall)!;
+            Check(targets.Count==3&&Math.Abs(targets[1].Bounds.X+targets[1].Bounds.Width/2-fixedAnchor.X)<.001,"aisle label stays fixed after deleting the whole block on one side");
+            Check(!targets[0].Bounds.IntersectsWith(targets[1].Bounds),"outer row number stays clear of the fixed aisle number after edge deletion");
         }finally{window.Close();}
     }
     private static void Move(FrameworkElement target,Point point){var screen=target.PointToScreen(point);SetCursorPos((int)screen.X,(int)screen.Y);PumpInput();}

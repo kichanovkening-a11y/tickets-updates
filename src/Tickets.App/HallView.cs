@@ -123,6 +123,15 @@ public sealed class HallView : FrameworkElement
             var sectorSeats=visible.ToLookup(s=>s.Sector);
             var seatBounds=visible.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
             var rowLabels=new List<RowCaption>();
+            var fixedCaptions=new List<Rect>();
+            foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
+            {
+                var text=Text(row.Key.Row,14.3,Brushes.Black);var glyphs=new DrawingGroup();using(var context=glyphs.Open())context.DrawText(text,new Point());
+                if(glyphs.Bounds.IsEmpty)continue;
+                foreach(var anchor in HallEditing025.RowAnchors(row.ToArray()).Where(a=>a.Centre))
+                    fixedCaptions.Add(new Rect(anchor.X-glyphs.Bounds.Width/2,anchor.Y-glyphs.Bounds.Height/2,glyphs.Bounds.Width,glyphs.Bounds.Height));
+            }
+            var rowObstacles=seatBounds.Concat(fixedCaptions).ToArray();
             // Keep the logical anchors fixed; resolve only small rendered-ink
             // collisions locally, before headings reserve the final row labels.
             foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
@@ -133,7 +142,7 @@ public sealed class HallView : FrameworkElement
                 foreach(var anchor in HallEditing025.RowAnchors(row.ToArray()))
                 {
                     var ink=new Rect(anchor.X-native.Bounds.Width/2,anchor.Y-native.Bounds.Height/2,native.Bounds.Width,native.Bounds.Height);
-                    rowLabels.Add(PlaceRowCaption(new(label,native.Bounds,ink,ink,row.Min(s=>s.Id),anchor.Centre),seatBounds,rowLabels));
+                    rowLabels.Add(PlaceRowCaption(new(label,native.Bounds,ink,ink,row.Min(s=>s.Id),anchor.Centre),rowObstacles,rowLabels));
                 }
             }
             var captionBounds=rowLabels.Select(label=>label.Ink).ToList();

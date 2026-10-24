@@ -11,7 +11,7 @@ internal static class TicketlandCurrent0281Checks
     internal static void Register(Action<string,Action<Store>> run)
     {
         run("0281 current Ticketland report uses event dates and actual XML fields",_=>{
-            using var c=Session(Metadata,Report());var r=Fetch(c);var s=r.Sales.Single();
+            using var c=Session(Metadata,Report());var r=Fetch(c);Check(r.IsCurrentEventSnapshot,"XML snapshot migration marker missing");var s=r.Sales.Single();
             Check(s.Barcode=="123456789"&&s.Sector=="Партер"&&s.Row=="1"&&s.Seat=="2"&&s.Nominal==500&&s.Title=="Дубровский","swapped field identities");
         });
         run("0281 current Ticketland submits observed forms fields and follows secure login redirect",_=>{
@@ -66,6 +66,24 @@ internal static class TicketlandCurrent0281Checks
             var saved=store.SaveEditedHall(b,"0281 renamed hall","new address",draft);
             Check(saved==b&&store.Venues().Count==before,"renaming hall silently created another visible hall");
             Check(!store.Venues().Any(v=>v.Id==a)&&store.Venues().Single(v=>v.Id==b).Name=="0281 renamed hall","deleted hall reappeared or title not updated");
+        });
+        run("0281 current XML corrects legacy page footer without losing active sales",store=>{
+            var venue=store.CreateHall("0281 migration","",[new(){Sector="Партер",Row="1",Number="2",X=0,Y=0}]);
+            var seat=store.VenueSeats(venue).Single().Id;var plan=store.SavePlan(venue,"price",[new(seat,500,"#FF0000")]);
+            var at=new DateTime(2026,10,27,19,0,0);var ev=store.CreateEvent(store.SavePerformance("Дубровский"),venue,plan,at);
+            var time=DateTimeOffset.UtcNow;var wrong=new TicketlandSale028("4стр. из 19 Личный кабинет backstage",new DateTime(2026,10,24,18,22,20),"Партер","1","2","123456789",500);
+            store.ApplyTicketlandReport028(new([wrong],time),true);
+            var constructor=typeof(TicketlandReport028).GetConstructor([typeof(IReadOnlyList<TicketlandSale028>),typeof(DateTimeOffset),typeof(bool)]);Check(constructor is not null,"current XML migration marker missing");
+            var corrected=(TicketlandReport028)constructor!.Invoke([new[]{wrong with{Title="Дубровский",StartsAt=at}},time.AddMinutes(1),true]);
+            store.ApplyTicketlandReport028(corrected,true);Check(store.Seats(ev).Single().IsTicketlandSold,"footer correction did not map actual showing");
+            var cached=store.CachedTicketlandReport028();Check(cached.Sales.Single().Title==CatalogText.Key("Дубровский"),"invalid page heading retained");store.ApplyTicketlandReport028(cached,true);
+        });
+        run("0281 current XML cannot change genuine prior seat identities",store=>{
+            var time=DateTimeOffset.UtcNow;var sale=new TicketlandSale028("Дубровский",new DateTime(2026,10,27,19,0,0),"Партер","1","2","123456789",500);
+            store.ApplyTicketlandReport028(new([sale],time),true);
+            var constructor=typeof(TicketlandReport028).GetConstructor([typeof(IReadOnlyList<TicketlandSale028>),typeof(DateTimeOffset),typeof(bool)]);Check(constructor is not null,"current XML migration marker missing");
+            var changed=(TicketlandReport028)constructor!.Invoke([new[]{sale with{Title="Другой спектакль"}},time.AddMinutes(1),true]);
+            try{store.ApplyTicketlandReport028(changed,true);}catch(TicketException){Check(store.TicketlandLastSync028==time,"rejected identity change updated last sync");return;}throw new Exception("genuine prior identity changed");
         });
         run("0281 delete hall then edit another preserves deletion",store=>{
             var a=store.CreateHall("0281 deleted","",[new(){Sector="Партер",Row="1",Number="1",X=0,Y=0}]);var b=store.CreateHall("0281 active","",[new(){Sector="Партер",Row="1",Number="1",X=0,Y=0}]);store.DeleteVenue(a);

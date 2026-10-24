@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Microsoft.Data.Sqlite;
 
 namespace Tickets.Core;
@@ -75,8 +76,13 @@ public sealed partial class Store
             {
                 q.Transaction=tx;using var r=q.ExecuteReader();if(r.Read())
                 {
-                    if(r.GetString(0)!=sale.Title||DateTime.Parse(r.GetString(1),CultureInfo.InvariantCulture)!=sale.StartsAt||r.GetString(2)!=sale.Sector||r.GetString(3)!=sale.Row||r.GetString(4)!=sale.Seat||decimal.Parse(r.GetString(5),CultureInfo.InvariantCulture)!=sale.Nominal)throw new TicketException("Штрихкод Ticketland изменил место или стоимость. Последняя успешная загрузка сохранена.");
-                    if(!r.IsDBNull(6)&&!r.IsDBNull(7)){priorEvent=r.GetInt64(6);priorSeat=r.GetInt64(7);}
+                    // Old HTML continuation pages could replace the showing heading with this
+                    // exact report footer. A fully validated current XML snapshot may repair
+                    // that known invalid heading once; seat labels and amount stay immutable.
+                    static bool Footer(string title)=>Regex.IsMatch(title,@"^\d+СТР\. ИЗ \d+ ЛИЧНЫЙ КАБИНЕТ BACKSTAGE$",RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1));
+                    var repairFooter=replace&&report.IsCurrentEventSnapshot&&Footer(r.GetString(0))&&!Footer(sale.Title);
+                    if((!repairFooter&&(r.GetString(0)!=sale.Title||DateTime.Parse(r.GetString(1),CultureInfo.InvariantCulture)!=sale.StartsAt))||r.GetString(2)!=sale.Sector||r.GetString(3)!=sale.Row||r.GetString(4)!=sale.Seat||decimal.Parse(r.GetString(5),CultureInfo.InvariantCulture)!=sale.Nominal)throw new TicketException("Штрихкод Ticketland изменил место или стоимость. Последняя успешная загрузка сохранена.");
+                    if(!repairFooter&&!r.IsDBNull(6)&&!r.IsDBNull(7)){priorEvent=r.GetInt64(6);priorSeat=r.GetInt64(7);}
                 }
             }
             long? eventId=null;long? seatId=null;

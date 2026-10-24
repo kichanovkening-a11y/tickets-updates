@@ -6,7 +6,7 @@ using System.Text.Json;
 namespace Tickets.Core;
 
 public sealed record TicketlandSale028(string Title, DateTime StartsAt, string Sector, string Row, string Seat, string Barcode, decimal Nominal);
-public sealed record TicketlandReport028(IReadOnlyList<TicketlandSale028> Sales, DateTimeOffset FetchedAt);
+public sealed record TicketlandReport028(IReadOnlyList<TicketlandSale028> Sales, DateTimeOffset FetchedAt, bool IsCurrentEventSnapshot=false);
 
 /// <summary>Session-scoped SSRS forms authentication. Credentials are never persisted.</summary>
 public sealed class TicketlandClient028 : IDisposable
@@ -66,7 +66,7 @@ public sealed class TicketlandClient028 : IDisposable
             query.Add(Uri.EscapeDataString(parameters.To)+"="+Uri.EscapeDataString(to.Date.ToString("yyyy-MM-dd'T'23:59:59",CultureInfo.InvariantCulture)));
             query.Add(Uri.EscapeDataString(parameters.Period)+"="+parameters.Value);
             var report=await SendAsync(new HttpRequestMessage(HttpMethod.Get,new Uri(Origin,"ReportServer?"+string.Join("&",query))),timeout.Token);
-            return new(TicketlandXml0281.Parse(report.Text,from.Date,to.Date),DateTimeOffset.UtcNow);
+            return new(TicketlandXml0281.Parse(report.Text,from.Date,to.Date),DateTimeOffset.UtcNow,IsCurrentEventSnapshot:true);
         }
         catch(OperationCanceledException) when(ct.IsCancellationRequested){throw;}
         catch(TicketException ex){throw new TicketException("Вход в Ticketland выполнен. "+ex.Message);}

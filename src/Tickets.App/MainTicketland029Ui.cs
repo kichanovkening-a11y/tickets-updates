@@ -24,8 +24,15 @@ public partial class MainWindow
     {
         if(TicketlandIsUpdating028||ticketlandManualRefresh029)return;
         ticketlandManualRefresh029=true;UpdateTicketlandRefreshState029();
-        try{await RefreshTicketland028();HandleTicketlandReview029();}
-        finally{ticketlandManualRefresh029=false;UpdateTicketlandRefreshState029();}
+        try
+        {
+            await RefreshTicketland028();
+            if(!Dispatcher.HasShutdownStarted)await Dispatcher.InvokeAsync(HandleTicketlandReview029);
+        }
+        finally
+        {
+            if(!Dispatcher.HasShutdownStarted)await Dispatcher.InvokeAsync(()=>{ticketlandManualRefresh029=false;UpdateTicketlandRefreshState029();});
+        }
     }
 
     private void RefreshTicketlandBringIntoView029(object sender,RequestBringIntoViewEventArgs e)

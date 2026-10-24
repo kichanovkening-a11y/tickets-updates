@@ -290,10 +290,14 @@ internal sealed class EventEditorWindow : EditorWindow
         var venue=Combo(form,"Площадка / зал",store.Venues(),"Name");venue.SelectedIndex=-1;
         var plan=Combo(form,"Расценовка",Array.Empty<PlanInfo>(),"");
         var planText=new FrameworkElementFactory(typeof(TextBlock));planText.SetBinding(TextBlock.TextProperty,new Binding{Converter=new PlanCaptionConverter(store)});plan.ItemTemplate=new DataTemplate{VisualTree=planText};
-        form.Children.Remove(plan);
+        var planLabel=(TextBlock)form.Children[form.Children.IndexOf(plan)-1];
+        form.Children.Remove(planLabel);form.Children.Remove(plan);
         var planRow=new Grid();planRow.ColumnDefinitions.Add(new ColumnDefinition());planRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
+        planRow.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});planRow.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});
+        planLabel.TextAlignment=TextAlignment.Center;planLabel.Margin=new Thickness(0,10,10,4);planRow.Children.Add(planLabel);
+        Grid.SetRow(plan,1);
         plan.Margin=new Thickness(0,0,10,0);plan.VerticalAlignment=VerticalAlignment.Center;planRow.Children.Add(plan);
-        var createPlan=new Button{Content="Создать",Margin=new Thickness(0)};Grid.SetColumn(createPlan,1);planRow.Children.Add(createPlan);form.Children.Add(planRow);
+        var createPlan=new Button{Content="Создать",Margin=new Thickness(0)};Grid.SetColumn(createPlan,1);Grid.SetRow(createPlan,1);planRow.Children.Add(createPlan);form.Children.Add(planRow);
         plan.SetBinding(FrameworkElement.HeightProperty,new Binding(nameof(FrameworkElement.ActualHeight)){Source=createPlan});
         void LoadPlans(){plan.ItemsSource=venue.SelectedItem is VenueInfo v?store.Plans(v.Id):Array.Empty<PlanInfo>();plan.SelectedIndex=-1;}
         createPlan.Click+=(_,_)=>Try(()=>{
@@ -302,8 +306,9 @@ internal sealed class EventEditorWindow : EditorWindow
             if(editor.ShowDialog()==true){LoadPlans();plan.SelectedItem=plan.Items.Cast<PlanInfo>().FirstOrDefault(p=>p.Id==editor.CreatedId);}
         });
         venue.SelectionChanged+=(_,_)=>Try(LoadPlans);LoadPlans();
-        form.Children.Add(new TextBlock{Text="Дата",Margin=new Thickness(0,12,0,5)});
+        var dateLabel=new TextBlock{Text="Дата",Margin=new Thickness(0,12,10,5),TextAlignment=TextAlignment.Center};
         var dateRow=new Grid();dateRow.ColumnDefinitions.Add(new ColumnDefinition());dateRow.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});form.Children.Add(dateRow);
+        dateRow.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});dateRow.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});dateRow.Children.Add(dateLabel);
         var date=new DatePicker{SelectedDate=null,CalendarStyle=new Style(typeof(Calendar),(Style)Application.Current.FindResource(typeof(Calendar))){Setters={new Setter(FrameworkElement.LayoutTransformProperty,new ScaleTransform(1.3,1.3))}},FontSize=26,Height=44,VerticalContentAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,10,0)};
         date.Loaded+=(_,_)=>{
             date.ApplyTemplate();if(date.Template.FindName("PART_Button",date) is UIElement button)button.Visibility=Visibility.Collapsed;
@@ -314,8 +319,13 @@ internal sealed class EventEditorWindow : EditorWindow
                 input.Template=new ControlTemplate(typeof(System.Windows.Controls.Primitives.DatePickerTextBox)){VisualTree=content};
                 input.BorderThickness=new Thickness(0);input.Background=Brushes.Transparent;
             }
-        };dateRow.Children.Add(date);
-        var calendarButton=new Button{Content="Календарь",Margin=new Thickness(0)};Grid.SetColumn(calendarButton,1);dateRow.Children.Add(calendarButton);calendarButton.Click+=(_,_)=>date.IsDropDownOpen=!date.IsDropDownOpen;
+        };Grid.SetRow(date,1);dateRow.Children.Add(date);
+        OnShown(()=>Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,new Action(()=>{
+            date.ApplyTemplate();
+            if(date.Template.FindName("PART_TextBox",date) is System.Windows.Controls.Primitives.DatePickerTextBox input)
+            {input.ApplyTemplate();input.Focus();Keyboard.Focus(input);input.CaretIndex=input.Text.Length;}
+        })));
+        var calendarButton=new Button{Content="Календарь",Margin=new Thickness(0)};Grid.SetColumn(calendarButton,1);Grid.SetRow(calendarButton,1);dateRow.Children.Add(calendarButton);calendarButton.Click+=(_,_)=>date.IsDropDownOpen=!date.IsDropDownOpen;
         form.Children.Add(new TextBlock{Text="Время",Margin=new Thickness(0,12,0,5)});
         var timeRow=new WrapPanel();form.Children.Add(timeRow);
         ComboBox Part(string title,int count)

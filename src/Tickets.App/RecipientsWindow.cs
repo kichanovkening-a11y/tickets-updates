@@ -12,6 +12,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private readonly CheckBox showDeleted=new(){Content="Показать удалённых",Margin=new Thickness(0,5,0,5)};
     private readonly ListBox organizations=new(){DisplayMemberPath=nameof(RecipientDirectoryInfo.Caption),HorizontalContentAlignment=HorizontalAlignment.Stretch,FontSize=16,FontWeight=FontWeights.Bold};
     private readonly TreeView history=new();
+    private readonly List<FrameworkElement> returnedDetails028=[];
     private readonly TextBlock heading=new(){FontSize=21,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap};
     private readonly TextBlock summary=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,10)};
     private readonly Button edit;
@@ -77,6 +78,10 @@ internal sealed class RecipientsWindow:EditorWindow
         right.Children.Add(history);
         search.TextChanged+=(_,_)=>Try(Filter);
         organizations.SelectionChanged+=(_,_)=>Try(ShowHistory);
+        history.PreviewMouseLeftButtonUp+=(_,e)=>{
+            if(ReturnedTicketDetails027.IsEmptySpaceSource(history,e.OriginalSource as DependencyObject))
+                foreach(var details in returnedDetails028)details.Visibility=Visibility.Collapsed;
+        };
         history.PreviewKeyDown+=(_,e)=>{if(ReturnedTicketDetails027.IsToggleSource(e.OriginalSource as DependencyObject))return;if(e.Key==Key.Enter&&history.SelectedItem is TreeViewItem {Tag:RecipientIssueInfo}){e.Handled=true;Try(OpenSelected);}};
         directory=Store.RecipientDirectory(showDeleted.IsChecked==true);Filter();
     }
@@ -92,7 +97,7 @@ internal sealed class RecipientsWindow:EditorWindow
 
     private void ShowHistory()
     {
-        packageSelection.Clear();history.Items.Clear();
+        packageSelection.Clear();history.Items.Clear();returnedDetails028.Clear();
         var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};edit.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
@@ -132,7 +137,7 @@ internal sealed class RecipientsWindow:EditorWindow
                     var body=new StackPanel();header.Children.Add(body);body.Children.Add(text);
                     FrameworkElement? returned=null;
                     var returnCount=ReturnedTicketDetails027.CreateToggle(issue.Issue.ReturnedCount,()=>Try(()=>{
-                        if(returned is null){returned=ReturnedTicketDetails027.CreateTable(Store,issue.Issue.EventId,issue.Issue.Id);body.Children.Add(returned);}
+                        if(returned is null){returned=ReturnedTicketDetails027.CreateTable(Store,issue.Issue.EventId,issue.Issue.Id);body.Children.Add(returned);returnedDetails028.Add(returned);}
                         else returned.Visibility=returned.Visibility==Visibility.Visible?Visibility.Collapsed:Visibility.Visible;
                     }));returnCount.FontSize=17;body.Children.Add(returnCount);row.Header=header;
                     // Only the issue text opens its invoice; the sibling square only selects package membership.

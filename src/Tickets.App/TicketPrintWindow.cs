@@ -62,6 +62,10 @@ internal sealed class TicketPrintWindow:EditorWindow
         var submitted=false;
         try
         {
+            // Ask before issuance as well: mixed selections may contain printed tickets.
+            var existing=issuedSnapshot??originalOccupied;
+            var selected=existing is null?null:Store.TicketReprint(eventId,existing.Tickets.Select(t=>t.SeatId).ToArray());
+            if(!ConfirmReprint(Printed||selected?.Tickets.Any(t=>t.IsPrinted)==true))return;
             // All cancellation and printable-area checks happen before issuance.
             if(draft&&IssueId==0)
             {
@@ -92,6 +96,9 @@ internal sealed class TicketPrintWindow:EditorWindow
             MessageBox.Show(DialogOwner,ex.Message,"Печать билетов",MessageBoxButton.OK,MessageBoxImage.Warning);
         }
     }
+
+    internal bool ConfirmReprint(bool previouslyPrinted)
+        =>!previouslyPrinted||MessageBox.Show(DialogOwner,"Среди выбранных билетов есть уже напечатанные. Напечатать выбранные билеты повторно?","Повторная печать билетов",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)==MessageBoxResult.Yes;
 
     private static InvoiceInfo Combine(InvoiceInfo fresh,InvoiceInfo? occupied)
         =>occupied is null?fresh:fresh with{Tickets=fresh.Tickets.Concat(occupied.Tickets).ToArray()};

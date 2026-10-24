@@ -11,7 +11,7 @@ public static class SeatSelection
     public static bool RemoveOnDrag(IEnumerable<SeatInfo> seats,IEnumerable<long> initial,double x,double y)
         =>Hit(seats,x,y) is { } seat && initial.Contains(seat.Id);
 
-    public static bool CanSelect(SeatInfo seat)=>!seat.IsHidden&&!seat.TicketId.HasValue&&!seat.IsReserved&&!seat.IsBlocked;
+    public static bool CanSelect(SeatInfo seat)=>!seat.IsHidden&&!seat.IsTicketlandSold&&!seat.TicketId.HasValue&&!seat.IsReserved&&!seat.IsBlocked;
 
     public static void Toggle(HashSet<long> selection,SeatInfo seat)
     { if(CanSelect(seat))Toggle(selection,seat.Id);else selection.Remove(seat.Id); }

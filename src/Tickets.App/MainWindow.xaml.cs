@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);
+        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);InitializeTicketland028();
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         UpperActions.SizeChanged+=(_,_)=>UpdateCompactLayout();
@@ -191,7 +191,7 @@ public partial class MainWindow : Window
     {
         if(!ready) return;
         var selected=Hall.SelectedSeats;
-        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0),AlertBrush=s.TicketId.HasValue||s.IsBlocked?Brushes.Red:Brushes.Black}).ToList();
+        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0),AlertBrush=s.TicketId.HasValue||s.IsBlocked||s.IsTicketlandSold?Brushes.Red:Brushes.Black}).ToList();
         SelectedPriceSummary.ItemsSource=selected.GroupBy(s=>s.Amount).OrderByDescending(g=>g.Key).Select(g=>$"{(g.Key.HasValue?InvoiceDocuments.Money(g.Key.Value):"Без цены")} × {g.Count()} = {InvoiceDocuments.Money(g.Sum(s=>s.Amount??0))}").Append($"Всего: {selected.Count} · {InvoiceDocuments.Money(selected.Sum(s=>s.Amount??0))}").ToList();
         IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Получатель: {g.Key} — мест: {g.Count()}"));
         IssuedRecipients.Visibility=string.IsNullOrEmpty(IssuedRecipients.Text)?Visibility.Collapsed:Visibility.Visible;
@@ -209,8 +209,8 @@ public partial class MainWindow : Window
         var allBlocked=selected.Count>0&&selected.All(x=>x.IsBlocked);
         SaleStateButton.Content=allBlocked?"Разблокировать":"Заблокировать";
         SaleStateButton.ToolTip=null;
-        SaleStateButton.IsEnabled=!archived&&selected.Count>0&&issued==0&&(allBlocked||selected.All(x=>!x.IsBlocked));
-        ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue);
+        SaleStateButton.IsEnabled=!archived&&selected.Count>0&&issued==0&&selected.All(s=>!s.IsTicketlandSold)&&(allBlocked||selected.All(x=>!x.IsBlocked));
+        ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue&&!s.IsTicketlandSold);
         UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
         ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
         SelectionHint.Text=archived?"Показ удалён из рабочих списков. Накладные доступны в журнале.":selected.Count==0?"Клик и рамка выбирают места. Для занятых мест доступны исходная накладная и возврат.":
@@ -316,6 +316,7 @@ public partial class MainWindow : Window
     {
         var source=e.OriginalSource as DependencyObject;
         if(ReturnedTicketDetails027.IsToggleSource(source))return;
+        if(ReturnedTicketDetails027.IsEmptySpaceSource(HistoryGrid,source)){CollapseReturnedDetails028();return;}
         for(var node=source;node is not null&&node!=HistoryGrid;node=node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
             if(node is CheckBox)return;
         var row=source is null?null:ItemsControl.ContainerFromElement(HistoryGrid,source) as DataGridRow;

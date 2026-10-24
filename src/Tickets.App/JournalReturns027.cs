@@ -6,6 +6,13 @@ namespace Tickets.App;
 
 public partial class MainWindow
 {
+    private void CollapseReturnedDetails028()
+    {
+        foreach(var item in HistoryGrid.Items)
+            if(HistoryGrid.ItemContainerGenerator.ContainerFromItem(item) is DataGridRow row)
+                row.DetailsVisibility=Visibility.Collapsed;
+    }
+
     private void ReturnCountLoaded027(object sender,RoutedEventArgs e)
     {
         if(sender is not ContentControl host||host.DataContext is not JournalIssueRow issue)return;

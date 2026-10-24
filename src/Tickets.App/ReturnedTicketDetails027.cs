@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -26,6 +27,18 @@ internal static class ReturnedTicketDetails027
             if(source is FrameworkElement element&&ReferenceEquals(element.Tag,ToggleMarker))return true;
             source=source is FrameworkContentElement content?content.Parent:
                 source is Visual?VisualTreeHelper.GetParent(source):LogicalTreeHelper.GetParent(source);
+        }
+        return false;
+    }
+
+    internal static bool IsEmptySpaceSource(ItemsControl host,DependencyObject? source)
+    {
+        if(source is null||IsToggleSource(source))return false;
+        for(var node=source;node is not null;node=node is FrameworkContentElement content?content.Parent:
+            node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
+        {
+            if(ReferenceEquals(node,host))return true;
+            if(node is DataGridRow or TreeViewItem or ButtonBase or ScrollBar)return false;
         }
         return false;
     }

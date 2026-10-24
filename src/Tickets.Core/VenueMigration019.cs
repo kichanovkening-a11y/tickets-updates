@@ -19,7 +19,8 @@ public sealed partial class Store
         {
             // Only the two exact imported hall identities are replaced. Custom or similarly named
             // halls (including «Новая сцена театра Русская песня») must remain untouched.
-            using var query=Command(c,"SELECT id,name,address FROM venue WHERE id=$original AND name=$n AND id NOT IN(SELECT old_venue_id FROM hall_layout_migration_019 UNION SELECT new_venue_id FROM hall_layout_migration_019)","$n",name,"$original",originalId);
+            // A prior catalogue deletion must not create a new visible replacement on upgrade.
+            using var query=Command(c,"SELECT id,name,address FROM venue WHERE id=$original AND name=$n AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='venue' AND h.entity_key=CAST(venue.id AS TEXT)) AND id NOT IN(SELECT old_venue_id FROM hall_layout_migration_019 UNION SELECT new_venue_id FROM hall_layout_migration_019)","$n",name,"$original",originalId);
             using var r=query.ExecuteReader();while(r.Read())targets.Add((r.GetInt64(0),r.GetString(1),r.GetString(2),seats));
         }
         if(targets.Count==0)return;

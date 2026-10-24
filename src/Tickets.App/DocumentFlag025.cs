@@ -11,9 +11,9 @@ internal static class DocumentFlag025
             window.Loaded+=(_,_)=>{if(!editor.IsInline&&window.Content is UIElement body){window.Content=null;window.Content=Separate(body,editor.DocumentTab);}};
         }
     }
-    internal static Border Tab(string text)=>new(){Width=27,Background=Brushes.AliceBlue,BorderBrush=Brushes.SlateGray,BorderThickness=new Thickness(1,1,0,1),
+    internal static Border Tab(string text)=>new(){Width=27,Background=Brushes.Red,BorderBrush=Brushes.SlateGray,BorderThickness=new Thickness(1,1,0,1),
         HorizontalAlignment=HorizontalAlignment.Right,VerticalAlignment=VerticalAlignment.Top,Margin=new Thickness(0,60,-1,0),
-        Child=new TextBlock{Text=string.Join("\n",text.Select(c=>c.ToString())),FontSize=18,Margin=new Thickness(2,5,2,5),FontWeight=FontWeights.Bold,TextAlignment=TextAlignment.Center}};
+        Child=new TextBlock{Foreground=Brushes.White,Text=string.Join("\n",text.Select(c=>c.ToString())),FontSize=18,Margin=new Thickness(2,5,2,5),FontWeight=FontWeights.Bold,TextAlignment=TextAlignment.Center}};
     internal static UIElement Separate(UIElement body,string text)
     {
         var root=new Grid();root.ColumnDefinitions.Add(new(){Width=GridLength.Auto});root.ColumnDefinitions.Add(new());

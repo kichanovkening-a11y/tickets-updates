@@ -14,9 +14,10 @@ public sealed record SeatInfo(long Id, string Sector, string Row, string Number,
         get=>rowAisleAnchors;
         init=>rowAisleAnchors=value is null?null:new RowAisleAnchorList027(value);
     }
-    public bool Available => !IsHidden && Amount.HasValue && !TicketId.HasValue && !IsBlocked;
+    public bool IsTicketlandSold {get;init;}
+    public bool Available => !IsHidden && !IsTicketlandSold && Amount.HasValue && !TicketId.HasValue && !IsBlocked;
     public string Label => $"{Sector} · ряд {Row}, место {Number}";
-    public string Status => TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";
+    public string Status => IsTicketlandSold ? (TicketId.HasValue ? $"Конфликт: продано Ticketland и выдано локально: {Recipient}" : "Продано Ticketland") : TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";
 }
 public sealed record SectorInfo(string Name, double X, double Y);
 public sealed record TicketInfo(long Id, long SeatId, string Sector, string Row, string Seat,

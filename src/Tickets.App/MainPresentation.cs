@@ -69,5 +69,6 @@ public partial class MainWindow
         }
         PriceSummaryLayout.Arrange(LegendPanel);
         AddLegend("Бронь / накладная",Brushes.Black);AddLegend("Распечатаны",Brushes.Red);AddLegend("× Заблокировано",Brushes.Gray);AddLegend("Нет цены",Brushes.Gainsboro);
+        if(seats.Any(s=>s.IsTicketlandSold))AddLegend("Продано Ticketland",Brushes.Red);
     }
 }

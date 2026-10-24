@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--corrections028")&&!name.StartsWith("028"))return;
     if(args.Contains("--hall027")&&!(name.StartsWith("027")&&(name.Contains("hall")||name.Contains("sector")||name.Contains("aisle"))))return;
     if(args.Contains("--corrections027")&&!name.StartsWith("027"))return;
     if(args.Contains("--corrections026")&&!name.StartsWith("026"))return;
@@ -39,6 +40,9 @@ void Reject(Action action)
     throw new Exception("seed has no event with 3 priced seats");
 }
 Hall024Checks.Register(Test);
+DeletedVenue028Checks.Register(Test);
+TicketlandClient028Checks.Register(Test);
+TicketlandStore028Checks.Register(Test);
 Corrections025Checks.Register(Test);
 Corrections026Checks.Register(Test);
 Corrections027HallDrawingChecks.Register(Test);

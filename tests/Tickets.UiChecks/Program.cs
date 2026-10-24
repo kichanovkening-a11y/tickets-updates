@@ -38,6 +38,7 @@ internal static class Program
             DocumentEditor019Checks.Run();
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--corrections028",StringComparer.Ordinal)){PrintSchedule028UiChecks.Run(store,main);ReturnedDetails028UiChecks.Run(store,main);TicketlandCredentials028UiChecks.Run();TicketlandConnection028UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections027",StringComparer.Ordinal)){Hall027UiChecks.Run(store);ScheduleReturns027UiChecks.Run(store);Document027UiChecks.Run(store,main);Main027UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections025",StringComparer.Ordinal)){Corrections025UiChecks.Run(store);Corrections026UiChecks.Run(store,main);main.Close();return 0;}
             var actions=Logical(main).OfType<Button>().ToList();

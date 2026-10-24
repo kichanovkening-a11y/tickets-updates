@@ -31,6 +31,13 @@ public sealed partial class Store
     public InvoiceInfo TicketReprint(long eventId,IReadOnlyCollection<long> seatIds)
     {
         ValidatePrintSelection(seatIds);
+        using(var c=Open())
+        using(var query=Command(c,"SELECT seat_id FROM ticketland_sale_028 WHERE event_id=$e AND seat_id IS NOT NULL","$e",eventId))
+        {
+            using var reader=query.ExecuteReader();
+            while(reader.Read())if(seatIds.Contains(reader.GetInt64(0)))
+                throw new TicketException("Выбранное место продано Ticketland. Печать билетов с конфликтом отменена.");
+        }
         var active=History(eventId).Where(t=>t.ReturnedAt is null).ToDictionary(t=>t.SeatId);
         if(seatIds.Any(id=>!active.ContainsKey(id)))throw new TicketException("Для повторной печати выберите только выданные и не возвращённые билеты этого показа.");
         var tickets=seatIds.Select(id=>active[id]).ToList();

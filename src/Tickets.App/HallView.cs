@@ -225,6 +225,9 @@ public sealed class HallView : FrameworkElement
         }
         group.Freeze(); drawing=group;
         bounds=drawing.Bounds;
+        // Rotated glyph ink can be smaller than the selectable caption rectangle.
+        // Fit the entire hit region so every part remains reachable after fitting.
+        foreach(var caption in sectorHits)bounds.Union(caption.Bounds);
         if(bounds.IsEmpty) bounds=new Rect(0,0,100,100);
     }
 

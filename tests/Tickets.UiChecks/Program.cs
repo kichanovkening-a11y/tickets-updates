@@ -259,8 +259,11 @@ internal static class Program
             Isolated("pricing021",Pricing021UiChecks.Run);
             Isolated("hall021",HallEditor021Checks.Run);
             Isolated("schedule-returns027",ScheduleReturns027UiChecks.Run);
-            Document027UiChecks.Run(store,main);
-            Main027UiChecks.Run(store,main);
+            Isolated("document027",s=>Document027UiChecks.Run(s,main));
+            Isolated("main027",s=>{
+                var isolatedMain=new Tickets.App.MainWindow(s);isolatedMain.Show();Pump();
+                try{Main027UiChecks.Run(s,isolatedMain);}finally{isolatedMain.Close();}
+            });
             Isolated("hall024",Hall024Checks.Run);
             Isolated("corrections025",Corrections025UiChecks.Run);
             Isolated("recipients024",Recipients024Checks.Run);

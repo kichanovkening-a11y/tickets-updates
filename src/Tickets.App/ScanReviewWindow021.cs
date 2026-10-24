@@ -84,7 +84,7 @@ internal sealed class ScanReviewWindow021 : EditorWindow
         table.ItemsSource=marks;sidebar.Children.Add(table);
         table.RowEditEnding+=(_,_)=>Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ContextIdle,new Action(Draw));
         overlay.MouseLeftButtonDown+=(_,e)=>{
-            if(e.ClickCount!=2)return;var point=e.GetPosition(overlay);marks.Add(new Mark{X=point.X,Y=point.Y,Row="",Number=""});Draw();e.Handled=true;
+            if(e.ClickCount!=2){table.SelectedItems.Clear();e.Handled=true;return;}var point=e.GetPosition(overlay);marks.Add(new Mark{X=point.X,Y=point.Y,Row="",Number=""});Draw();e.Handled=true;
         };
         Draw();
     }

@@ -47,6 +47,10 @@ internal static class HallEditor021Checks
                     var grid=(DataGrid)type.GetField("table",Private)!.GetValue(review)!;
                     Check(!grid.IsReadOnly&&grid.Items.Count==9,"scan trial detects actual synthetic chair outlines and overrides readonly app style");
                     Check(grid.Items.Cast<object>().All(mark=>!(bool)mark.GetType().GetProperty("Reviewed")!.GetValue(mark)!),"all detected scan identities start unreviewed");
+                    grid.SelectedItems.Add(grid.Items[0]);grid.SelectedItems.Add(grid.Items[1]);
+                    var overlay=(Canvas)type.GetField("overlay",Private)!.GetValue(review)!;
+                    overlay.RaiseEvent(new System.Windows.Input.MouseButtonEventArgs(System.Windows.Input.Mouse.PrimaryDevice,0,System.Windows.Input.MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonDownEvent});
+                    Check(grid.SelectedItems.Count==0&&grid.Items.Count==9,"empty scan click clears all selected marks without changing the scheme");
                     grid.SelectedItem=grid.Items[0];grid.CurrentCell=new DataGridCellInfo(grid.Items[0],grid.Columns[1]);grid.ScrollIntoView(grid.Items[0],grid.Columns[1]);grid.Focus();
                     Check(grid.BeginEdit(),"scan row labels can be manually edited");Pump();
                     var element=grid.Columns[1].GetCellContent(grid.Items[0]);var text=element as TextBox??Visual(element!).OfType<TextBox>().First();text.Text="А";text.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();

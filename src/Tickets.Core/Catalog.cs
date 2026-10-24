@@ -16,6 +16,7 @@ public sealed class DraftSeat
     public double Y {get;set;}
     public IReadOnlyList<HallEditing025.RowAnchor>? RowAisleAnchors {get;set;}
     public bool Hidden {get;set;}
+    public SectorCaption029? SectorCaption {get;set;}
 }
 public sealed partial class Store
 {
@@ -79,9 +80,9 @@ public sealed partial class Store
     }
     public List<DraftSeat> HallDraft(long venueId)
     {
-        using var c=Open();using var cmd=Command(c,"SELECT z.name,s.row_label,s.number,s.x,s.y,h.seat_id IS NOT NULL,(SELECT anchors FROM hall_row_anchors a WHERE a.seat_id=s.id) FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id LEFT JOIN hall_hidden_seat h ON h.seat_id=s.id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden x WHERE x.kind='sector' AND x.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.id","$v",venueId);
+        using var c=Open();using var cmd=Command(c,"SELECT z.name,s.row_label,s.number,s.x,s.y,h.seat_id IS NOT NULL,(SELECT anchors FROM hall_row_anchors a WHERE a.seat_id=s.id),(SELECT caption FROM hall_sector_caption_029 cap WHERE cap.venue_id=z.venue_id AND cap.sector_id=z.id) FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id LEFT JOIN hall_hidden_seat h ON h.seat_id=s.id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden x WHERE x.kind='sector' AND x.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.id","$v",venueId);
         using var r=cmd.ExecuteReader();var result=new List<DraftSeat>();
-        while(r.Read())result.Add(new(){Sector=r.GetString(0),Row=r.GetString(1),Number=r.GetString(2),X=r.GetDouble(3),Y=r.GetDouble(4),Hidden=r.GetBoolean(5),RowAisleAnchors=ReadRowAnchors027(r,6)});return result;
+        while(r.Read())result.Add(new(){Sector=r.GetString(0),Row=r.GetString(1),Number=r.GetString(2),X=r.GetDouble(3),Y=r.GetDouble(4),Hidden=r.GetBoolean(5),RowAisleAnchors=ReadRowAnchors027(r,6),SectorCaption=ReadSectorCaption029(r,7)});return result;
     }
     public long CreateHall(string name,string address,IReadOnlyCollection<DraftSeat> seats)
     {
@@ -95,6 +96,7 @@ public sealed partial class Store
                 throw new TicketException("Недопустимые координаты места.");
             if(!keys.Add(s.Sector+"\u001f"+s.Row+"\u001f"+s.Number)) throw new TicketException($"Повторяется место: {s.Sector}, ряд {s.Row}, место {s.Number}.");
         }
+        ValidateSectorCaptions029(seats);
         HallAnchors027.Capture(seats.ToArray());
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
         using var add=Command(c,"INSERT INTO venue(name,address) VALUES($n,$a) RETURNING id","$n",name,"$a",address.Trim()); add.Transaction=tx;
@@ -103,6 +105,7 @@ public sealed partial class Store
         {
             zid++; using var zone=Command(c,"INSERT INTO sector VALUES($v,$z,$n,$x,$y)","$v",id,"$z",zid,"$n",sector.Key,"$x",sector.Min(s=>s.X),"$y",sector.Min(s=>s.Y)-26);
             zone.Transaction=tx; zone.ExecuteNonQuery();
+            SaveSectorCaption029(c,tx,id,zid,sector.First().SectorCaption);
             foreach(var s in sector)
             {
                 using var seat=Command(c,"INSERT INTO seat(venue_id,sector_id,row_label,number,x,y) VALUES($v,$z,$r,$n,$x,$y) RETURNING id",

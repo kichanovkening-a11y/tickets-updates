@@ -24,6 +24,7 @@ public sealed partial class Store
         name=Required(name,"Название зала");address=address.Trim();
         var venue=Venues().SingleOrDefault(v=>v.Id==venueId)??throw new TicketException("Выберите зал.");
         var original=HallDraft(venueId);var draft=seats.ToArray();
+        ValidateSectorCaptions029(draft);
         var renames=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
         var namesOnly=original.Count==draft.Length;
         for(var i=0;namesOnly&&i<original.Count;i++)
@@ -54,6 +55,7 @@ public sealed partial class Store
         {
             if(!renames.TryGetValue(sector.Name,out var replacement))continue;
             using var update=Command(c,"UPDATE sector SET name=$n WHERE venue_id=$v AND id=$s","$n",replacement,"$v",venueId,"$s",sector.Id);update.Transaction=tx;update.ExecuteNonQuery();
+            SaveSectorCaption029(c,tx,venueId,sector.Id,draft.First(s=>s.Sector==replacement).SectorCaption);
         }
         tx.Commit();return venueId;
     }

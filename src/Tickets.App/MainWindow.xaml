@@ -54,6 +54,7 @@
               <Button x:Name="PrintTicketsButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Style="{StaticResource SeatActionStyle}" Content="Печать билетов" Click="PrintTicketsClick" Background="#1B7A43" Foreground="White" IsEnabled="False"/>
               <Button x:Name="IssueButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Style="{StaticResource SeatActionStyle}" Content="Выдать накладную" Click="IssueClick" Background="#2466A8" Foreground="White" IsEnabled="False"/>
             </StackPanel>
+            <Button x:Name="RefreshTicketlandButton029" Width="Auto" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Обновить" Margin="3,3,6,3" Loaded="InitializeTicketlandUi029" Click="RefreshTicketlandClick029" RequestBringIntoView="RefreshTicketlandBringIntoView029"/>
         </Canvas>
         <TabControl x:Name="WorkspaceTabs" SelectionChanged="WorkspaceTabChanged" Grid.Row="2" BorderBrush="#CBD5E1" Background="White">
           <TabItem><TabItem.Header><TextBlock Text="Схема зала" FontSize="19" FontWeight="Bold" Margin="12,8"/></TabItem.Header>

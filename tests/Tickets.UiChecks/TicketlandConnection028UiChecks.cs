@@ -39,6 +39,7 @@ internal static class TicketlandConnection028UiChecks
             typeof(MainWindow).GetMethod("ReadEventCatalog",Private)!.Invoke(main,null);
             typeof(MainWindow).GetMethod("ApplyFilter",Private)!.Invoke(main,null);
             main.SelectEvent(eventId);Pump();
+            Ticketland029UiChecks.CheckLayout(main);
             var hall=(HallView)main.FindName("Hall");
             var at=(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1);
             var report=new TicketlandReport028([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500)],at);
@@ -46,6 +47,7 @@ internal static class TicketlandConnection028UiChecks
             main.TicketlandFetch028=(saved,_)=>{Check(saved==login,"fetch receives original login or login recovered from Windows vault");calls++;return Task.FromResult(report);};
             Wait(main.ConnectTicketland028(login,CancellationToken.None));
             Check(calls==1&&store.Seats(eventId).Single(s=>s.Id==ids[0]).IsTicketlandSold&&store.TicketlandLastSync028==at,"connect commits exact local seat and report timestamp");
+            Ticketland029UiChecks.CheckRefreshButton(main);
             var json=File.ReadAllText(settingsPath);
             using(var document=JsonDocument.Parse(json))Check(document.RootElement.GetProperty("ConnectionId").GetString()==connection&&document.RootElement.GetProperty("Enabled").GetBoolean(),"nonsecret settings enable the same random connection");
             Check(!json.Contains(login.Username,StringComparison.Ordinal)&&!json.Contains(login.Password,StringComparison.Ordinal)&&!json.Contains("Username",StringComparison.OrdinalIgnoreCase)&&!json.Contains("Password",StringComparison.OrdinalIgnoreCase),"settings JSON contains no username or password");
@@ -58,7 +60,7 @@ internal static class TicketlandConnection028UiChecks
             Check(store.Invoice(eventId,issue).Tickets.Single().Id==local.Id&&store.Seats(eventId).Single(s=>s.Id==ids[0]).TicketId is null,"external issuance guard preserves local ticket and creates no remote ticket");
 
             report=new([],at.AddMinutes(1));Wait(main.RefreshTicketland028());
-            Check(calls==2&&store.Seats(eventId).Single(s=>s.Id==ids[0]).Available,"refresh recovers saved credentials and frees sales absent from complete snapshot");
+            Check(calls==3&&store.Seats(eventId).Single(s=>s.Id==ids[0]).Available,"refresh recovers saved credentials and frees sales absent from complete snapshot");
             Check(store.Seats(eventId).Single(s=>s.Id==ids[1]).IsBlocked&&store.Seats(eventId).Single(s=>s.Id==ids[2]).TicketId==local.Id,"snapshot replacement preserves manual block and local ticket");
 
             report=new([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500)],at.AddMinutes(2));
@@ -75,7 +77,7 @@ internal static class TicketlandConnection028UiChecks
             main.TicketlandFetch028=(_,_)=>Task.FromException<TicketlandReport028>(new TicketException("Вход в Ticketland выполнен. Превышено время ожидания отчёта текущих сеансов."));
             Wait(main.RefreshTicketland028());
             Check(main.TicketlandStatus028.StartsWith("Вход в Ticketland выполнен.",StringComparison.Ordinal),"automatic refresh preserves precise login/report stage error");
-            CheckMappingWindow(store,main,eventId,starts,ids[0],report.FetchedAt.AddMinutes(1));
+            Ticketland029UiChecks.CheckReview(store,main);
         }
         finally
         {
@@ -95,7 +97,7 @@ internal static class TicketlandConnection028UiChecks
             var controls=Walk(window).ToArray();
             Check(controls.OfType<TextBox>().Count()==1&&controls.OfType<PasswordBox>().Count()==1,"login form contains one login and one protected password input");
             var buttons=controls.OfType<Button>().Select(b=>b.Content?.ToString()).ToArray();
-            Check(new[]{"Подключить","Обновить","Отключить","Сопоставление показов и секторов"}.All(b=>buttons.Count(x=>x==b)==1)&&buttons.Length==4,"login form has automatic connection and mapping commands without manual exports");
+            Check(new[]{"Подключить","Обновить","Отключить","Расхождения"}.All(b=>buttons.Count(x=>x==b)==1)&&buttons.Length==4,"login form has automatic connection and discrepancy review without manual exports");
             Corrections025UiChecks.Capture(window,"028-ticketland-connection");
             foreach(var caption in new[]{"Логин","Пароль"})
             {
@@ -105,27 +107,6 @@ internal static class TicketlandConnection028UiChecks
                 var inputCenter=input.TranslatePoint(new Point(input.ActualWidth/2,0),window).X;
                 Check(label.TextAlignment==TextAlignment.Center&&Math.Abs(labelCenter-inputCenter)<.5,"connection input caption is centered over its field: "+caption);
             }
-        }
-        finally{window.Close();}
-    }
-    private static void CheckMappingWindow(Store store,MainWindow main,long eventId,DateTime starts,long seatId,DateTimeOffset at)
-    {
-        var sourceTitle="Ticketland source UI028 "+Guid.NewGuid().ToString("N");
-        store.ApplyTicketlandReport028(new([new(sourceTitle,starts,"Ticketland Партер","1","1","TL028-MAP-"+Guid.NewGuid().ToString("N"),500)],at),replace:true);
-        store.BindTicketlandShow028(sourceTitle,starts,eventId);
-        var window=new TicketlandMappingWindow028(store,main);window.Show();Pump();
-        try
-        {
-            var controls=Walk(window).ToArray();var combos=controls.OfType<ComboBox>().ToArray();
-            Check(combos.Length==4,"mapping form has one source/local show pair and one source/local sector pair");
-            Check(combos[0].Items.Count==1&&combos[0].SelectedItem is not null&&combos[1].Items.Count==1&&combos[1].SelectedItem is not null,"opening prebound show selects its sole exact-date local candidate");
-            Check(combos[2].Items.Cast<string>().Any(s=>string.Equals(s,"Ticketland Партер",StringComparison.OrdinalIgnoreCase))&&combos[3].Items.Cast<string>().Contains("Партер"),"prebound local show populates sector choices immediately on opening");
-            combos[2].SelectedIndex=0;combos[3].SelectedItem="Партер";Pump();
-            Corrections025UiChecks.Capture(window,"028-ticketland-mapping");
-            controls.OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
-            Check(store.Seats(eventId).Single(s=>s.Id==seatId).IsTicketlandSold,"saving explicit show and sector mapping resolves different Ticketland labels");
-            var hall=(HallView)main.FindName("Hall");hall.SetSelection([seatId]);Pump();
-            Check(hall.SelectedSeats.Single().IsTicketlandSold,"saving mappings refreshes actual hall from cached report");
         }
         finally{window.Close();}
     }

@@ -1,0 +1,47 @@
+using System.Windows;
+using System.Windows.Controls;
+
+namespace Tickets.App;
+
+public partial class MainWindow
+{
+    private bool ticketlandUiInitialized029;
+    private bool ticketlandManualRefresh029;
+
+    private void InitializeTicketlandUi029(object sender,RoutedEventArgs e)
+    {
+        if(ticketlandUiInitialized029)return;
+        ticketlandUiInitialized029=true;
+        TicketlandStatusChanged028+=UpdateTicketlandRefreshState029;
+        Closed+=(_,_)=>TicketlandStatusChanged028-=UpdateTicketlandRefreshState029;
+        RefreshTicketlandButton029.SizeChanged+=(_,_)=>UpdateCompactLayout();
+        UpdateTicketlandRefreshState029();UpdateCompactLayout();
+    }
+
+    internal void UpdateTicketlandRefreshState029()=>RefreshTicketlandButton029.IsEnabled=!TicketlandIsUpdating028&&!ticketlandManualRefresh029;
+
+    private async void RefreshTicketlandClick029(object sender,RoutedEventArgs e)
+    {
+        if(TicketlandIsUpdating028||ticketlandManualRefresh029)return;
+        ticketlandManualRefresh029=true;UpdateTicketlandRefreshState029();
+        try{await RefreshTicketland028();HandleTicketlandReview029();}
+        finally{ticketlandManualRefresh029=false;UpdateTicketlandRefreshState029();}
+    }
+
+    private void RefreshTicketlandBringIntoView029(object sender,RequestBringIntoViewEventArgs e)
+    {
+        var right=Canvas.GetLeft(RefreshTicketlandButton029)+OrdinaryActionsScroll.HorizontalOffset+
+            RefreshTicketlandButton029.ActualWidth+RefreshTicketlandButton029.Margin.Left+RefreshTicketlandButton029.Margin.Right;
+        OrdinaryActionsScroll.ScrollToHorizontalOffset(Math.Max(0,right-OrdinaryActionsScroll.ViewportWidth));e.Handled=true;
+    }
+
+    internal void HandleTicketlandReview029()
+    {
+        if(ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||store.TicketlandIssues029().Count==0)return;
+        var existing=Application.Current.Windows.OfType<TicketlandMappingWindow028>().FirstOrDefault();
+        if(existing is not null){existing.Activate();return;}
+        var window=new TicketlandMappingWindow028(store,this);
+        if(IsVisible)window.Owner=this;
+        window.ShowDialog();
+    }
+}

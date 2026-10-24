@@ -19,7 +19,8 @@ public sealed record SeatInfo(long Id, string Sector, string Row, string Number,
     public string Label => $"{Sector} · ряд {Row}, место {Number}";
     public string Status => IsTicketlandSold ? (TicketId.HasValue ? $"Конфликт: продано Ticketland и выдано локально: {Recipient}" : "Продано Ticketland") : TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";
 }
-public sealed record SectorInfo(string Name, double X, double Y);
+public sealed record SectorInfo(string Name, double X, double Y)
+{public SectorCaption029? Caption {get;init;}}
 public sealed record TicketInfo(long Id, long SeatId, string Sector, string Row, string Seat,
     string Recipient, string Series, long Number, long Amount, string IssuedAt, string? ReturnedAt, long IssueId=0, string? PrintedAt=null, bool IsReserved=false)
 {

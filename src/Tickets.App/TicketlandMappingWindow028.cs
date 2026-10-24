@@ -1,4 +1,3 @@
-using System.Globalization;
 using System.Windows;
 using System.Windows.Controls;
 using Tickets.Core;
@@ -7,43 +6,48 @@ namespace Tickets.App;
 
 internal sealed class TicketlandMappingWindow028:EditorWindow
 {
-    private sealed record SourceChoice(TicketlandShow028 Show)
-    {public string Caption=>$"{Show.Title} · {Show.StartsAt:dd.MM.yyyy HH:mm} · билетов: {Show.Tickets}";}
-    private sealed record LocalChoice(Tickets.Core.EventInfo Show)
-    {public string Caption=>$"{Show.Title} · {Show.Date} · {Show.Venue}";}
-
-    internal TicketlandMappingWindow028(Store store,MainWindow main):base(store,"Сопоставление Ticketland",900,650)
+    internal TicketlandMappingWindow028(Store store,MainWindow main):base(store,"Расхождения Ticketland",900,650)
     {
-        var form=new StackPanel{Margin=new Thickness(20)};Content=form;
-        var source=Combo(form,"Показ Ticketland",store.TicketlandShows028().Select(s=>new SourceChoice(s)).ToArray(),"Caption");
-        var local=Combo(form,"Показ в программе",Array.Empty<LocalChoice>(),"Caption");
-        var sourceSector=Combo(form,"Сектор Ticketland",Array.Empty<string>(),"");
-        var localSector=Combo(form,"Сектор в программе",Array.Empty<string>(),"");
-        var status=new TextBlock{Text="Выберите соответствующий показ. Если названия секторов отличаются, укажите их соответствие. Ряды и места сопоставляются по своим номерам.",TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Center,Margin=new Thickness(0,12,0,0)};form.Children.Add(status);
-        void LoadLocal()
+        var form=new DockPanel{Margin=new Thickness(20)};Content=form;
+        var instructions=new TextBlock{Text="Проверьте отличия и подтвердите предложенное соответствие или откажитесь от него.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)};
+        DockPanel.SetDock(instructions,Dock.Top);form.Children.Add(instructions);
+        var commands=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Center};
+        DockPanel.SetDock(commands,Dock.Bottom);form.Children.Add(commands);
+        var agree=Button(commands,"Согласиться",()=>{});var reject=Button(commands,"Отказаться",()=>{});
+        var status=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,8,0,8)};
+        DockPanel.SetDock(status,Dock.Bottom);form.Children.Add(status);
+        var body=new Grid();body.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(2,GridUnitType.Star)});body.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(3,GridUnitType.Star)});form.Children.Add(body);
+        var issues=new ListBox{Name="TicketlandIssues029",DisplayMemberPath="Source",Margin=new Thickness(0,0,12,0),HorizontalContentAlignment=HorizontalAlignment.Stretch};body.Children.Add(issues);
+        var detail=new DockPanel();Grid.SetColumn(detail,1);body.Children.Add(detail);
+        var reason=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};DockPanel.SetDock(reason,Dock.Top);detail.Children.Add(reason);
+        var differences=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,10,0,0)};DockPanel.SetDock(differences,Dock.Bottom);detail.Children.Add(differences);
+        var candidates=new ListBox{Name="TicketlandCandidates029",DisplayMemberPath="Caption",HorizontalContentAlignment=HorizontalAlignment.Stretch};detail.Children.Add(candidates);
+        void UpdateCommands(){agree.IsEnabled=!main.TicketlandIsUpdating028&&issues.SelectedItem is TicketlandIssue029&&candidates.SelectedItem is TicketlandCandidate029;reject.IsEnabled=!main.TicketlandIsUpdating028&&issues.SelectedItem is TicketlandIssue029;}
+        void Reload()
         {
-            if(source.SelectedItem is not SourceChoice choice)return;
-            var available=store.Events().Where(e=>DateTime.TryParse(e.SortDate,CultureInfo.InvariantCulture,DateTimeStyles.None,out var at)&&at==choice.Show.StartsAt).Select(e=>new LocalChoice(e)).ToArray();
-            localSector.ItemsSource=Array.Empty<string>();
-            local.ItemsSource=available;local.SelectedItem=available.FirstOrDefault(e=>e.Show.Id==choice.Show.EventId);
-            sourceSector.ItemsSource=store.TicketlandSectors028(choice.Show.Title,choice.Show.StartsAt);sourceSector.SelectedIndex=-1;
+            var selected=issues.SelectedIndex;var pending=store.TicketlandIssues029();issues.ItemsSource=pending;
+            if(pending.Count>0)issues.SelectedIndex=Math.Clamp(selected,0,pending.Count-1);
+            else{reason.Text="Расхождений нет.";candidates.ItemsSource=null;differences.Text="";}
+            status.Text=pending.Count>0?$"Расхождений: {pending.Count}":"Все расхождения рассмотрены.";UpdateCommands();
         }
-        source.SelectionChanged+=(_,_)=>LoadLocal();
-        local.SelectionChanged+=(_,_)=>{
-            localSector.ItemsSource=local.SelectedItem is LocalChoice choice?store.Sectors(choice.Show.VenueId).Select(s=>s.Name).ToArray():Array.Empty<string>();localSector.SelectedIndex=-1;
+        issues.SelectionChanged+=(_,_)=>{
+            if(issues.SelectedItem is TicketlandIssue029 issue){reason.Text=issue.Source+"\n"+issue.Reason;candidates.ItemsSource=issue.Candidates;candidates.SelectedIndex=issue.Candidates.Count==1?0:-1;}
+            else{reason.Text="";candidates.ItemsSource=null;}
+            differences.Text=(candidates.SelectedItem as TicketlandCandidate029)?.Differences??"";UpdateCommands();
         };
-        sourceSector.SelectionChanged+=(_,_)=>{
-            if(sourceSector.SelectedItem is string name)localSector.SelectedItem=localSector.Items.Cast<string>().FirstOrDefault(s=>CatalogText.Key(s)==CatalogText.Key(name));
-        };
-        Button(form,"Сохранить",()=>Try(()=>{
+        candidates.SelectionChanged+=(_,_)=>{differences.Text=(candidates.SelectedItem as TicketlandCandidate029)?.Differences??"";UpdateCommands();};
+        agree.Click+=(_,_)=>Try(()=>{
             if(main.TicketlandIsUpdating028)throw new TicketException("Дождитесь окончания обновления Ticketland.");
-            if(source.SelectedItem is not SourceChoice remote||local.SelectedItem is not LocalChoice target)throw new TicketException("Выберите показ Ticketland и соответствующий показ в программе с той же датой и временем.");
-            if(sourceSector.SelectedItem is not null&&localSector.SelectedItem is null)throw new TicketException("Выберите соответствующий сектор в программе.");
-            store.BindTicketlandShow028(remote.Show.Title,remote.Show.StartsAt,target.Show.Id);
-            if(sourceSector.SelectedItem is string from&&localSector.SelectedItem is string to)store.BindTicketlandSector028(remote.Show.Title,remote.Show.StartsAt,from,target.Show.Id,to);
-            main.ReapplyTicketlandMappings028();status.Text=main.TicketlandStatus028;
-        }));
-        foreach(var label in form.Children.OfType<TextBlock>())label.TextAlignment=TextAlignment.Center;
-        LoadLocal();
+            if(issues.SelectedItem is not TicketlandIssue029 issue||candidates.SelectedItem is not TicketlandCandidate029 candidate)return;
+            store.AcceptTicketlandIssue029(issue.Key,candidate.EventId,candidate.SeatId);main.ReapplyTicketlandMappings028();Reload();
+        });
+        reject.Click+=(_,_)=>Try(()=>{
+            if(main.TicketlandIsUpdating028)throw new TicketException("Дождитесь окончания обновления Ticketland.");
+            if(issues.SelectedItem is not TicketlandIssue029 issue)return;
+            store.RejectTicketlandIssue029(issue.Key);Reload();
+        });
+        void StateChanged(){if(main.TicketlandIsUpdating028)UpdateCommands();else Reload();}
+        main.TicketlandStatusChanged028+=StateChanged;Closed+=(_,_)=>main.TicketlandStatusChanged028-=StateChanged;
+        Reload();
     }
 }

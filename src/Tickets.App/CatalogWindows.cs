@@ -66,6 +66,7 @@ internal sealed class PriceEditorWindow : EditorWindow
 {
     private readonly HallView preview=new(){AllowUnavailableSelection=true};
     private List<SeatInfo> seats=[];
+    private IReadOnlyList<SectorInfo> previewSectors029=[];
     private readonly Dictionary<long,PriceValue> prices=[];
     private readonly HashSet<long> withdrawn=[];
     private readonly TextBlock hallTotals=new(){TextWrapping=TextWrapping.NoWrap,Margin=new Thickness(0,4,0,10),FontSize=18,FontWeight=FontWeights.Bold};
@@ -228,7 +229,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         }
         void LoadVenue()
         {
-            if(venue.SelectedItem is not VenueInfo v)return;seats=store.VenueSeats(v.Id);prices.Clear();withdrawn.Clear();sourcePlan=null;name.Text="";preview.FocusPrice=null;history.Clear();if(undo is not null)undo.IsEnabled=false;copied.Text="";LoadPlans();Refresh(true);SelectCategoryColor();SelectionSummary();
+            if(venue.SelectedItem is not VenueInfo v)return;seats=store.VenueSeats(v.Id);previewSectors029=store.Sectors(v.Id);prices.Clear();withdrawn.Clear();sourcePlan=null;name.Text="";preview.FocusPrice=null;history.Clear();if(undo is not null)undo.IsEnabled=false;copied.Text="";LoadPlans();Refresh(true);SelectCategoryColor();SelectionSummary();
         }
         preview.EmptySpaceClicked+=(_,_)=>preview.FocusPrice=null;
         venue.SelectionChanged+=(_,_)=>Try(LoadVenue);OnShown(()=>Try(()=>{LoadVenue();if(planId.HasValue){plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==planId.Value);LoadSelectedPlan();}}));
@@ -253,7 +254,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         PriceSummaryLayout.Arrange(priceSummary);
         var ids=preview.Selected.ToArray();
         preview.Load(seats.Select(s=>prices.TryGetValue(s.Id,out var p)?s with{Amount=p.Amount,Color=p.Color,IsBlocked=withdrawn.Contains(s.Id)}:s with{Amount=null,IsBlocked=withdrawn.Contains(s.Id)}).ToList(),
-            seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(x=>x.X),g.Min(x=>x.Y)-26)).ToList(),fit);preview.SetSelection(ids);
+            previewSectors029,fit);preview.SetSelection(ids);
     }
 }
 

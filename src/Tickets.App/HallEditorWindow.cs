@@ -20,7 +20,7 @@ internal sealed class HallEditorWindow : EditorWindow
     private sealed record HallState(List<DraftSeat> Seats,long[] Selected);
     private readonly Stack<HallState> history=[];
     private Button? undo;
-    private static DraftSeat Clone(DraftSeat s)=>new(){Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y,Hidden=s.Hidden,RowAisleAnchors=s.RowAisleAnchors?.ToArray()};
+    private static DraftSeat Clone(DraftSeat s)=>new(){Sector=s.Sector,Row=s.Row,Number=s.Number,X=s.X,Y=s.Y,Hidden=s.Hidden,RowAisleAnchors=s.RowAisleAnchors?.ToArray(),SectorCaption=s.SectorCaption};
     private void Remember(){history.Push(new(seats.Select(Clone).ToList(),preview.Selected.ToArray()));if(undo is not null)undo.IsEnabled=true;}
     private void Undo()
     {
@@ -53,7 +53,7 @@ internal sealed class HallEditorWindow : EditorWindow
             if(!CommitEdits())return;
             CreatedId=editExisting?store.SaveEditedHall(copy!.Id,name.Text,address.Text,seats.ToArray()):store.CreateHall(name.Text,address.Text,seats.ToArray());Finish(true);
         }));
-        if(editExisting)sidebar.Children.Add(new TextBlock{Text="Названия секторов сохраняются в существующем зале. Изменение мест или схемы требует другого названия и сохраняется как новый зал.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,0)});
+        if(editExisting)sidebar.Children.Add(new TextBlock{Text="Названия и положение надписей секторов сохраняются в существующем зале. Изменение мест или схемы требует другого названия и сохраняется как новый зал.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,12,0,0)});
         sidebar.Children.Add(summary);
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
         var toolbar=new WrapPanel();DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
@@ -92,11 +92,13 @@ internal sealed class HallEditorWindow : EditorWindow
         });
         preview.SeatContextRequested+=(id,_)=>Context(id,false);preview.RowContextRequested+=(id,_)=>Context(id,true);
         preview.SectorContextRequested+=(sector,_)=>Try(()=>{
-            var dialog=new HallSectorNameWindow027(store,sector);if(dialog.ShowDialog()!=true)return;
+            var original=seats.First(s=>s.Sector==sector).SectorCaption;
+            var dialog=new HallSectorNameWindow027(store,sector,preview.SectorCaption029ForEdit(sector),original is not null);if(dialog.ShowDialog()!=true)return;
             // Validate before recording undo, then apply the complete sector rename.
             var draft=seats.Select(Clone).ToList();HallEditing027.RenameSector(draft,sector,dialog.Result);
-            Remember();HallEditing027.RenameSector(seats,sector,dialog.Result);Refresh(false);
+            Remember();HallEditing027.RenameSector(seats,sector,dialog.Result);foreach(var seat in seats.Where(s=>s.Sector==dialog.Result))seat.SectorCaption=dialog.ResultCaption;Refresh(false);
         });
+        preview.SectorCaptionChanged029+=(sector,caption)=>Try(()=>{Remember();foreach(var seat in seats.Where(s=>s.Sector==sector))seat.SectorCaption=caption;Refresh(false);});
         void Transform(IReadOnlyList<SeatInfo> changed)=>Try(()=>{
             if(changed.Count==0)return;Remember();
             foreach(var mark in changed)if(mark.Id>0&&mark.Id<=seats.Count){seats[(int)mark.Id-1].X=mark.X;seats[(int)mark.Id-1].Y=mark.Y;seats[(int)mark.Id-1].RowAisleAnchors=mark.RowAisleAnchors?.ToArray();}
@@ -114,7 +116,7 @@ internal sealed class HallEditorWindow : EditorWindow
     private void Refresh(bool fit=true)
     {
         var view=seats.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,0,s.Hidden?"#BBBBBB":"#7AA8D9",null,"","",null,IsHidden:s.Hidden&&showHidden.IsChecked!=true){RowAisleAnchors=s.RowAisleAnchors}).ToList();
-        preview.Load(view,seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(s=>s.X),g.Min(s=>s.Y)-26)).ToList(),fit);
+        preview.Load(view,seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(s=>s.X),g.Min(s=>s.Y)-26){Caption=g.First().SectorCaption}).ToList(),fit);
         summary.Text=$"Мест: {seats.Count(s=>!s.Hidden)} · Скрыто: {seats.Count(s=>s.Hidden)} · Секторов: {seats.Select(s=>s.Sector).Distinct().Count()}";
     }
 }
@@ -122,10 +124,37 @@ internal sealed class HallEditorWindow : EditorWindow
 internal sealed class HallSectorNameWindow027:EditorWindow
 {
     public string Result{get;private set;}="";
-    public HallSectorNameWindow027(Store store,string sector):base(store,"Название сектора",460,240)
+    public SectorCaption029? ResultCaption{get;private set;}
+    public HallSectorNameWindow027(Store store,string sector):this(store,sector,new SectorCaption029(sector,0,0,0),false){}
+    public HallSectorNameWindow027(Store store,string sector,SectorCaption029 caption,bool hasOverride):base(store,"Название сектора",500,360)
     {
-        var panel=new StackPanel{Margin=new Thickness(16)};Content=panel;var name=Field(panel,"Название сектора",sector);
-        Button(panel,"Сохранить",()=>Try(()=>{var draft=new[]{new DraftSeat{Sector=sector}};HallEditing027.RenameSector(draft,sector,name.Text);Result=draft[0].Sector;Finish(true);}));
+        var panel=new StackPanel{Margin=new Thickness(16)};Content=panel;
+        panel.Children.Add(new TextBlock{Text="Название сектора (одна или две строки)",Margin=new Thickness(0,0,0,4)});
+        var name=new TextBox{Text=caption.Text,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,Height=74,VerticalContentAlignment=VerticalAlignment.Center};panel.Children.Add(name);
+        var angle=caption.Angle;var angleLabel=new TextBlock{Text=$"Угол надписи: {angle:0.##}°",Margin=new Thickness(0,10,0,4)};panel.Children.Add(angleLabel);
+        Button(panel,"Повернуть надпись",()=>Try(()=>{
+            var dialog=new SectorCaptionAngleWindow029(store,angle);if(dialog.ShowDialog()!=true)return;angle=dialog.Angle;angleLabel.Text=$"Угол надписи: {angle:0.##}°";
+        }));
+        Button(panel,"Сохранить",()=>Try(()=>{
+            var text=name.Text.Replace("\r\n","\n").Trim();
+            if(text.Length is 0 or >200||text.Count(c=>c=='\n')>1||text.Any(c=>char.IsControl(c)&&c!='\n')||text.Split('\n').Any(string.IsNullOrWhiteSpace))throw new TicketException("Укажите название в одну или две строки (до 200 символов).");
+            var logical=System.Text.RegularExpressions.Regex.Replace(text,@"\s+"," ");
+            var draft=new[]{new DraftSeat{Sector=sector}};HallEditing027.RenameSector(draft,sector,logical);Result=draft[0].Sector;
+            ResultCaption=hasOverride||text.Contains('\n')||angle!=0?caption with{Text=text,Angle=angle}:null;Finish(true);
+        }));
+    }
+}
+internal sealed class SectorCaptionAngleWindow029:EditorWindow
+{
+    internal double Angle{get;private set;}
+    internal SectorCaptionAngleWindow029(Store store,double angle):base(store,"Поворот надписи",420,230)
+    {
+        var panel=new StackPanel{Margin=new Thickness(16)};Content=panel;
+        var input=Field(panel,"Угол в градусах",angle.ToString(System.Globalization.CultureInfo.CurrentCulture));
+        Button(panel,"Сохранить",()=>Try(()=>{
+            if(!double.TryParse(input.Text.Replace(',', '.'),System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var result)||!double.IsFinite(result))throw new TicketException("Укажите угол в градусах.");
+            Angle=result%360;Finish(true);
+        }));
     }
 }
 internal sealed class RowAisleChoicesConverter : IMultiValueConverter

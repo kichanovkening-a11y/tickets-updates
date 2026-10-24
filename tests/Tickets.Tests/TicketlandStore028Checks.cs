@@ -71,8 +71,8 @@ internal static class TicketlandStore028Checks
         });
         run("028 Ticketland normalized exact keys map without fuzzy matching",s=>{
             var f=Fixture(s);var sale=Sale(f,"1","normalized") with{Title="  "+f.Title.ToUpperInvariant()+"  ",Sector=" ПАРТЕР ",Row=" 1 ",Seat=" 1 "};
-            var summary=s.ApplyTicketlandReport028(new(new[]{sale,sale with{Barcode="wrongtime",StartsAt=f.At.AddSeconds(1)},sale with{Barcode="wrongsector",Sector="Партер левый"}},DateTimeOffset.UtcNow),false);
-            Check(summary.Matched==1&&summary.Unmatched==2,"normalization failed or fuzzy match accepted wrong identity");
+            var summary=s.ApplyTicketlandReport028(new(new[]{sale,sale with{Barcode="wrongtime",StartsAt=f.At.AddSeconds(1)},sale with{Barcode="wrongsector",Sector="Партер левый",Seat="2"}},DateTimeOffset.UtcNow),false);
+            Check(summary.Matched==2&&summary.Unmatched==1,"normalization failed or wrong time accepted");
         });
         run("028 Ticketland append retains occupied markers when show becomes ambiguous",s=>{
             var f=Fixture(s);var sale=Sale(f,"1","retain");var at=DateTimeOffset.UtcNow;

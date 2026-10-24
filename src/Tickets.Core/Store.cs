@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureHallRowAnchors027(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); EnsureTicketland028(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureHallRowAnchors027(); EnsureHallSectorCaptions029(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); EnsureTicketland028(); }
 
     private SqliteConnection Open()
     {
@@ -66,9 +66,9 @@ public sealed partial class Store
     public List<SectorInfo> Sectors(long venueId)
     {
         using var c=Open();
-        using var cmd=Command(c,"SELECT name,x,y FROM sector WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(sector.venue_id AS TEXT)||':'||CAST(sector.id AS TEXT)) ORDER BY y,x","$v",venueId);
+        using var cmd=Command(c,"SELECT name,x,y,(SELECT caption FROM hall_sector_caption_029 cap WHERE cap.venue_id=sector.venue_id AND cap.sector_id=sector.id) FROM sector WHERE venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(sector.venue_id AS TEXT)||':'||CAST(sector.id AS TEXT)) ORDER BY y,x","$v",venueId);
         using var r=cmd.ExecuteReader(); var result=new List<SectorInfo>();
-        while(r.Read()) result.Add(new(r.GetString(0),r.GetDouble(1),r.GetDouble(2)));
+        while(r.Read()) result.Add(new(r.GetString(0),r.GetDouble(1),r.GetDouble(2)){Caption=ReadSectorCaption029(r,3)});
         return result;
     }
 

@@ -147,7 +147,7 @@ public partial class MainWindow : Window
         var add=new Button{Content="Создать зал"};add.Click+=(_,_)=>Run(()=>{new HallEditorWindow(store).ShowDialog();list.ItemsSource=store.Venues();});buttons.Children.Add(add);
         list.PreviewMouseLeftButtonUp+=(_,e)=>{
             if(e.OriginalSource is not DependencyObject source||ItemsControl.ContainerFromElement(list,source) is not ListBoxItem {Content:VenueInfo venue})return;
-            e.Handled=true;Run(()=>{new HallEditorWindow(store,venue).ShowDialog();list.ItemsSource=store.Venues();});
+            e.Handled=true;Run(()=>{new HallEditorWindow(store,venue,true).ShowDialog();list.ItemsSource=store.Venues();});
         };
         var edit=new MenuItem{Header="Редактировать зал"};edit.Click+=(_,_)=>Run(()=>{
             if(list.SelectedItem is not VenueInfo selected)throw new TicketException("Выберите площадку.");

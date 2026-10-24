@@ -66,7 +66,11 @@ public sealed class HallView : FrameworkElement
         worldAnchor=World(Mouse.GetPosition(this));transformDragging=true;CacheSectorDrawing();
         Focus();Cursor=Cursors.SizeWE;InvalidateVisual();
     }
-    public bool CancelPendingRowMove(){if(transformRow is null)return false;CancelRowMove();return true;}
+    public bool CancelPendingRowMove()
+    {
+        if(draggingCaption029 is {} captionSector){sectors=sectors.Select(s=>s.Name==captionSector?s with{Caption=captionDragOriginal029}:s).ToArray();captionMoved029=false;EndGesture();RebuildDrawing();InvalidateVisual();return true;}
+        if(transformRow is null)return false;CancelRowMove();return true;
+    }
     private void CancelRowMove()
     {
         if(transformRow is null)return;
@@ -76,6 +80,7 @@ public sealed class HallView : FrameworkElement
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if(e.Key==Key.Escape&&transformRow is not null){CancelRowMove();e.Handled=true;return;}
+        if(e.Key==Key.Escape&&draggingCaption029 is not null){CancelPendingRowMove();e.Handled=true;return;}
         base.OnKeyDown(e);
     }
 
@@ -85,6 +90,18 @@ public sealed class HallView : FrameworkElement
     public event Action<string,Point>? SectorContextRequested;
     private readonly List<(Rect Bounds,long Id)> rowHits=[];
     private readonly List<(Rect Bounds,string Sector)> sectorHits=[];
+    private readonly Dictionary<string,Point> sectorCaptionOrigins029=[];
+    private string? draggingCaption029;
+    private SectorCaption029? captionDragOriginal029;
+    private SectorCaption029? captionDragStart029;
+    private bool captionMoved029;
+    public event Action<string,SectorCaption029>? SectorCaptionChanged029;
+    private static string DefaultSectorCaptionText029(string name)=>name.StartsWith("Ложа партера (",StringComparison.Ordinal)||name.StartsWith("Балкон №",StringComparison.Ordinal)?name.Replace(" (","\n("):name;
+    internal SectorCaption029 SectorCaption029ForEdit(string name)
+    {
+        var sector=sectors.Single(s=>s.Name==name);var origin=sectorCaptionOrigins029[name];
+        return sector.Caption??new SectorCaption029(DefaultSectorCaptionText029(name),origin.X-sector.X,origin.Y-sector.Y,0);
+    }
     public event Action<SeatInfo>? SeatSelectionRejected;
     public IReadOnlyList<SeatInfo> SelectedSeats => seats.Where(s=>Selected.Contains(s.Id)).ToList();
 
@@ -116,7 +133,7 @@ public sealed class HallView : FrameworkElement
 
     private void RebuildDrawing()
     {
-        var visible=seats.Where(s=>!s.IsHidden).ToArray();rowHits.Clear();sectorHits.Clear();
+        var visible=seats.Where(s=>!s.IsHidden).ToArray();rowHits.Clear();sectorHits.Clear();sectorCaptionOrigins029.Clear();
         var group=new DrawingGroup();
         using(var dc=group.Open())
         {
@@ -148,15 +165,17 @@ public sealed class HallView : FrameworkElement
             var captionBounds=rowLabels.Select(label=>label.Ink).ToList();
             foreach(var sector in sectors)
             {
-                var wrapped=sector.Name.StartsWith("Ложа партера (",StringComparison.Ordinal)||sector.Name.StartsWith("Балкон №",StringComparison.Ordinal);
-                var label=Text(wrapped?sector.Name.Replace(" (","\n("):sector.Name,15.6,Brushes.SlateGray);
+                var label=Text(sector.Caption?.Text??DefaultSectorCaptionText029(sector.Name),15.6,Brushes.SlateGray);
                 label.TextAlignment=TextAlignment.Center;
                 var places=sectorSeats[sector.Name];
                 var captionDrawing=new DrawingGroup();using(var textContext=captionDrawing.Open())textContext.DrawText(label,new Point());
                 var ink=captionDrawing.Bounds;
-                var origin=SectorCaptionOrigin(ink,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y));
-                var x=origin.X;var y=origin.Y;
-                dc.DrawText(label,new Point(x,y));ink.Offset(x,y);captionBounds.Add(ink);sectorHits.Add((ink,sector.Name));
+                var origin=sector.Caption is {} caption?new Point(sector.X+caption.OffsetX,sector.Y+caption.OffsetY):SectorCaptionOrigin(ink,places.ToArray(),visible,captionBounds,new Point(sector.X,sector.Y));
+                sectorCaptionOrigins029[sector.Name]=origin;
+                ink.Offset(origin.X,origin.Y);
+                var rotation=new RotateTransform(sector.Caption?.Angle??0,ink.X+ink.Width/2,ink.Y+ink.Height/2);
+                dc.PushTransform(rotation);dc.DrawText(label,origin);dc.Pop();
+                ink=rotation.TransformBounds(ink);captionBounds.Add(ink);sectorHits.Add((ink,sector.Name));
             }
             foreach(var s in visible)
             {
@@ -326,6 +345,17 @@ public sealed class HallView : FrameworkElement
         rightGesture=e.ChangedButton==MouseButton.Right;panMoved=false;
         marquee=false;gestureSelection=Selected.ToHashSet();
         worldAnchor=World(start);
+        if(SectorEditingEnabled&&e.ChangedButton==MouseButton.Left&&transformSector is null)
+        {
+            var title=sectorHits.FirstOrDefault(h=>h.Bounds.Contains(worldAnchor)).Sector;
+            if(title is not null)
+            {
+                var sector=sectors.Single(s=>s.Name==title);var origin=sectorCaptionOrigins029[title];
+                draggingCaption029=title;captionDragOriginal029=sector.Caption;captionMoved029=false;
+                captionDragStart029=sector.Caption??new SectorCaption029(DefaultSectorCaptionText029(sector.Name),origin.X-sector.X,origin.Y-sector.Y,0);
+                panning=false;CaptureMouse();Cursor=Cursors.SizeAll;e.Handled=true;return;
+            }
+        }
         if(e.ChangedButton==MouseButton.Left&&transformSector is not null)
         {
             transformStart=seats.Where(s=>s.Sector==transformSector&&s.Id>0).ToArray();
@@ -338,6 +368,12 @@ public sealed class HallView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         var p=e.GetPosition(this);
+        if(dragging&&draggingCaption029 is {} captionSector&&captionDragStart029 is {} caption)
+        {
+            var delta=World(p)-worldAnchor;captionMoved029|=(p-start).Length>=3;
+            if(captionMoved029){sectors=sectors.Select(s=>s.Name==captionSector?s with{Caption=caption with{OffsetX=caption.OffsetX+delta.X,OffsetY=caption.OffsetY+delta.Y}}:s).ToArray();RebuildDrawing();InvalidateVisual();}
+            last=p;return;
+        }
         if(transformRow is not null&&transformDragging)
         {
             sectorMatrix=Matrix.Identity;sectorMatrix.Translate(World(p).X-worldAnchor.X,0);
@@ -383,11 +419,13 @@ public sealed class HallView : FrameworkElement
     {
         if(!dragging || e.ChangedButton!=gestureButton) return;
         var p=e.GetPosition(this);
+        if(draggingCaption029 is not null){EndGesture();e.Handled=true;return;}
         var emptyClick=false;
         SeatInfo? rejected=null;
         var contextSector=rightGesture&&!panMoved&&(p-start).Length<3?sectorHits.FirstOrDefault(h=>h.Bounds.Contains(World(p))).Sector:null;
         var contextRow=rightGesture&&!panMoved?rowHits.FirstOrDefault(h=>h.Bounds.Contains(World(p))).Id:0;
         var contextSeat=rightGesture && e.ChangedButton==MouseButton.Right && !panMoved && (p-start).Length<3?Hit(p):null;
+        if(SectorEditingEnabled&&contextSector is not null)contextSeat=null;
         if(!panning&&!transformDragging)
         {
             if(marquee || (p-start).Length>=6)
@@ -453,6 +491,9 @@ public sealed class HallView : FrameworkElement
     private void EndGesture()
     {
         scrollTimer.Stop();
+        var captionSector=draggingCaption029;
+        var changedCaption=captionSector is not null&&captionMoved029?sectors.Single(s=>s.Name==captionSector).Caption:null;
+        draggingCaption029=null;captionDragStart029=null;captionDragOriginal029=null;captionMoved029=false;
         SeatInfo[]? transformed=null;var rowMove=transformRow is not null;
         if(transformDragging)
         {
@@ -467,6 +508,7 @@ public sealed class HallView : FrameworkElement
         if(IsMouseCaptured)ReleaseMouseCapture();
         InvalidateVisual();
         if(transformed is not null){if(rowMove)RowTransformCompleted?.Invoke(transformed);else SectorTransformCompleted?.Invoke(transformed);}
+        if(captionSector is not null&&changedCaption is not null)SectorCaptionChanged029?.Invoke(captionSector,changedCaption);
     }
 
     private IReadOnlyList<HallEditing025.RowAnchor>? TransformAnchors(IReadOnlyList<HallEditing025.RowAnchor>? anchors)

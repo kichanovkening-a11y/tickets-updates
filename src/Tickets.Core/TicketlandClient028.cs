@@ -5,7 +5,11 @@ using System.Text.Json;
 
 namespace Tickets.Core;
 
-public sealed record TicketlandSale028(string Title, DateTime StartsAt, string Sector, string Row, string Seat, string Barcode, decimal Nominal);
+public sealed record TicketlandSale028(string Title, DateTime StartsAt, string Sector, string Row, string Seat, string Barcode, decimal Nominal)
+{
+    public string Venue { get; init; }="";
+    public string SourceChannel { get; init; }="";
+}
 public sealed record TicketlandReport028(IReadOnlyList<TicketlandSale028> Sales, DateTimeOffset FetchedAt, bool IsCurrentEventSnapshot=false);
 
 /// <summary>Session-scoped SSRS forms authentication. Credentials are never persisted.</summary>
@@ -17,7 +21,7 @@ public sealed class TicketlandClient028 : IDisposable
     private readonly HttpClient client;
     public Action<string>? Progress0281 { get; set; }
     private (string From,string To,string Period,string Value)? currentParameters0281;
-    public const string CurrentReportPath0281="/Театры/(C4at) По вознаграждению со списком билетов";
+    public const string CurrentReportPath0281=TicketlandAllChannels029.ReportPath;
 
     public async Task AuthenticateCurrentAsync(string username,string password,CancellationToken ct=default)
     {
@@ -39,10 +43,11 @@ public sealed class TicketlandClient028 : IDisposable
             var metadata=await SendAsync(new HttpRequestMessage(HttpMethod.Get,new Uri(Origin,path)),timeout.Token);
             var dates=DateParameters(metadata.Text);
             using var document=JsonDocument.Parse(metadata.Text);
-            var periods=document.RootElement.GetProperty("value").EnumerateArray().Where(p=>p.TryGetProperty("Prompt",out var prompt)&&prompt.GetString()?.Trim()=="Период"&&p.GetProperty("ParameterType").GetString()=="Integer").ToArray();
+            var periods=document.RootElement.GetProperty("value").EnumerateArray().Where(p=>p.TryGetProperty("Prompt",out var prompt)&&prompt.GetString()?.Trim()=="Отбор данных"&&p.GetProperty("ParameterType").GetString()=="Integer").ToArray();
             if(periods.Length!=1)throw new TicketException("Не найден выбор периода мероприятий Ticketland.");
             var options=periods[0].GetProperty("ValidValues").EnumerateArray().Where(p=>p.GetProperty("Label").GetString()=="Период мероприятий").ToArray();
             if(options.Length!=1||options[0].GetProperty("Value").GetString()!="1")throw new TicketException("Не удалось подтвердить период мероприятий Ticketland.");
+            ValidateAllChannelParameters029(document.RootElement.GetProperty("value"));
             currentParameters0281=(dates.From,dates.To,periods[0].GetProperty("Name").GetString()!,"1");
             Progress0281?.Invoke("Ticketland: вход выполнен.");
         }
@@ -65,8 +70,9 @@ public sealed class TicketlandClient028 : IDisposable
             query.Add(Uri.EscapeDataString(parameters.From)+"="+Uri.EscapeDataString(from.Date.ToString("yyyy-MM-dd'T'00:00:00",CultureInfo.InvariantCulture)));
             query.Add(Uri.EscapeDataString(parameters.To)+"="+Uri.EscapeDataString(to.Date.ToString("yyyy-MM-dd'T'23:59:59",CultureInfo.InvariantCulture)));
             query.Add(Uri.EscapeDataString(parameters.Period)+"="+parameters.Value);
+            query.AddRange(new[]{"Nominal=false","Filter=1","Filter=2","Filter=3","Filter=4","IdSubAgent=0","filterShow=","IdShow=0"});
             var report=await SendAsync(new HttpRequestMessage(HttpMethod.Get,new Uri(Origin,"ReportServer?"+string.Join("&",query))),timeout.Token);
-            return new(TicketlandXml0281.Parse(report.Text,from.Date,to.Date),DateTimeOffset.UtcNow,IsCurrentEventSnapshot:true);
+            return new(TicketlandAllChannels029.Parse(report.Text,from.Date,to.Date),DateTimeOffset.UtcNow,IsCurrentEventSnapshot:true);
         }
         catch(OperationCanceledException) when(ct.IsCancellationRequested){throw;}
         catch(TicketException ex){throw new TicketException("Вход в Ticketland выполнен. "+ex.Message);}
@@ -123,6 +129,18 @@ public sealed class TicketlandClient028 : IDisposable
         catch { throw new TicketException("Не удалось получить полный отчёт Ticketland. Проверьте соединение и повторите загрузку."); }
     }
 
+    private static void ValidateAllChannelParameters029(JsonElement definitions)
+    {
+        JsonElement Parameter(string name,string type)=>definitions.EnumerateArray().Single(p=>p.GetProperty("Name").GetString()==name&&p.GetProperty("ParameterType").GetString()==type);
+        static bool Option(JsonElement p,string label,string value)=>p.GetProperty("ValidValues").EnumerateArray().Any(o=>o.GetProperty("Label").GetString()==label&&o.GetProperty("Value").GetString()==value);
+        var filter=Parameter("Filter","Integer");
+        var filterValues=filter.GetProperty("ValidValues").EnumerateArray().Select(o=>o.GetProperty("Value").GetString()).ToHashSet(StringComparer.Ordinal);
+        if(!filterValues.SetEquals(new[]{"1","2","3","4"})||!filter.GetProperty("MultiValue").GetBoolean()||!Option(filter,"Агенты (МДТЗК)","1")||!Option(filter,"субагенты","2")||!Option(filter,"автоматизированные","3")||!Option(filter,"продажи поставщика","4")
+            ||!Option(Parameter("Nominal","Boolean"),"По фактической цене","false")||!Option(Parameter("IdSubAgent","Integer"),"<Все субагенты>","0")||!Option(Parameter("IdShow","String"),"Все зрелища","0"))
+            throw new TicketException("Не удалось подтвердить все каналы продаж Ticketland.");
+        _=Parameter("filterShow","String");
+    }
+
     private static (string From, string To) DateParameters(string json)
     {
         if (TicketlandHtml028.IsLogin(json)) throw new TicketException("Сеанс Ticketland не подтверждён. Проверьте логин и пароль.");
@@ -138,7 +156,7 @@ public sealed class TicketlandClient028 : IDisposable
                 Name = Text(p, "Name"), Prompt = Text(p, "Prompt"), Type = Text(p, "ParameterType")
             }).ToArray();
             static string Label(string s) => s.Trim().Trim(':', '.', ' ').ToLowerInvariant();
-            var from = parameters.Where(p => new[] { "с", "c", "от", "дата с", "дата начала", "начало", "from", "start date" }.Contains(Label(p.Prompt))).ToArray();
+            var from = parameters.Where(p => new[] { "с", "c", "от", "данные с", "дата с", "дата начала", "начало", "from", "start date" }.Contains(Label(p.Prompt))).ToArray();
             var to = parameters.Where(p => new[] { "по", "до", "дата по", "дата окончания", "окончание", "to", "end date" }.Contains(Label(p.Prompt))).ToArray();
             if (from.Length != 1 || to.Length != 1 || string.IsNullOrWhiteSpace(from[0].Name) || string.IsNullOrWhiteSpace(to[0].Name) || from[0].Name == to[0].Name
                 || from[0].Type != "DateTime" || to[0].Type != "DateTime")

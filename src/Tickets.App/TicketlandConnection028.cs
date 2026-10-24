@@ -110,7 +110,11 @@ public partial class MainWindow
         catch(OperationCanceledException){SetTicketlandStatus028("Ticketland: получение отчёта остановлено. Предыдущие данные сохранены.");throw;}
         catch(TicketException ex){SetTicketlandStatus028(ex.Message);throw;}
         catch(Exception){SetTicketlandStatus028(applied?"Отчёт Ticketland загружен. Не удалось сохранить подключение на этом компьютере.":"Ticketland: не удалось получить отчёт. Предыдущие данные сохранены.");throw new TicketException(TicketlandStatus028);}
-        finally{ticketlandGate028.Release();}
+        finally
+        {
+            ticketlandGate028.Release();
+            if(!Dispatcher.HasShutdownStarted)await Dispatcher.InvokeAsync(()=>{UpdateTicketlandRefreshState029();TicketlandStatusChanged028?.Invoke();});
+        }
     }
     internal void DisconnectTicketland028()
     {
@@ -145,7 +149,7 @@ internal sealed class TicketlandConnectionWindow028:EditorWindow
         var connect=Button(commands,"Подключить",()=>{});
         var refresh=Button(commands,"Обновить",()=>{});
         var disconnect=Button(commands,"Отключить",()=>Try(main.DisconnectTicketland028));
-        Button(form,"Сопоставление показов и секторов",()=>Try(()=>new TicketlandMappingWindow028(store,main).ShowDialog()));
+        Button(form,"Расхождения",()=>Try(()=>new TicketlandMappingWindow028(store,main).ShowDialog()));
         void Changed()=>status.Text=main.TicketlandStatus028;
         main.TicketlandStatusChanged028+=Changed;Closed+=(_,_)=>main.TicketlandStatusChanged028-=Changed;
         connect.Click+=async(_,_)=>{

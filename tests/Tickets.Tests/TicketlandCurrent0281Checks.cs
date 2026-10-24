@@ -5,7 +5,7 @@ using Tickets.Core;
 
 internal static class TicketlandCurrent0281Checks
 {
-    internal const string Metadata="{\"value\":[{\"Name\":\"BD\",\"ParameterType\":\"DateTime\",\"Prompt\":\"С\"},{\"Name\":\"ED\",\"ParameterType\":\"DateTime\",\"Prompt\":\"По\"},{\"Name\":\"Period\",\"ParameterType\":\"Integer\",\"Prompt\":\"Период\",\"ValidValues\":[{\"Label\":\"Период операций\",\"Value\":\"0\"},{\"Label\":\"Период мероприятий\",\"Value\":\"1\"}]}]}";
+    internal const string Metadata=TicketlandAllChannels029Checks.Metadata;
     private const string Detail="<Подробности SectionName='123456789' Barcode='Партер' PlaceRow='1' PlacePlace='2' Price1='500.0000' Oper1='продажа' TaxName='Без НДС'/>";
     private static string Report(string? rows=null,int sales=1,int returns=0)=>$"<Report Name='(C4at) По вознаграждению со списком билетов' ReportTitle3='По вознаграждению со списком билетов за период мероприятий c 24.10.2026 0:00:00 по 28.10.2026 23:59:59'><Tablix1 SalesSumm4='{sales}' SalesSumm6='{returns}' Oper='{sales-returns}'><QuotaOwnerName_Collection><QuotaOwnerName><idPerformance_Collection><idPerformance PerfName='Дубровский 27.10.2026 19:00:00' SaleChannelName='МДТЗК' Price='{sales}' Price2='{returns}' RetSum='{sales-returns}'><Подробности_Collection>{rows??Detail}</Подробности_Collection></idPerformance></idPerformance_Collection></QuotaOwnerName></QuotaOwnerName_Collection></Tablix1></Report>";
     internal static void Register(Action<string,Action<Store>> run)
@@ -94,8 +94,38 @@ internal static class TicketlandCurrent0281Checks
     private static async Task<TicketlandReport028> Current(TicketlandClient028 c){var m=typeof(TicketlandClient028).GetMethod("FetchCurrentAsync");Check(m is not null,"current event-period report download missing");try{return await (Task<TicketlandReport028>)m!.Invoke(c,["secret-user","secret-password",new DateTime(2026,10,24),new DateTime(2026,10,28),CancellationToken.None])!;}catch(TargetInvocationException e) when(e.InnerException is not null){throw e.InnerException;}}
     private static TicketlandReport028 Fetch(TicketlandClient028 c)=>Current(c).GetAwaiter().GetResult();
     private static string Reject(TicketlandClient028 c){try{Fetch(c);}catch(TicketException e){Check(!e.ToString().Contains("secret-user")&&!e.ToString().Contains("secret-password"),"leaked credentials");return e.Message;}throw new Exception("expected TicketException");}
-    private static TicketlandClient028 Session(string metadata,string report){var n=0;return new(new Handler((req,ct)=>{n++;if(n==1)return Task.FromResult(Html("<html>reports</html>"));if(n==2){Check(Uri.UnescapeDataString(req.RequestUri!.AbsolutePath).Contains("(C4at)"),"wrong report");return Task.FromResult(Html(metadata));}var q=Uri.UnescapeDataString(req.RequestUri!.Query);Check(q.Contains("BD=2026-10-24T00:00:00")&&q.Contains("ED=2026-10-28T23:59:59")&&q.Contains("Period=1")&&q.Contains("rs:Format=XML"),"not event-period XML");return Task.FromResult(Html(report));}));}
-    private static HttpResponseMessage Html(string text)=>new(HttpStatusCode.OK){Content=new StringContent(text,Encoding.UTF8,"text/html")};
+    private static TicketlandClient028 Session(string metadata,string report){var n=0;return new(new Handler((req,ct)=>{n++;if(n==1)return Task.FromResult(Html("<html>reports</html>"));if(n==2){Check(Uri.UnescapeDataString(req.RequestUri!.AbsolutePath).Contains("(Sub1T)"),"wrong report");return Task.FromResult(Html(metadata));}var q=Uri.UnescapeDataString(req.RequestUri!.Query);Check(q.Contains("BD=2026-10-24T00:00:00")&&q.Contains("ED=2026-10-28T23:59:59")&&q.Contains("Period=1")&&q.Contains("rs:Format=XML"),"not event-period XML");return Task.FromResult(Html(report));}));}
+    private static HttpResponseMessage Html(string text)=>new(HttpStatusCode.OK){Content=new StringContent(CurrentFixture(text),Encoding.UTF8,"text/html")};
+    // Keep the existing C4-shaped corruption cases while exercising the replacement transport.
+    private static string CurrentFixture(string text)
+    {
+        if(!text.StartsWith("<Report Name='(C4at)"))return text;
+        try
+        {
+            var root=System.Xml.Linq.XElement.Parse(text);
+            var oldTitle=(string?)root.Attribute("ReportTitle3")??"";
+            root.SetAttributeValue("Name","(Sub1T) Актуальные продажи по распространителям и МДТЗК с субагентами");
+            root.SetAttributeValue("ReportTitle3",oldTitle+" По фактической цене <Все субагенты> Все зрелища");
+            var total=root.Descendants("Tablix1").Single();total.SetAttributeValue("ETicketCnt4",(string?)total.Attribute("SalesSumm4"));total.SetAttributeValue("RetAnotherCnt4",(string?)total.Attribute("SalesSumm6"));
+            // Preserve the legacy grand-total invariant test in the replacement shape.
+            if((int?)total.Attribute("Oper")!=(int?)total.Attribute("SalesSumm4")-(int?)total.Attribute("SalesSumm6"))total.SetAttributeValue("ETicketCnt4","999999");
+            foreach(var group in root.Descendants("idPerformance").ToArray())
+            {
+                var perf=(string)group.Attribute("PerfName")!;var split=perf.Length-19;
+                group.Name="ShowName";group.SetAttributeValue("ShowName",perf[..split].Trim());
+                group.SetAttributeValue("PerformanceTime",DateTime.ParseExact(perf[split..],"dd.MM.yyyy HH:mm:ss",System.Globalization.CultureInfo.InvariantCulture).ToString("yyyy-MM-dd'T'HH:mm:ss"));
+                group.SetAttributeValue("HallBuildingName","Тестовый зал");group.SetAttributeValue("AgentName","МДТЗК");
+                group.SetAttributeValue("ETicketCnt3",(string?)group.Attribute("Price"));group.SetAttributeValue("RetAnotherCnt3",(string?)group.Attribute("Price2"));group.SetAttributeValue("ETicketCnt6",(string?)group.Attribute("RetSum"));
+                foreach(var row in group.Descendants("Подробности").ToArray())
+                {
+                    row.Name="Details";
+                    foreach(var (oldName,newName)in new[]{("SectionName","Barcode2"),("Barcode","SectionName4"),("PlaceRow","PlaceRow2"),("PlacePlace","PlacePlace2"),("Price1","NonPlaceSumm2")})row.SetAttributeValue(newName,(string?)row.Attribute(oldName));
+                }
+            }
+            return root.ToString();
+        }
+        catch{return text;}
+    }
     private static void Check(bool value,string message){if(!value)throw new Exception(message);}
     private sealed class Handler(Func<HttpRequestMessage,CancellationToken,Task<HttpResponseMessage>> send):HttpMessageHandler{protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage r,CancellationToken c)=>send(r,c);}
 }

@@ -20,6 +20,9 @@ public partial class MainWindow
             UndoPriceButton.ActualWidth+UndoPriceButton.Margin.Left+UndoPriceButton.Margin.Right+
             ExtendInvoiceButton.ActualWidth+ExtendInvoiceButton.Margin.Left+ExtendInvoiceButton.Margin.Right-OrdinaryActionsScroll.HorizontalOffset);
         Canvas.SetTop(SquareShowActions,0);
+        Canvas.SetLeft(RefreshTicketlandButton029,Canvas.GetLeft(SquareShowActions)+SquareShowActions.ActualWidth);
+        Canvas.SetTop(RefreshTicketlandButton029,0);
+        UpperActions.Margin=new Thickness(0,0,RefreshTicketlandButton029.ActualWidth+RefreshTicketlandButton029.Margin.Left+RefreshTicketlandButton029.Margin.Right,0);
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
             var navigation=layout.ActualWidth<1050?236d:280d;

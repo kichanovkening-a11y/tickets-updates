@@ -111,11 +111,17 @@ public sealed partial class Store
         using var c=Open();using var tx=c.BeginTransaction();DateTimeOffset fetched=default;
         using(var q=Command(c,"SELECT fetched_at FROM ticketland_sync_028 WHERE id=1"))
         {q.Transaction=tx;if(q.ExecuteScalar() is string text)fetched=DateTimeOffset.Parse(text,CultureInfo.InvariantCulture);}
-        var sales=new List<TicketlandSale028>();
-        using(var q=Command(c,"SELECT title,starts_at,sector,row_label,seat_label,barcode,nominal FROM ticketland_sale_028 ORDER BY barcode"))
-        {
-            q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())sales.Add(new(r.GetString(0),TicketlandAt028(DateTime.Parse(r.GetString(1),CultureInfo.InvariantCulture)),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),decimal.Parse(r.GetString(6),CultureInfo.InvariantCulture)));
-        }
+        var sales=ReadTicketlandSales029(c,tx);
         tx.Commit();return new(sales,fetched);
     }
+    private static List<TicketlandSale028> ReadTicketlandSales029(SqliteConnection c,SqliteTransaction tx)
+    {
+        var sales=new List<TicketlandSale028>();
+        using(var q=Command(c,"SELECT title,starts_at,sector,row_label,seat_label,barcode,nominal,source_venue,source_channel FROM ticketland_sale_028 ORDER BY barcode"))
+        {
+            q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())sales.Add(new(r.GetString(0),TicketlandAt028(DateTime.Parse(r.GetString(1),CultureInfo.InvariantCulture)),r.GetString(2),r.GetString(3),r.GetString(4),r.GetString(5),decimal.Parse(r.GetString(6),CultureInfo.InvariantCulture)){Venue=r.GetString(7),SourceChannel=r.GetString(8)});
+        }
+        return sales;
+    }
+
 }

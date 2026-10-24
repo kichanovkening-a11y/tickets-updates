@@ -28,8 +28,8 @@ internal static class Journal017Checks
             var selection=(HashSet<long>)typeof(Tickets.App.MainWindow).GetField("journalSelection",Private)!.GetValue(main)!;
             var grid=(DataGrid)main.FindName("HistoryGrid");
             var detailColumns=grid.Columns.OfType<DataGridTextColumn>().Where(column=>column.Binding is System.Windows.Data.Binding binding&&binding.Path.Path is "ReturnedCount" or "Status").ToArray();
-            Check(detailColumns.Length==2&&detailColumns.All(column=>column.Visibility==Visibility.Collapsed),"Returned count and status are hidden by default while remaining available as columns");
-            Check(grid.Columns.Count(column=>column.Visibility==Visibility.Visible)==7,"Default journal contains six main columns and the selection checkbox");
+            Check(detailColumns.Length==1&&detailColumns.All(column=>column.Visibility==Visibility.Collapsed)&&grid.Columns.Any(column=>Equals(column.Header,"Возврат")&&column.Visibility==Visibility.Visible),"Return details are visible while the status column remains optional");
+            Check(grid.Columns.Count(column=>column.Visibility==Visibility.Visible)==8,"Default journal contains main columns return count and the selection checkbox");
             var merge=(Button)main.FindName("MergeInvoicesButton");
             var status=(TextBlock)main.FindName("JournalSelectionStatus");
             void Select(params long[] ids){selection.Clear();selection.UnionWith(ids);typeof(Tickets.App.MainWindow).GetMethod("UpdateJournalSelection",Private)!.Invoke(main,null);}

@@ -72,7 +72,7 @@ internal static class HallCaption029UiChecks
             {
                 main.SeparateWindows=separate;var suffix=Guid.NewGuid().ToString("N");var title="029 catalog edit "+suffix;
                 var id=store.CreateHall(title,"",[new(){Sector="Партер",Row="1",Number="1",X=12,Y=24}]);var before=store.VenueSeats(id);
-                var plan=store.SavePlan(id,title,before.Select(s=>new PriceValue(s.Id,500,"#ABCDEF")).ToArray());var evt=store.CreateEvent(store.SavePerformance(title),id,plan,DateTime.Today.AddDays(31));store.Issue(evt,[before[0].Id],title,"CE029",1);
+                var plan=store.SavePlan(id,title,before.Select(s=>new PriceValue(s.Id,500,"#ABCDEF")).ToArray());var evt=store.CreateEvent(store.SavePerformance(title),id,plan,DateTime.Today.AddDays(31));store.Issue(evt,[before[0].Id],title,separate?"CE029S":"CE029E",1);
                 var count=store.Venues().Count;Exception? failure=null;
                 Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                     EditorWindow? catalog=null;

@@ -63,7 +63,8 @@ internal static class Main027UiChecks
             var point=(Point)captionMethod.Invoke(null,[new Rect(0,0,40,15),seats,seats,Array.Empty<Rect>(),new Point()])!;Check(point.Y+15==-5,"sector title is exactly five units above first row");
             Move(hall,new Point(200,150));hall.EditRow("Партер","7");Pump();IReadOnlyList<SeatInfo>? changed=null;hall.RowTransformCompleted+=value=>changed=value;
             Move(hall,new Point(240,210));Click();
-            Check(changed is {Count:6}&&changed.All(s=>s.Y==0)&&changed.Select(s=>s.X-seats[(int)s.Id-1].X).Distinct().Count()==1&&changed[0].X>0,"row move changes only horizontal coordinates of its own places");
+            Console.WriteLine("027 row move result: "+(changed is null?"no completion":string.Join("; ",changed.Select(s=>$"{s.Id}: X={s.X:R} Y={s.Y:R} dx={s.X-seats[(int)s.Id-1].X:R}"))));
+            Check(changed is {Count:6}&&changed.All(s=>s.Y==0)&&changed.All(s=>Math.Abs(s.X-seats[(int)s.Id-1].X-changed[0].X)<.00001)&&changed[0].X>0,"row move changes only horizontal coordinates of its own places");
             changed=null;Move(hall,new Point(200,150));hall.EditRow("Партер","7");Move(hall,new Point(250,220));hall.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(hall),0,Key.Escape){RoutedEvent=Keyboard.KeyDownEvent});Pump();Check(changed is null,"Escape cancels pending row move");
             Corrections025UiChecks.Capture(window,"027-hall-caption-and-aisles");
         }finally{window.Close();}

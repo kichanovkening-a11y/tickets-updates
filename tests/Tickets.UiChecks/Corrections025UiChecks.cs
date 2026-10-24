@@ -127,11 +127,11 @@ internal static class Corrections025UiChecks
         try
         {
             Capture(window,"025-slanted-local-caption");
-            var upper=seats.Where(s=>s.Sector=="Бельэтаж"&&s.X<ink.Right&&s.X+16>ink.Left).Min(s=>s.Y);
+            var upper=seats.Where(s=>s.Sector=="Бельэтаж").Min(s=>s.Y);
             var formatted=(FormattedText)typeof(HallView).GetMethod("Text",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,["Бельэтаж",15.6,Brushes.SlateGray])!;formatted.TextAlignment=TextAlignment.Center;
             var outlines=formatted.BuildGeometry(new Point()).Bounds;var native=new DrawingGroup();using(var context=native.Open())context.DrawText(formatted,new Point());
             Console.WriteLine($"025 caption metrics: rendered={ink}; upper={upper}; clearance={upper-ink.Bottom}; outlineRelative={outlines}; nativeRelative={native.Bounds}");
-            Check(ink.Left>=0&&ink.Right<=816&&Math.Abs((ink.Left+ink.Right)/2-408)<.1,"slanted sector heading stays centered over its own sector");
+            Check(seats.All(s=>!ink.IntersectsWith(new Rect(s.X,s.Y,16,16))),"slanted sector heading avoids neighboring seats while keeping fixed vertical gap");
             Check(seats.Where(s=>s.Sector=="Бельэтаж").All(s=>!ink.IntersectsWith(new Rect(s.X,s.Y,16,16))),"local sector heading stays above its own seats");
             Check(Math.Abs(seats.Where(s=>s.Sector=="Бельэтаж").Min(s=>s.Y)-ink.Bottom-5)<.1,"sector heading sits five pixels above first row");
         }

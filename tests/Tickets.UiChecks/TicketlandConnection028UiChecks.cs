@@ -72,6 +72,9 @@ internal static class TicketlandConnection028UiChecks
             Wait(main.RefreshTicketland028());
             Check(store.TicketlandLastSync028==report.FetchedAt&&store.Seats(eventId).Single(s=>s.Id==ids[0]).IsTicketlandSold&&hall.SelectedSeats.Single().IsTicketlandSold,"failed fetch preserves last successful timestamp and markers");
             Check(main.TicketlandStatus028.Contains("обновление не выполнено",StringComparison.Ordinal)&&main.TicketlandStatus028.Contains("последние полученные данные",StringComparison.Ordinal),"failed automatic refresh explains that last report remains available");
+            main.TicketlandFetch028=(_,_)=>Task.FromException<TicketlandReport028>(new TicketException("Вход в Ticketland выполнен. Превышено время ожидания отчёта текущих сеансов."));
+            Wait(main.RefreshTicketland028());
+            Check(main.TicketlandStatus028.StartsWith("Вход в Ticketland выполнен.",StringComparison.Ordinal),"automatic refresh preserves precise login/report stage error");
             CheckMappingWindow(store,main,eventId,starts,ids[0],report.FetchedAt.AddMinutes(1));
         }
         finally

@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--ticketland0281")&&!name.StartsWith("0281"))return;
     if(args.Contains("--corrections028")&&!name.StartsWith("028"))return;
     if(args.Contains("--hall027")&&!(name.StartsWith("027")&&(name.Contains("hall")||name.Contains("sector")||name.Contains("aisle"))))return;
     if(args.Contains("--corrections027")&&!name.StartsWith("027"))return;
@@ -42,6 +43,7 @@ void Reject(Action action)
 Hall024Checks.Register(Test);
 DeletedVenue028Checks.Register(Test);
 TicketlandClient028Checks.Register(Test);
+TicketlandCurrent0281Checks.Register(Test);
 TicketlandStore028Checks.Register(Test);
 Corrections025Checks.Register(Test);
 Corrections026Checks.Register(Test);

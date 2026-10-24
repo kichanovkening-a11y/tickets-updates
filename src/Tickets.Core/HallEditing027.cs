@@ -18,14 +18,14 @@ public static class HallEditing027
 
 public sealed partial class Store
 {
-    /// <summary>Only sector names can replace an existing scheme. Geometry always gets a new identity.</summary>
+    /// <summary>Hall metadata and sector names keep the existing identity. Geometry gets a new identity.</summary>
     public long SaveEditedHall(long venueId,string name,string address,IReadOnlyCollection<DraftSeat> seats)
     {
         name=Required(name,"Название зала");address=address.Trim();
         var venue=Venues().SingleOrDefault(v=>v.Id==venueId)??throw new TicketException("Выберите зал.");
         var original=HallDraft(venueId);var draft=seats.ToArray();
         var renames=new Dictionary<string,string>(StringComparer.OrdinalIgnoreCase);
-        var namesOnly=original.Count==draft.Length&&name==venue.Name&&address==venue.Address;
+        var namesOnly=original.Count==draft.Length;
         for(var i=0;namesOnly&&i<original.Count;i++)
         {
             var old=original[i];var edit=draft[i];var sector=Required(edit.Sector,"Сектор");
@@ -43,6 +43,10 @@ public sealed partial class Store
         }
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         RequireActiveVenue(c,tx,venueId);
+        if(name!=venue.Name&&Venues().Any(v=>v.Id!=venueId&&CatalogText.Key(v.Name)==CatalogText.Key(name)))
+            throw new TicketException("Зал с таким названием уже есть.");
+        using(var update=Command(c,"UPDATE venue SET name=$n,address=$a WHERE id=$v","$n",name,"$a",address,"$v",venueId))
+        {update.Transaction=tx;update.ExecuteNonQuery();}
         // Updating sector rows keeps every seat, event, pricing and issuance reference intact.
         using var find=Command(c,"SELECT id,name FROM sector WHERE venue_id=$v","$v",venueId);find.Transaction=tx;
         var sectors=new List<(long Id,string Name)>();using(var reader=find.ExecuteReader())while(reader.Read())sectors.Add((reader.GetInt64(0),reader.GetString(1)));

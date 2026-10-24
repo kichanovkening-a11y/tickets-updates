@@ -71,6 +71,7 @@ public partial class MainWindow
             await SyncTicketland028(login,false,ticketlandLifetime028.Token);
         }
         catch(OperationCanceledException){}
+        catch(TicketException){}
         catch(Exception){SetTicketlandStatus028("Ticketland: обновление не выполнено. Сохранены последние полученные данные.");}
     }
     private async Task SyncTicketland028(TicketlandLogin028 login,bool connect,CancellationToken cancellation)
@@ -85,9 +86,11 @@ public partial class MainWindow
             if(TicketlandFetch028 is not null)report=await TicketlandFetch028(login,linked.Token);
             else
             {
-                using var client=new TicketlandClient028();
-                var reportEnd=TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow,"Russian Standard Time").Date.AddDays(1);
-                report=await client.FetchAsync(login.Username,login.Password,new DateTime(2000,1,1),reportEnd,linked.Token);
+                using var client=new TicketlandClient028{Progress0281=SetTicketlandStatus028};
+                var today=TimeZoneInfo.ConvertTimeBySystemTimeZoneId(DateTime.UtcNow,"Russian Standard Time").Date;
+                var period=store.TicketlandPeriod0281(today);
+                if(period is {} dates)report=await client.FetchCurrentAsync(login.Username,login.Password,dates.From,dates.To,linked.Token);
+                else{await client.AuthenticateCurrentAsync(login.Username,login.Password,linked.Token);report=new([],DateTimeOffset.UtcNow);}
             }
             linked.Token.ThrowIfCancellationRequested();
             var summary=await Task.Run(()=>store.ApplyTicketlandReport028(report,replace:true),linked.Token);

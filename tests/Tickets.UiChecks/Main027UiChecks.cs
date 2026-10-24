@@ -39,7 +39,7 @@ internal static class Main027UiChecks
             var history=(DataGrid)main.FindName("HistoryGrid");history.UpdateLayout();Pump();
             var toggle=Visuals(history).OfType<TextBlock>().Single(t=>t.Text=="Возврат: 1");var windows=Application.Current.Windows.Count;
             toggle.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.PreviewMouseLeftButtonUpEvent});Pump();
-            var row=Visuals(history).OfType<DataGridRow>().Single(r=>r.Item.GetType().GetProperty("Id")!.GetValue(r.Item) is long n&&n==ticketIssue);
+            var row=Visuals(history).OfType<DataGridRow>().Single(r=>ReferenceEquals(ItemsControl.ItemsControlFromItemContainer(r),history)&&r.Item.GetType().GetProperty("Id")!.GetValue(r.Item) is long n&&n==ticketIssue);
             Check(row.DetailsVisibility==Visibility.Visible&&Visuals(row).OfType<DataGrid>().Any(g=>g.Items.Count==1&&g.Columns.Count==6),"journal return count expands actual returned places inline");
             Check(Application.Current.Windows.Count==windows,"journal return click opens no extra window");
             var details=Visuals(row).OfType<DataGrid>().Single(g=>g.Columns.Count==6);

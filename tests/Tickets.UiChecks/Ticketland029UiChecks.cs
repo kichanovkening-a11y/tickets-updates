@@ -63,7 +63,7 @@ internal static class Ticketland029UiChecks
         var plan=store.SavePlan(venue,name,ids.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
         var starts=DateTime.Today.AddDays(45).AddSeconds(Random.Shared.Next(10000));
         var eventId=store.CreateEvent(store.SavePerformance(name),venue,plan,starts);
-        var otherId=store.CreateEvent(store.SavePerformance("Другой UI030 "+token),venue,plan,starts);
+        var otherId=store.CreateEvent(store.SavePerformance("Другой UI030 "+token),venue,plan,starts.AddDays(1));
         var sales=new[]{
             new TicketlandSale028(name,starts,"Источник партер","1","1",token+"A",500){Venue=venueName},
             new TicketlandSale028(name,starts,"Источник партер","1","2",token+"B",500){Venue=venueName},

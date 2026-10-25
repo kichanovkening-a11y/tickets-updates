@@ -11,6 +11,7 @@ internal sealed class TransferWindow033:EditorWindow
         var form=new StackPanel{Margin=new Thickness(24)};Content=form;
         var kinds=new[]{new Kind("hall","Зал"),new Kind("performance","Спектакль"),new Kind("pricing","Расценовка"),new Kind("blank","Бланк")};
         var kind=Combo(form,"Что передать",kinds,nameof(Kind.Name));var item=Combo(form,"Выберите",Array.Empty<TransferChoice033>(),nameof(TransferChoice033.Name));
+        kind.SelectedIndex=-1;
         kind.SelectionChanged+=(_,_)=>{item.ItemsSource=store.TransferChoices033(((Kind)kind.SelectedItem).Id);item.SelectedIndex=-1;};
         kind.SelectedIndex=0;
         Button(form,"Экспорт",()=>Try(()=>{

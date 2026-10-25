@@ -4,6 +4,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using System.Windows.Threading;
 using Tickets.App;
 using Tickets.Core;
@@ -25,7 +26,14 @@ internal static class FutureSessionDeletion030UiChecks
             store.Return([store.History(target).Single().Id]);var document=store.SaveInvoiceDocument(target,issue);var documentBytes=File.ReadAllBytes(document);
             var before=Backups(store).ToHashSet();Window owner=main;PerformanceWindow? catalog=null;
             RefreshMain(main);
-            if(directory){catalog=new PerformanceWindow(store);owner=catalog;catalog.Show();Pump();}
+            // Use the user's search path to place this fixture's two dates in the viewport.
+            ((TextBox)main.FindName("SearchBox")).Text="UI030 delete "+suffix;Pump();
+            if(directory)
+            {
+                catalog=new PerformanceWindow(store);owner=catalog;catalog.Show();Pump();
+                Logical(catalog).OfType<TextBox>().Last().Text="UI030 delete "+suffix;Pump();
+            }
+            owner.Activate();Pump();
             try
             {
                 var tree=directory?Logical(owner).OfType<TreeView>().Single():(TreeView)main.FindName("EventsList");
@@ -33,7 +41,10 @@ internal static class FutureSessionDeletion030UiChecks
                 void OpenMenu()
                 {
                     var leaf=Find(target);foreach(var node in Items(tree))if(Items(node).Contains(leaf))node.IsExpanded=true;
-                    leaf.BringIntoView();Pump();NativeClick((FrameworkElement)leaf.Header,true);Pump();
+                    var header=(FrameworkElement)leaf.Header;
+                    header.BringIntoView();Pump();owner.UpdateLayout();Pump();
+                    Corrections025UiChecks.Capture(owner,directory?"030-delete-directory-before-menu":"030-delete-main-before-menu");
+                    NativeClick(header,true);Pump();
                     Check(owner.IsVisible&&leaf.ContextMenu is {IsOpen:true},"native right-click opens date menu without opening the show: "+directory);
                     Check(leaf.ContextMenu!.Items.OfType<MenuItem>().Count()==1,"date menu exposes one show deletion command");
                 }
@@ -81,7 +92,15 @@ internal static class FutureSessionDeletion030UiChecks
     }
     private static void NativeClick(FrameworkElement item,bool right)
     {
-        item.UpdateLayout();var p=item.PointToScreen(new Point(item.ActualWidth/2,item.ActualHeight/2));
+        item.UpdateLayout();var local=new Point(item.ActualWidth/2,item.ActualHeight/2);
+        var root=(UIElement)PresentationSource.FromVisual(item)!.RootVisual;
+        var rootPoint=item.TranslatePoint(local,root);var hit=root.InputHitTest(rootPoint) as DependencyObject;
+        Console.WriteLine($"030 native click target={item.GetType().Name} size={item.ActualWidth}x{item.ActualHeight} rootPoint={rootPoint} rootSize={root.RenderSize} hit={hit?.GetType().Name}");
+        var inside=false;
+        for(var node=hit;node is not null;node=node is Visual or System.Windows.Media.Media3D.Visual3D?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))
+            if(ReferenceEquals(node,item)){inside=true;break;}
+        Check(inside,"native click point actually hits requested show header or menu item");
+        var p=item.PointToScreen(local);
         Check(SetCursorPos((int)p.X,(int)p.Y),"native cursor reaches show/menu");Wait();mouse_event(right?8u:2u,0,0,0,UIntPtr.Zero);Wait();mouse_event(right?16u:4u,0,0,0,UIntPtr.Zero);Wait();
     }
     private static void Wait(){var f=new DispatcherFrame();var t=new DispatcherTimer(DispatcherPriority.Background){Interval=TimeSpan.FromMilliseconds(80)};t.Tick+=(_,_)=>{t.Stop();f.Continue=false;};t.Start();Dispatcher.PushFrame(f);}

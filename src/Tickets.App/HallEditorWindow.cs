@@ -92,11 +92,17 @@ internal sealed class HallEditorWindow : EditorWindow
         });
         preview.SeatContextRequested+=(id,_)=>Context(id,false);preview.RowContextRequested+=(id,_)=>Context(id,true);
         preview.SectorContextRequested+=(sector,_)=>Try(()=>{
-            var original=seats.First(s=>s.Sector==sector).SectorCaption;
-            var dialog=new HallSectorNameWindow027(store,sector,preview.SectorCaption029ForEdit(sector),original is not null);if(dialog.ShowDialog()!=true)return;
-            // Validate before recording undo, then apply the complete sector rename.
-            var draft=seats.Select(Clone).ToList();HallEditing027.RenameSector(draft,sector,dialog.Result);
-            Remember();HallEditing027.RenameSector(seats,sector,dialog.Result);foreach(var seat in seats.Where(s=>s.Sector==dialog.Result))seat.SectorCaption=dialog.ResultCaption;Refresh(false);
+            var menu=new ContextMenu{PlacementTarget=preview};
+            var rename=new MenuItem{Header="Изменить название"};
+            rename.Click+=(_,_)=>Try(()=>{
+                var original=seats.First(s=>s.Sector==sector).SectorCaption;
+                var dialog=new HallSectorNameWindow027(store,sector,preview.SectorCaption029ForEdit(sector),original is not null);if(dialog.ShowDialog()!=true)return;
+                // Validate before recording undo, then apply the complete sector rename.
+                var draft=seats.Select(Clone).ToList();HallEditing027.RenameSector(draft,sector,dialog.Result);
+                Remember();HallEditing027.RenameSector(seats,sector,dialog.Result);foreach(var seat in seats.Where(s=>s.Sector==dialog.Result))seat.SectorCaption=dialog.ResultCaption;Refresh(false);
+            });
+            var rotate=new MenuItem{Header="Повернуть название"};rotate.Click+=(_,_)=>preview.EditSectorCaption031(sector);
+            menu.Items.Add(rename);menu.Items.Add(rotate);preview.ContextMenu=menu;menu.IsOpen=true;
         });
         preview.SectorCaptionChanged029+=(sector,caption)=>Try(()=>{Remember();foreach(var seat in seats.Where(s=>s.Sector==sector))seat.SectorCaption=caption;Refresh(false);});
         void Transform(IReadOnlyList<SeatInfo> changed)=>Try(()=>{
@@ -131,29 +137,13 @@ internal sealed class HallSectorNameWindow027:EditorWindow
         var panel=new StackPanel{Margin=new Thickness(16)};Content=panel;
         panel.Children.Add(new TextBlock{Text="Название сектора (одна или две строки)",Margin=new Thickness(0,0,0,4)});
         var name=new TextBox{Text=caption.Text,AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,Height=74,VerticalContentAlignment=VerticalAlignment.Center};panel.Children.Add(name);
-        var angle=caption.Angle;var angleLabel=new TextBlock{Text=$"Угол надписи: {angle:0.##}°",Margin=new Thickness(0,10,0,4)};panel.Children.Add(angleLabel);
-        Button(panel,"Повернуть надпись",()=>Try(()=>{
-            var dialog=new SectorCaptionAngleWindow029(store,angle);if(dialog.ShowDialog()!=true)return;angle=dialog.Angle;angleLabel.Text=$"Угол надписи: {angle:0.##}°";
-        }));
+        var angle=caption.Angle;
         Button(panel,"Сохранить",()=>Try(()=>{
             var text=name.Text.Replace("\r\n","\n").Trim();
             if(text.Length is 0 or >200||text.Count(c=>c=='\n')>1||text.Any(c=>char.IsControl(c)&&c!='\n')||text.Split('\n').Any(string.IsNullOrWhiteSpace))throw new TicketException("Укажите название в одну или две строки (до 200 символов).");
             var logical=System.Text.RegularExpressions.Regex.Replace(text,@"\s+"," ");
             var draft=new[]{new DraftSeat{Sector=sector}};HallEditing027.RenameSector(draft,sector,logical);Result=draft[0].Sector;
             ResultCaption=hasOverride||text.Contains('\n')||angle!=0?caption with{Text=text,Angle=angle}:null;Finish(true);
-        }));
-    }
-}
-internal sealed class SectorCaptionAngleWindow029:EditorWindow
-{
-    internal double Angle{get;private set;}
-    internal SectorCaptionAngleWindow029(Store store,double angle):base(store,"Поворот надписи",420,230)
-    {
-        var panel=new StackPanel{Margin=new Thickness(16)};Content=panel;
-        var input=Field(panel,"Угол в градусах",angle.ToString(System.Globalization.CultureInfo.CurrentCulture));
-        Button(panel,"Сохранить",()=>Try(()=>{
-            if(!double.TryParse(input.Text.Replace(',', '.'),System.Globalization.NumberStyles.Float,System.Globalization.CultureInfo.InvariantCulture,out var result)||!double.IsFinite(result))throw new TicketException("Укажите угол в градусах.");
-            Angle=result%360;Finish(true);
         }));
     }
 }

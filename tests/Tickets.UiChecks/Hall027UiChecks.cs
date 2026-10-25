@@ -38,7 +38,8 @@ internal static class Hall027UiChecks
                     try{Logical(dialog).OfType<TextBox>().Single().Text="Амфитеатр027";Logical(dialog).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}
                     catch(Exception ex){renameError=ex;dialog.Close();}
                 }));
-                ((Action<string,Point>)typeof(HallView).GetField("SectorContextRequested",Private)!.GetValue(hall)!)("Партер",new Point());Pump();
+                ((Action<string,Point>)typeof(HallView).GetField("SectorContextRequested",Private)!.GetValue(hall)!)("Партер",new Point());
+                hall.ContextMenu!.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Изменить название")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));hall.ContextMenu.IsOpen=false;Pump();
                 if(renameError is not null)throw renameError;
                 Check(seats.All(s=>s.Sector=="Амфитеатр027"),"right-click caption renames the entire sector");
                 type.GetMethod("Undo",Private)!.Invoke(editor,null);Check(seats.All(s=>s.Sector=="Партер"),"sector rename supports undo");

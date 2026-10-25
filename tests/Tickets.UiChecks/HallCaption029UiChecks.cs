@@ -35,22 +35,17 @@ internal static class HallCaption029UiChecks
                     try
                     {
                         var box=Logical(dialog).OfType<TextBox>().Single();Check(box.AcceptsReturn,"sector name input supports two lines");box.Text="Балкон\nдлинное название";
-                        Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
-                            var angle=Application.Current.Windows.OfType<SectorCaptionAngleWindow029>().Single();
-                            try{Logical(angle).OfType<TextBox>().Single().Text="37";Logical(angle).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));}
-                            catch(Exception ex){dialogFailure=ex;angle.Close();}
-                        }));
-                        Logical(dialog).OfType<Button>().Single(b=>Equals(b.Content,"Повернуть надпись")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                         Logical(dialog).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                     }
                     catch(Exception ex){dialogFailure=ex;dialog.Close();}
                 }));
-                ((Action<string,Point>)typeof(HallView).GetField("SectorContextRequested",Private)!.GetValue(hall)!)(name,new Point());Pump();if(dialogFailure is not null)throw dialogFailure;
+                ((Action<string,Point>)typeof(HallView).GetField("SectorContextRequested",Private)!.GetValue(hall)!)(name,new Point());
+                hall.ContextMenu!.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Изменить название")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));hall.ContextMenu.IsOpen=false;Pump();if(dialogFailure is not null)throw dialogFailure;
                 expected=draft.First().SectorCaption;
-                Check(expected is {Angle:37,Text:"Балкон\nдлинное название"}&&draft.All(s=>s.Sector==name),"multiline rotated caption keeps single-line logical sector key");
-                Check(draft.Select(s=>(s.X,s.Y,s.Row,s.Number)).SequenceEqual(coordinates),"caption rotation and text preserve seat geometry");
+                Check(expected is {Angle:0,Text:"Балкон\nдлинное название"}&&draft.All(s=>s.Sector==name),"multiline caption keeps single-line logical sector key");
+                Check(draft.Select(s=>(s.X,s.Y,s.Row,s.Number)).SequenceEqual(coordinates),"caption text preserves seat geometry");
                 var bounds=(Rect)typeof(HallView).GetField("bounds",Private)!.GetValue(hall)!;var hit=CaptionBounds(hall,name);
-                Check(bounds.Contains(hit),"fit bounds include rotated caption hit region");expectedWorldBounds=hit;
+                Check(bounds.Contains(hit),"fit bounds include two-line caption hit region");expectedWorldBounds=hit;
                 Corrections025UiChecks.Capture(editor,"029-movable-two-line-sector-caption");
                 Logical(body).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить изменения")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }
@@ -100,6 +95,7 @@ internal static class HallCaption029UiChecks
                                     catch(Exception ex){failure=ex;dialog.Close();}
                                 }));
                                 ((Action<string,Point>)typeof(HallView).GetField("SectorContextRequested",Private)!.GetValue(preview)!)("Партер",new Point());
+                                preview.ContextMenu!.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Изменить название")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));preview.ContextMenu.IsOpen=false;
                                 if(failure is not null)throw failure;
                                 Logical(body).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить изменения")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
                                 Check(editor.CreatedId==id,"actual catalog entrypoint saves same hall identity");

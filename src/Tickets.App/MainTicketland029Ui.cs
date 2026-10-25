@@ -21,11 +21,12 @@ public partial class MainWindow
     private async void RefreshTicketlandClick029(object sender,RoutedEventArgs e)
     {
         if(TicketlandIsUpdating028||ticketlandManualRefresh029)return;
+        var eventId=current?.Id;
         ticketlandManualRefresh029=true;UpdateTicketlandRefreshState029();
         try
         {
             await RefreshTicketland028();
-            if(!Dispatcher.HasShutdownStarted)await Dispatcher.InvokeAsync(HandleTicketlandReview029);
+            if(!Dispatcher.HasShutdownStarted&&eventId.HasValue)await Dispatcher.InvokeAsync(()=>HandleTicketlandReview029(eventId.Value));
         }
         finally
         {
@@ -33,12 +34,12 @@ public partial class MainWindow
         }
     }
 
-    internal void HandleTicketlandReview029()
+    internal void HandleTicketlandReview029(long eventId)
     {
-        if(ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||store.TicketlandSectorReviews030().Count==0)return;
-        var existing=Application.Current.Windows.OfType<TicketlandMappingWindow028>().FirstOrDefault();
+        if(ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||current?.Id!=eventId||!store.TicketlandSectorReviews030().Any(issue=>issue.EventId==eventId))return;
+        var existing=Application.Current.Windows.OfType<TicketlandMappingWindow028>().FirstOrDefault(window=>window.EventId031==eventId);
         if(existing is not null){existing.Activate();return;}
-        var window=new TicketlandMappingWindow028(store,this);
+        var window=new TicketlandMappingWindow028(store,this,eventId);
         if(IsVisible)window.Owner=this;
         window.ShowDialog();
     }

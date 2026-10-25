@@ -24,20 +24,47 @@ public sealed partial class Store
         "ЦЕНТРАЛЬНЫЙ ДОМ КУЛЬТУРЫ ЖЕЛЕЗНОДОРОЖНИКОВ" or "ТЕАТРАЛЬНО КОНЦЕРТНЫЙ ЗАЛ ЦДКЖ"=>"ЦДКЖ",
         var key=>key
     };
+    // Only recognized grammatical forms are folded. Unknown words remain part of the
+    // identity, so word-order normalization cannot erase a level, number or qualifier.
+    private static string SectorIdentity031(string text)
+    {
+        var key=Regex.Replace(Text029(text),@"\bБЕЛЬ ЭТАЖ(?:А|Е)?\b","БЕЛЬЭТАЖ");
+        key=Regex.Replace(key,@"\b(\d+) (?:Й|Я|ОЙ)\b","$1");
+        var tokens=key.Split(' ',StringSplitOptions.RemoveEmptyEntries).Select(word=>word switch
+        {
+            "ЛОЖА" or "ЛОЖИ" or "ЛОЖУ" or "ЛОЖЕ"=>"ЛОЖА",
+            "ПАРТЕР" or "ПАРТЕРА" or "ПАРТЕРЕ"=>"ПАРТЕР",
+            "АМФИТЕАТР" or "АМФИТЕАТРА" or "АМФИТЕАТРЕ"=>"АМФИТЕАТР",
+            "БЕЛЬЭТАЖ" or "БЕЛЬЭТАЖА" or "БЕЛЬЭТАЖЕ"=>"БЕЛЬЭТАЖ",
+            "БАЛКОН" or "БАЛКОНА" or "БАЛКОНЕ"=>"БАЛКОН",
+            "ЛЕВ" or "ЛЕВЫЙ" or "ЛЕВАЯ" or "ЛЕВОЕ" or "ЛЕВОЙ" or "ЛЕВОГО" or "ЛЕВУЮ"=>"ЛЕВЫЙ",
+            "ПРАВ" or "ПРАВЫЙ" or "ПРАВАЯ" or "ПРАВОЕ" or "ПРАВОЙ" or "ПРАВОГО" or "ПРАВУЮ"=>"ПРАВЫЙ",
+            "ЦЕНТР" or "ЦЕНТРАЛЬНЫЙ" or "ЦЕНТРАЛЬНАЯ" or "ЦЕНТРАЛЬНОЙ" or "СЕРЕДИНА" or "СРЕДНИЙ" or "СРЕДНЯЯ"=>"ЦЕНТР",
+            _=>word
+        }).ToList();
+        if(tokens.Any(t=>t is "ЛЕВЫЙ" or "ПРАВЫЙ" or "ЦЕНТР"))tokens.RemoveAll(t=>t is "СТОРОНА" or "СТОРОНЫ" or "ЧАСТЬ" or "ЧАСТИ");
+        return string.Join(" ",tokens.OrderBy(t=>t,StringComparer.Ordinal));
+    }
     private static string Sector029(string text)
     {
-        var key=Text029(text);
-        var family=Regex.Match(key,@"^(ПАРТЕР|АМФИТЕАТР|БЕЛЬ ?ЭТАЖ)(?: (?:ЛЕВЫЙ|ЛЕВАЯ|ЛЕВ|ПРАВЫЙ|ПРАВАЯ|ПРАВ|ЦЕНТР|ЦЕНТРАЛЬНЫЙ|ЦЕНТРАЛЬНАЯ|СЕРЕДИНА|СРЕДНИЙ|СРЕДНЯЯ)(?: СТОРОНА| ЧАСТЬ)?)?$");
-        if(family.Success)return family.Groups[1].Value.Replace(" ","");
-        if(key.Contains("БАЛКОН"))
-        {
-            var number=Regex.Match(key,@"\d+").Value;
-            var side=key.Contains("ЛЕВ")?"ЛЕВЫЙ":key.Contains("ПРАВ")?"ПРАВЫЙ":key.Contains("ЦЕНТР")?"ЦЕНТР":"";
-            // Keep unknown qualifiers rather than equating unrelated balcony sections.
-            var rest=Regex.Replace(key,@"БАЛКОН|\d+|ЛЕВЫЙ|ЛЕВАЯ|ПРАВЫЙ|ПРАВАЯ|ЦЕНТРАЛЬНЫЙ|ЦЕНТР|СТОРОНА|\bЙ\b","").Trim();
-            if(rest.Length==0)return "БАЛКОН "+number+" "+side;
-        }
-        return key;
+        var identity=SectorIdentity031(text);var tokens=identity.Split(' ');
+        // These three sector families have combined sections. Keep the established fallback,
+        // but never combine box/balcony identities or two explicitly opposite sides.
+        var family=tokens.FirstOrDefault(t=>t is "ПАРТЕР" or "АМФИТЕАТР" or "БЕЛЬЭТАЖ");
+        return family is not null&&tokens.All(t=>t==family||t is "ЛЕВЫЙ" or "ПРАВЫЙ" or "ЦЕНТР")?family:identity;
+    }
+    private static bool CompatibleSector031(string source,string local)
+    {
+        var a=SectorIdentity031(source).Split(' ');var b=SectorIdentity031(local).Split(' ');
+        static string Family(string[] words)=>string.Join(" ",words.Where(t=>t is "ЛОЖА" or "ПАРТЕР" or "АМФИТЕАТР" or "БЕЛЬЭТАЖ" or "БАЛКОН"));
+        var fa=Family(a);var fb=Family(b);
+        if(fa.Length>0&&fb.Length>0&&fa!=fb)return false;
+        static string Side(string[] words)=>string.Join(" ",words.Where(t=>t is "ЛЕВЫЙ" or "ПРАВЫЙ" or "ЦЕНТР"));
+        var sa=Side(a);var sb=Side(b);
+        if(sa.Length>0&&sb.Length>0&&sa!=sb)return false;
+        static string Numbers(string[] words)=>string.Join(" ",words.Where(t=>t.All(char.IsDigit)));
+        var na=Numbers(a);var nb=Numbers(b);
+        return !(na.Length>0&&nb.Length>0&&na!=nb);
     }
     private static List<TlShow029> Local029(SqliteConnection c,SqliteTransaction tx,bool loadSeats=true)
     {
@@ -80,14 +107,17 @@ public sealed partial class Store
         if(exact.Length!=1||General030(sale))return new(null,null,null);
         var show=exact[0];var key=SectorKey030(sale,show);var decision=Decision030(c,tx,key);
         if(decision.Rejected)return new(null,null,null);
+        // A legacy approval may have crossed an explicit family, side or level.
+        // Re-run current matching rather than allowing that old decision to bypass it.
+        if(decision.Sector is not null&&!CompatibleSector031(sale.Sector,decision.Sector))decision=(false,null);
         var sector=decision.Sector??sale.Sector;
         var positions=show.Seats.Where(s=>CatalogText.Key(s.Row)==CatalogText.Key(sale.Row)&&CatalogText.Key(s.Number)==CatalogText.Key(sale.Seat)).ToArray();
-        var seats=positions.Where(s=>Text029(s.Sector)==Text029(sector)).ToArray();
-        if(seats.Length==0&&decision.Sector is null)seats=positions.Where(s=>Sector029(s.Sector)==Sector029(sector)).ToArray();
+        var seats=positions.Where(s=>SectorIdentity031(s.Sector)==SectorIdentity031(sector)).ToArray();
+        if(seats.Length==0&&decision.Sector is null)seats=positions.Where(s=>CompatibleSector031(sector,s.Sector)&&Sector029(s.Sector)==Sector029(sector)).ToArray();
         if(seats.Length==1&&collision.Length==0)return new(show.Id,seats[0].Id,null);
         var reason=collision.Length>0?"Разные исходные места нельзя объединить в одно местное место.":positions.Length==0?"Исходные ряд и место отсутствуют в местном зале. Изменение номера ряда или места запрещено.":"Требуется подтверждение названия сектора в этом показе.";
         // Compatibility view exposes only exact row/seat identities, never renumbering guesses.
-        var candidates=collision.Length>0?new List<TicketlandCandidate029>():positions.Select(s=>new TicketlandCandidate029(show.Id,s.Id,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}, {show.Venue}; {s.Sector}, ряд {s.Row}, место {s.Number}","сектор: «"+sale.Sector+"» → «"+s.Sector+"»")).ToList();
+        var candidates=collision.Length>0?new List<TicketlandCandidate029>():positions.Where(s=>CompatibleSector031(sale.Sector,s.Sector)).Select(s=>new TicketlandCandidate029(show.Id,s.Id,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}, {show.Venue}; {s.Sector}, ряд {s.Row}, место {s.Number}","сектор: «"+sale.Sector+"» → «"+s.Sector+"»")).ToList();
         return new(null,null,new(key,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}; {show.Venue}; {sale.Sector}",reason,candidates));
     }
     private static Dictionary<string,TlMatch029> Matches029(SqliteConnection c,SqliteTransaction tx,IReadOnlyCollection<TicketlandSale028> sales,List<TlShow029> shows,Dictionary<(string Title,DateTime At),long> bindings,Dictionary<(string Title,DateTime At,string Sector,long Event),string> sectors)
@@ -96,7 +126,7 @@ public sealed partial class Store
         var result=sales.ToDictionary(s=>s.Barcode,s=>Match029(c,tx,s,shows,bindings,sectors));
         foreach(var group in sales.Where(s=>result[s.Barcode].Event.HasValue&&result[s.Barcode].Seat.HasValue).GroupBy(s=>(result[s.Barcode].Event,result[s.Barcode].Seat)))
         {
-            var identities=group.Select(s=>$"{s.Sector}|{s.Row}|{s.Seat}").Distinct().OrderBy(x=>x,StringComparer.Ordinal).ToArray();
+            var identities=group.Select(s=>$"{SectorIdentity031(s.Sector)}|{CatalogText.Key(s.Row)}|{CatalogText.Key(s.Seat)}").Distinct().OrderBy(x=>x,StringComparer.Ordinal).ToArray();
             if(identities.Length<2)continue;
             var collision=string.Join("/",identities);
             foreach(var sale in group)result[sale.Barcode]=Match029(c,tx,sale,shows,bindings,sectors,collision);

@@ -38,6 +38,7 @@ internal static class Program
             DocumentEditor019Checks.Run();
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--corrections031",StringComparer.Ordinal)){TicketlandConnection028UiChecks.Run(store,main);TicketlandReview031UiChecks.Run(store,main);HallConflicts031UiChecks.Run(store);HallCaption031UiChecks.Run(store);HallCaption029UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections030",StringComparer.Ordinal)){TicketlandConnection028UiChecks.Run(store,main);HallStatus030UiChecks.Run(store,main);FutureSessionDeletion030UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections029",StringComparer.Ordinal)){TicketlandConnection028UiChecks.Run(store,main);Hall027UiChecks.Run(store);HallCaption029UiChecks.Run(store,main);HallCaption029UiChecks.CheckCatalogEntryPoint(store,main);main.Close();return 0;}
             if(args.Contains("--corrections028",StringComparer.Ordinal)){PrintSchedule028UiChecks.Run(store,main);ReturnedDetails028UiChecks.Run(store,main);TicketlandCredentials028UiChecks.Run();TicketlandConnection028UiChecks.Run(store,main);HallRename0281UiChecks.Run(store,main);main.Close();return 0;}

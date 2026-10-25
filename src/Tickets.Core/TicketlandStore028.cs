@@ -105,8 +105,10 @@ public sealed partial class Store
             // approvals and subsequently ambiguous show identities cannot bypass strict matching.
             if(eventId is null&&priorEvent.HasValue&&priorSeat.HasValue&&Exact030(sale,local029) is var priorExact030&&priorExact030.Length==1&&priorExact030[0].Id==priorEvent.Value)
             {
-                using var valid=Command(c,"SELECT count(*) FROM event e JOIN seat s ON s.venue_id=e.venue_id WHERE e.id=$e AND s.id=$s","$e",priorEvent.Value,"$s",priorSeat.Value);valid.Transaction=tx;
-                if(Convert.ToInt64(valid.ExecuteScalar())==1)
+                using var valid=Command(c,"SELECT z.name FROM event e JOIN seat s ON s.venue_id=e.venue_id JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE e.id=$e AND s.id=$s","$e",priorEvent.Value,"$s",priorSeat.Value);valid.Transaction=tx;
+                // Preserve ordinary arbitrary caption edits, but an old marker cannot
+                // override an explicit opposing side, different family or section number.
+                if(valid.ExecuteScalar() is string priorSector&&CompatibleSector031(sale.Sector,priorSector))
                 {
                     eventId=priorEvent;seatId=priorSeat;
                     using var occupied=Command(c,"SELECT count(*) FROM ticket WHERE event_id=$e AND seat_id=$s AND returned_at IS NULL","$e",eventId.Value,"$s",seatId.Value);occupied.Transaction=tx;

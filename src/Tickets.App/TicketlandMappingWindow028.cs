@@ -7,8 +7,10 @@ namespace Tickets.App;
 
 internal sealed class TicketlandMappingWindow028:EditorWindow
 {
-    internal TicketlandMappingWindow028(Store store,MainWindow main):base(store,"Расхождения Ticketland",900,650)
+    internal long? EventId031{get;}
+    internal TicketlandMappingWindow028(Store store,MainWindow main,long? eventId=null):base(store,"Расхождения Ticketland",900,650)
     {
+        EventId031=eventId;
         var form=new DockPanel{Margin=new Thickness(20)};Content=form;
         var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);form.Children.Add(header);
         header.Children.Add(new TextBlock{Text="Название, дата, время и площадка определяются автоматически. Подтвердите только написание сектора: решение применяется ко всем билетам группы.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
@@ -39,7 +41,7 @@ internal sealed class TicketlandMappingWindow028:EditorWindow
             else{reason.Text=pending.Count==0?"Расхождений нет.":"По этому запросу расхождений нет.";candidates.ItemsSource=null;differences.Text="";}
             status.Text=pending.Count>0?$"Групп: {visible.Length} из {pending.Count}. Билетов: {visible.Sum(i=>i.TicketCount)}.":"Все расхождения рассмотрены.";UpdateCommands();
         }
-        void Reload(){pending=store.TicketlandSectorReviews030();Filter();}
+        void Reload(){pending=store.TicketlandSectorReviews030().Where(issue=>!eventId.HasValue||issue.EventId==eventId.Value).ToArray();Filter();}
         issues.SelectionChanged+=(_,_)=>{
             if(issues.SelectedItem is TicketlandSectorReview030 issue)
             {

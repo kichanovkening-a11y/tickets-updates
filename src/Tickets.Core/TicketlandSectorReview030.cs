@@ -28,7 +28,7 @@ public sealed partial class Store
             // longer resolve. A new sector approval must not claim that seat for another source.
             using(var q=Command(c,"SELECT barcode,seat_id FROM ticketland_sale_028 WHERE event_id=$e AND seat_id IS NOT NULL","$e",show.Id))
             {q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(outside.Contains(r.GetString(0)))claimed.Add(r.GetInt64(1));}
-            var candidates=show.Seats.GroupBy(s=>s.Sector).Where(sector=>all.All(s=>sector.Count(p=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))==1)
+            var candidates=show.Seats.GroupBy(s=>s.Sector).Where(sector=>CompatibleSector031(sale.Sector,sector.Key)&&all.All(s=>sector.Count(p=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))==1)
                 &&!sector.Any(p=>claimed.Contains(p.Id)&&all.Any(s=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))))
                 .Select(g=>new TicketlandSectorCandidate030(g.Key,g.Key)).OrderBy(x=>x.Sector).ToArray();
             if(group.Any(s=>matches[s.Barcode].Issue!.Reason.StartsWith("Разные исходные",StringComparison.Ordinal)))candidates=[];

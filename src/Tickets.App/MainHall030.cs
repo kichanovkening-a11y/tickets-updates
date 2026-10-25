@@ -26,5 +26,22 @@ public partial class MainWindow
         var total=current is null?null:store.TicketlandSourceTotals030().SingleOrDefault(t=>t.EventId==current.Id);
         HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽"+
             $"\nПродано Ticketland: {total?.TicketCount??0} · Сумма Ticketland: {total?.Nominal??0:N2} ₽";
+        HallTotals.ToolTip=null;
+        if(current is not null&&total is null)
+        {
+            var diagnostic=store.TicketlandShowDiagnostics031(current.Id);
+            if(diagnostic.Differences.Count>0)
+            {
+                HallTotals.Text+="\nTicketland: нет точного совпадения показа. Причина — при наведении.";
+                var details=new List<string>{$"В программе: {diagnostic.Title} · {diagnostic.StartsAt:dd.MM.yyyy HH:mm:ss} · {diagnostic.Venue}"};
+                foreach(var source in diagnostic.Differences)
+                {
+                    var fields=new List<string>();
+                    if(!source.TitleMatches)fields.Add("название");if(!source.DateMatches)fields.Add("дата");if(!source.TimeMatches)fields.Add("время");if(!source.VenueMatches)fields.Add("площадка");
+                    details.Add($"Ticketland: {source.SourceTitle} · {source.StartsAt:dd.MM.yyyy HH:mm:ss} · {source.Venue}\n"+(fields.Count>0?"Не совпадает: "+string.Join(", ",fields):"В программе несколько показов с одинаковыми данными; однозначное сопоставление невозможно."));
+                }
+                HallTotals.ToolTip=new TextBlock{Text=string.Join("\n\n",details),TextWrapping=TextWrapping.Wrap,MaxWidth=650};
+            }
+        }
     }
 }

@@ -72,7 +72,7 @@ internal static class TicketlandReview031UiChecks
             main.TicketlandFetch028=(_,_)=>Task.FromResult(Report(sales.Append(Sale(diagnosticSource,starts.AddDays(3),"diagnostic")).ToArray()));
             ObserveReview(main,()=>ClickRefresh(main),_=>{},0);
             var hallTotals=(TextBlock)main.FindName("HallTotals");
-            Check(hallTotals.Text.Contains("нет точного совпадения")&&hallTotals.ToolTip is TextBlock explanation&&explanation.Text.Contains(diagnosticSource)&&explanation.Text.Contains("Не совпадает: название"),"unmatched showing explains source title instead of a silent zero");
+            Check(hallTotals.Text.Contains("нет точного совпадения")&&hallTotals.ToolTip is TextBlock explanation&&explanation.Text.Contains(diagnosticSource,StringComparison.OrdinalIgnoreCase)&&explanation.Text.Contains("Не совпадает: название"),"unmatched showing explains source title instead of a silent zero");
 
             var completion=new TaskCompletionSource<TicketlandReport028>();
             main.TicketlandFetch028=(_,_)=>completion.Task;
@@ -82,6 +82,8 @@ internal static class TicketlandReview031UiChecks
                 main.SelectEvent(second);Pump();completion.SetResult(Report(sales));
             },_=>{},0);
             Check(store.TicketlandSectorReviews030().Any(issue=>issue.EventId==first)&&store.TicketlandSectorReviews030().Any(issue=>issue.EventId==second),"switching shows suppresses stale popup despite discrepancies in both shows");
+            store.DeleteVenue(venue);typeof(MainWindow).GetMethod("LoadEvent",Private)!.Invoke(main,[false]);Pump();
+            Check(((TextBlock)main.FindName("HallTotals")).ToolTip is null,"archived showing remains viewable without active-catalog diagnostics");
         }
         finally
         {

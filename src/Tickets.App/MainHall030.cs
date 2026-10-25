@@ -27,7 +27,7 @@ public partial class MainWindow
         HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽"+
             $"\nПродано Ticketland: {total?.TicketCount??0} · Сумма Ticketland: {total?.Nominal??0:N2} ₽";
         HallTotals.ToolTip=null;
-        if(current is not null&&total is null)
+        if(current is not null&&!currentArchived&&total is null)
         {
             var diagnostic=store.TicketlandShowDiagnostics031(current.Id);
             if(diagnostic.Differences.Count>0)

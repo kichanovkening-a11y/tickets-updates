@@ -512,7 +512,13 @@ public sealed partial class HallView : FrameworkElement
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
-    { if(draggingCaption029 is not null)CancelPendingRowMove();else EndGesture(); base.OnLostMouseCapture(e); }
+    {
+        // Context-menu capture events bubble through the placement target. Only losing
+        // this hall's own capture cancels its gesture, not closing its context menu.
+        if(ReferenceEquals(e.OriginalSource,this))
+        {if(draggingCaption029 is not null)CancelPendingRowMove();else EndGesture();}
+        base.OnLostMouseCapture(e);
+    }
 
     protected override void OnMouseLeave(MouseEventArgs e)
     { CloseTip(); base.OnMouseLeave(e); }

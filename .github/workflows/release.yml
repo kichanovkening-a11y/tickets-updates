@@ -25,7 +25,7 @@ jobs:
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
         run: |
-          dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections032
+          dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections033
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Retain verified interface screenshots
         if: always()
@@ -36,6 +36,8 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Test accounting and updater
+        run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections033
+      - name: Verify matching regression
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections032
       - name: Publish portable Windows app
         shell: pwsh

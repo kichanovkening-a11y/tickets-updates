@@ -105,7 +105,9 @@ public sealed partial class Store
     private static string MissingPosition032(TlShow029 show,string sector,TicketlandSale028 sale)
     {
         var row=show.Seats.Where(s=>s.Sector==sector&&CatalogText.Key(s.Row)==CatalogText.Key(sale.Row)).ToArray();
-        return row.Length==0?$"Сектор «{sale.Sector}» → «{sector}»: отсутствует ряд {sale.Row} (место {sale.Seat}). Изменение номера ряда запрещено.":$"Сектор «{sale.Sector}» → «{sector}»: отсутствует или неоднозначно место {sale.Seat} в ряду {sale.Row}. Изменение номера места запрещено.";
+        if(row.Length==0)return $"Сектор «{sale.Sector}» → «{sector}»: отсутствует ряд {sale.Row} (место {sale.Seat}). Изменение номера ряда запрещено.";
+        var count=row.Count(s=>CatalogText.Key(s.Number)==CatalogText.Key(sale.Seat));
+        return count==0?$"Сектор «{sale.Sector}» → «{sector}»: отсутствует место {sale.Seat} в ряду {sale.Row}. Изменение номера места запрещено.":$"Сектор «{sale.Sector}» → «{sector}»: ряд {sale.Row}, место {sale.Seat} повторяется в схеме {count} раза. Требуется устранить дубли в схеме.";
     }
     public TicketlandSyncSummary028? ReapplyCachedTicketland032()=>TicketlandLastSync028.HasValue?ApplyTicketlandReport028(CachedTicketlandReport028(),true):null;
 }

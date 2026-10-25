@@ -99,6 +99,10 @@ public sealed partial class Store
         ValidateSectorCaptions029(seats);
         HallAnchors027.Capture(seats.ToArray());
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
+        var id=InsertHall033(c,tx,name,address,seats);tx.Commit();return id;
+    }
+    private static long InsertHall033(SqliteConnection c,SqliteTransaction tx,string name,string address,IReadOnlyCollection<DraftSeat> seats)
+    {
         using var add=Command(c,"INSERT INTO venue(name,address) VALUES($n,$a) RETURNING id","$n",name,"$a",address.Trim()); add.Transaction=tx;
         var id=Convert.ToInt64(add.ExecuteScalar()); long zid=0;
         foreach(var sector in seats.GroupBy(s=>s.Sector,StringComparer.OrdinalIgnoreCase))
@@ -114,7 +118,7 @@ public sealed partial class Store
                 if(s.Hidden){using var hidden=Command(c,"INSERT INTO hall_hidden_seat(seat_id) VALUES($s)","$s",seatId);hidden.Transaction=tx;hidden.ExecuteNonQuery();}
             }
         }
-        tx.Commit(); return id;
+        return id;
     }
     public List<PlanInfo> Plans(long venueId)
     {

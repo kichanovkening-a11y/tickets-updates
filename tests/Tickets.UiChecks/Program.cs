@@ -34,9 +34,10 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
-            if(!args.Contains("--corrections032",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
+            if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--corrections033",StringComparer.Ordinal)){Transfer033UiChecks.Run(store,main);TicketlandConnection028UiChecks.Run(store,main);TicketlandReview031UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections032",StringComparer.Ordinal)){TicketlandConnection028UiChecks.Run(store,main);TicketlandReview031UiChecks.Run(store,main);TicketlandMatching032UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections031",StringComparer.Ordinal)){TicketlandConnection028UiChecks.Run(store,main);TicketlandReview031UiChecks.Run(store,main);HallConflicts031UiChecks.Run(store);HallCaption031UiChecks.Run(store);HallCaption029UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--corrections030",StringComparer.Ordinal)){TicketlandConnection028UiChecks.Run(store,main);HallStatus030UiChecks.Run(store,main);FutureSessionDeletion030UiChecks.Run(store,main);main.Close();return 0;}

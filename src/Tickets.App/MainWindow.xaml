@@ -20,7 +20,10 @@
       </DockPanel>
     </Border>
     <Border DockPanel.Dock="Bottom" Background="White" Padding="15,9" BorderBrush="#CBD5E1" BorderThickness="0,1,0,0">
-      <TextBlock x:Name="StatusText" Text="Загрузка…" TextWrapping="Wrap"/>
+      <WrapPanel VerticalAlignment="Center">
+        <TextBlock x:Name="StatusText" Text="Загрузка…" TextWrapping="Wrap" VerticalAlignment="Center"/>
+        <Button x:Name="TicketlandConflictsButton033" Visibility="Collapsed" Click="TicketlandConflictsClick033" ContentTemplate="{x:Null}" Width="Auto" Height="Auto" MinHeight="0" Padding="5,0" Margin="6,0,0,0" FontSize="13" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
+      </WrapPanel>
     </Border>
     <Grid Margin="12"><Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
       <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">

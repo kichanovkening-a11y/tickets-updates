@@ -22,7 +22,7 @@ public partial class MainWindow
 
     private void InitializeTicketland028()
     {
-        try{store.ReapplyCachedTicketland032();}
+        try{var cached=store.ReapplyCachedTicketland032();if(cached is not null)UpdateConflictCount033(cached.Conflicts);}
         catch(TicketException){SetTicketlandStatus028("Ticketland: не удалось сопоставить сохранённый отчёт. Предыдущие данные сохранены.");}
         catch(Exception){SetTicketlandStatus028("Ticketland: не удалось прочитать сохранённые продажи. Повторите обновление.");}
         try
@@ -107,7 +107,8 @@ public partial class MainWindow
                     SaveTicketlandSettings028(ticketlandSettings028 with{Enabled=true});
                     ticketlandTimer028?.Start();
                 }
-                SetTicketlandStatus028($"Ticketland: {report.FetchedAt.LocalDateTime:dd.MM.yyyy HH:mm} · Мест: {summary.Matched} · Не сопоставлено: {summary.Unmatched} · Совпадений с выдачами: {summary.Conflicts} · Без мест: {summary.GeneralAdmission}");
+                UpdateConflictCount033(summary.Conflicts);
+                SetTicketlandStatus028($"Ticketland по всем показам: {report.FetchedAt.LocalDateTime:dd.MM.yyyy HH:mm} · Отмечено на схемах: {summary.Matched} · Не удалось сопоставить: {summary.Unmatched} · Без ряда или места в отчёте: {summary.GeneralAdmission}");
             });
         }
         catch(OperationCanceledException){SetTicketlandStatus028("Ticketland: получение отчёта остановлено. Предыдущие данные сохранены.");throw;}
@@ -131,7 +132,8 @@ public partial class MainWindow
         if(ticketlandGate028.CurrentCount==0)throw new TicketException("Дождитесь окончания обновления Ticketland.");
         var report=store.CachedTicketlandReport028();var summary=store.ApplyTicketlandReport028(report,replace:true);
         if(current is not null){var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();LoadEvent(false);Hall.SetSelection(ids);}
-        SetTicketlandStatus028($"Ticketland: мест сопоставлено {summary.Matched} · Не сопоставлено: {summary.Unmatched} · Совпадений с выдачами: {summary.Conflicts} · Без мест: {summary.GeneralAdmission}");
+        UpdateConflictCount033(summary.Conflicts);
+        SetTicketlandStatus028($"Ticketland по всем показам · Отмечено на схемах: {summary.Matched} · Не удалось сопоставить: {summary.Unmatched} · Без ряда или места в отчёте: {summary.GeneralAdmission}");
     }
 }
 

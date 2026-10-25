@@ -178,6 +178,7 @@ public partial class MainWindow : Window
         LoadJournal();RefreshRecipients();RefreshSenders();
         RenderHallLegend(seats);
         RefreshHallTotals030(seats);
+        if(store.TicketlandLastSync028.HasValue)UpdateConflictCount033(store.TicketlandConflicts033().Count);
         UpdateNumber();
     }
     private void UpdateSelection()

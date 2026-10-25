@@ -100,10 +100,10 @@ public sealed partial class Store
                 if(Convert.ToInt64(occupied.ExecuteScalar())>0)conflicts++;
             }
             else unmatched++;
-            // A still-present unchanged barcode remains sold even when local labels or the
-            // catalogue changed. Keep its proven seat identity; report the unresolved current
-            // match above rather than treating a label change as an external return.
-            if(eventId is null&&priorEvent.HasValue&&priorSeat.HasValue)
+            // Preserve a proven seat through sector/row/seat label edits only while its
+            // source still identifies this same unique exact show. Old cross-show manual
+            // approvals and subsequently ambiguous show identities cannot bypass strict matching.
+            if(eventId is null&&priorEvent.HasValue&&priorSeat.HasValue&&Exact030(sale,local029) is var priorExact030&&priorExact030.Length==1&&priorExact030[0].Id==priorEvent.Value)
             {
                 using var valid=Command(c,"SELECT count(*) FROM event e JOIN seat s ON s.venue_id=e.venue_id WHERE e.id=$e AND s.id=$s","$e",priorEvent.Value,"$s",priorSeat.Value);valid.Transaction=tx;
                 if(Convert.ToInt64(valid.ExecuteScalar())==1)

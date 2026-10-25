@@ -5,7 +5,7 @@ internal static class TicketlandMatching029Checks
  {
   run("029 normalized show and sector aliases match unique seat",s=>{
    var f=Fixture(s,"Ёлка: Новый год", "Партер");
-   var sale=new TicketlandSale028("Спектакль «Елка — Новый год»",f.At,"Партер левый","1","1","alias",500);
+   var sale=new TicketlandSale028("Спектакль «Елка — Новый год»",f.At,"Партер левый","1","1","alias",500){Venue=f.Venue};
    var result=s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);
    Check(result.Matched==1,"normalized aliases did not match");
   });
@@ -21,41 +21,38 @@ internal static class TicketlandMatching029Checks
    var venue=s.CreateHall("Ambiguous hall "+Guid.NewGuid(),"",new[]{new DraftSeat{Sector="Партер левый",Row="1",Number="1"},new DraftSeat{Sector="Партер правый",Row="1",Number="1"}});
    var ids=s.VenueSeats(venue).Select(x=>x.Id).ToArray();var plan=s.SavePlan(venue,"p",ids.Select(id=>new PriceValue(id,500,"#FF0000")).ToArray());
    var at=new DateTime(2030,5,7,19,0,0);var title="Ambiguous seats "+Guid.NewGuid();var evt=s.CreateEvent(s.SavePerformance(title),venue,plan,at);
-   var sale=new TicketlandSale028(title,at,"Партер","1","1","amb",500);s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);
+   var sale=new TicketlandSale028(title,at,"Партер","1","1","amb",500){Venue=s.Venues().Single(v=>v.Id==venue).Name};s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);
    var issue=s.TicketlandIssues029().Single();Check(!s.Seats(evt).Any(x=>x.IsTicketlandSold)&&issue.Candidates.Count==2,"canonical aliases collapsed seats");
    s.AcceptTicketlandIssue029(issue.Key,evt,ids[1]);s=new Store(s.Path);Check(s.TicketlandIssues029().Count==0,"approval not persisted");
    s.ApplyTicketlandReport028(s.CachedTicketlandReport028(),true);Check(s.Seats(evt).Single(x=>x.Id==ids[1]).IsTicketlandSold&&!s.Seats(evt).Single(x=>x.Id==ids[0]).IsTicketlandSold,"approved wrong ambiguous seat");
   });
-  run("029 approvals and refusals persist until source or local criteria change",s=>{
-   var f=Fixture(s,"Local name","Партер");var sale=new TicketlandSale028("Remote name",f.At.AddMinutes(1),"Партер","1","1","approval",500){Venue=s.Venues().Single(v=>v.Id==s.Events().Single(e=>e.Id==f.Event).VenueId).Name};
-   s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);var issue=s.TicketlandIssues029().Single();var candidate=issue.Candidates.Single(x=>x.EventId==f.Event&&x.SeatId.HasValue);
-   Check(candidate.Differences.Contains("название")&&candidate.Differences.Contains("время"),"field explanations missing");
-   var oldKey=issue.Key;s.RejectTicketlandIssue029(issue.Key);s=new Store(s.Path);Check(s.TicketlandIssues029().Count==0,"refusal repeated");
-   var venue=s.Events().Single(e=>e.Id==f.Event).VenueId;var hall=s.Venues().Single(v=>v.Id==venue);var draft=s.HallDraft(venue);HallEditing027.RenameSector(draft,"Партер","Партер левый");s.SaveEditedHall(venue,hall.Name,hall.Address,draft);
-   issue=s.TicketlandIssues029().Single();Check(issue.Key!=oldKey,"local edit did not reopen issue");
-   var current=issue.Candidates.Single(x=>x.EventId==f.Event&&x.SeatId.HasValue);s.AcceptTicketlandIssue029(issue.Key,current.EventId,current.SeatId);s.ApplyTicketlandReport028(s.CachedTicketlandReport028(),true);
-   Check(s.Seats(f.Event).Single().IsTicketlandSold,"approved differing datetime not applied");
+  run("030 differing show title and time cannot be manually approved",s=>{
+   var f=Fixture(s,"Local name","Партер");var sale=new TicketlandSale028("Remote name",f.At.AddMinutes(1),"Партер","1","1","approval",500){Venue=f.Venue};
+   s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);
+   Check(s.TicketlandIssues029().Count==0&&s.TicketlandSectorReviews030().Count==0,"different show offered for approval");
+   try{s.BindTicketlandShow028(sale.Title,sale.StartsAt,f.Event);throw new Exception("different show bound");}catch(TicketException){}
+   Check(!s.Seats(f.Event).Single().IsTicketlandSold&&s.CachedTicketlandReport028().Sales.Count==1,"different show marked or raw source lost");
   });
-  run("029 numbered row mismatch offers explicit seat correction",s=>{
-   var f=Fixture(s,"Row correction","Партер");var sale=new TicketlandSale028("Row correction",f.At,"Партер","2","1","row-correction",500);
+  run("030 numbered row mismatch exposes missing place without correction",s=>{
+   var f=Fixture(s,"Row correction","Партер");var sale=new TicketlandSale028("Row correction",f.At,"Партер","2","1","row-correction",500){Venue=f.Venue};
    s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);var issue=s.TicketlandIssues029().Single();
-   Check(issue.Candidates.Any(x=>x.SeatId.HasValue&&x.Differences.Contains("ряд:")),"row mismatch has no explicit correction");
+   Check(issue.Candidates.Count==0&&s.TicketlandSectorReviews030().Single().MissingSeats.Single().Contains("2"),"row renumbering was suggested");
   });
 
   run("029 balcony order preserves level and side",s=>{
    var f=Fixture(s,"Balcony show","Балкон 2 левый");
-   var sales=new[]{new TicketlandSale028("Balcony show",f.At,"2-й балкон левая сторона","1","1","balcony",500),new TicketlandSale028("Balcony show",f.At,"Балкон 1 левый","1","1","wrong-level",500),new TicketlandSale028("Balcony show",f.At,"Балкон 2 правый","1","1","wrong-side",500)};
+   var sales=new[]{new TicketlandSale028("Balcony show",f.At,"2-й балкон левая сторона","1","1","balcony",500){Venue=f.Venue},new TicketlandSale028("Balcony show",f.At,"Балкон 1 левый","1","1","wrong-level",500){Venue=f.Venue},new TicketlandSale028("Balcony show",f.At,"Балкон 2 правый","1","1","wrong-side",500){Venue=f.Venue}};
    var result=s.ApplyTicketlandReport028(new(sales,DateTimeOffset.UtcNow),true);Check(result.Matched==1&&result.Unmatched==2,"balcony number/side identity incorrect");
   });
 
   run("029 distinct source sectors cannot silently collapse onto one local seat",s=>{
-   var f=Fixture(s,"Source collision","Партер");var sale=new TicketlandSale028("Source collision",f.At,"Партер левый","1","1","left",500);
+   var f=Fixture(s,"Source collision","Партер");var sale=new TicketlandSale028("Source collision",f.At,"Партер левый","1","1","left",500){Venue=f.Venue};
    var result=s.ApplyTicketlandReport028(new(new[]{sale,sale with{Barcode="right",Sector="Партер правый"}},DateTimeOffset.UtcNow),true);
    Check(result.Matched==0&&result.Unmatched==2&&!s.Seats(f.Event).Single().IsTicketlandSold&&s.TicketlandIssues029().Count==2,"different source seats collapsed");
   });
 
   run("029 append checks cached source seats before canonical fallback",s=>{
-   var f=Fixture(s,"Append collision","Партер");var sale=new TicketlandSale028("Append collision",f.At,"Партер левый","1","1","append-left",500);var at=DateTimeOffset.UtcNow;
+   var f=Fixture(s,"Append collision","Партер");var sale=new TicketlandSale028("Append collision",f.At,"Партер левый","1","1","append-left",500){Venue=f.Venue};var at=DateTimeOffset.UtcNow;
    s.ApplyTicketlandReport028(new(new[]{sale},at),true);
    var result=s.ApplyTicketlandReport028(new(new[]{sale with{Barcode="append-right",Sector="Партер правый"}},at.AddSeconds(1)),false);
    Check(result.Matched==0&&result.Unmatched==1&&s.TicketlandIssues029().Count==2,"append silently collapsed another cached source seat");
@@ -65,13 +62,13 @@ internal static class TicketlandMatching029Checks
    var amph=Fixture(s,"Amphitheatre parts","Амфитеатр");var at=DateTimeOffset.UtcNow;var index=0;
    foreach(var sector in new[]{"Амфитеатр середина","Амфитеатр средний","Амфитеатр центральная часть"})
    {
-    var sale=new TicketlandSale028("Amphitheatre parts",amph.At,sector,"1","1","amph-"+(index++),500);
+    var sale=new TicketlandSale028("Amphitheatre parts",amph.At,sector,"1","1","amph-"+(index++),500){Venue=amph.Venue};
     Check(s.ApplyTicketlandReport028(new(new[]{sale},at.AddSeconds(index)),true).Matched==1,"amphitheatre part failed: "+sector);
    }
    var bel=Fixture(s,"Bel etage parts","Бель-этаж");
    foreach(var sector in new[]{"Бельэтаж левый","Бельэтаж правый","Бельэтаж центр"})
    {
-    var sale=new TicketlandSale028("Bel etage parts",bel.At,sector,"1","1","bel-"+(index++),500);
+    var sale=new TicketlandSale028("Bel etage parts",bel.At,sector,"1","1","bel-"+(index++),500){Venue=bel.Venue};
     Check(s.ApplyTicketlandReport028(new(new[]{sale},at.AddSeconds(index)),true).Matched==1,"bel etage part failed: "+sector);
    }
   });
@@ -93,9 +90,10 @@ internal static class TicketlandMatching029Checks
   run("029 old empty source venue retains proven seat only at supplied known venue",s=>{
    var title="Venue upgrade "+Guid.NewGuid();var f=Fixture(s,title,"Партер","Театр «Русская Песня»");var at=DateTimeOffset.UtcNow;
    var sale=new TicketlandSale028(title,f.At,"Партер","1","1","venue-upgrade",500);s.ApplyTicketlandReport028(new(new[]{sale},at),true);
-   var duplicate=Fixture(s,title,"Партер","Театр Русская Песня Олимпийский пр., д. 14");
+   using(var c=new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={s.Path}"))
+   {c.Open();using var q=c.CreateCommand();q.CommandText="UPDATE ticketland_sale_028 SET event_id=$e,seat_id=$s WHERE barcode='venue-upgrade'";q.Parameters.AddWithValue("$e",f.Event);q.Parameters.AddWithValue("$s",s.Seats(f.Event).Single().Id);q.ExecuteNonQuery();}
    var result=s.ApplyTicketlandReport028(new(new[]{sale with{Venue="Театр Русская Песня Олимпийский пр., д. 14"}},at.AddSeconds(1)),true);
-   Check(result.Unmatched==1&&s.Seats(f.Event).Single().IsTicketlandSold&&!s.Seats(duplicate.Event).Single().IsTicketlandSold,"known old seat lost on venue metadata upgrade");
+   Check(result.Matched==1&&s.Seats(f.Event).Single().IsTicketlandSold,"known old seat lost on unique venue metadata upgrade");
   });
 
   run("029 hidden performance is neither an automatic match nor a proposal",s=>{
@@ -105,18 +103,18 @@ internal static class TicketlandMatching029Checks
     c.Open();using var q=c.CreateCommand();q.CommandText="INSERT INTO catalog_hidden(kind,entity_key) VALUES('performance',$key)";q.Parameters.AddWithValue("$key",CatalogText.Key(title));q.ExecuteNonQuery();
    }
    Check(!s.Events().Any(e=>e.Id==hidden.Event),"fixture performance is still active");
-   var sale=new TicketlandSale028(title,hidden.At,"Партер","1","1","hidden-performance",500);
+   var sale=new TicketlandSale028(title,hidden.At,"Партер","1","1","hidden-performance",500){Venue=hidden.Venue};
    var result=s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);
    Check(result.Matched==0&&result.Unmatched==1&&!s.Seats(hidden.Event).Single().IsTicketlandSold,"hidden performance matched automatically");
-   var issue=s.TicketlandIssues029().Single();Check(issue.Candidates.All(c=>c.EventId!=hidden.Event)&&issue.Candidates.Any(c=>c.EventId==active.Event),"hidden performance remains a proposal");
+   Check(s.TicketlandIssues029().Count==0,"hidden performance or unrelated alternative remains actionable");
   });
 
  }
- private static (long Event,DateTime At) Fixture(Store s,string title,string sector,string? venueName=null)
+ private static (long Event,DateTime At,string Venue) Fixture(Store s,string title,string sector,string? venueName=null)
  {
-  var venue=s.CreateHall(venueName??("Hall "+Guid.NewGuid()),"",new[]{new DraftSeat{Sector=sector,Row="1",Number="1"}});
+  venueName??="Hall "+Guid.NewGuid();var venue=s.CreateHall(venueName,"",new[]{new DraftSeat{Sector=sector,Row="1",Number="1"}});
   var plan=s.SavePlan(venue,"p",s.VenueSeats(venue).Select(x=>new PriceValue(x.Id,500,"#FF0000")).ToArray());
-  var at=new DateTime(2030,5,7,19,0,0);return(s.CreateEvent(s.SavePerformance(title),venue,plan,at),at);
+  var at=new DateTime(2030,5,7,19,0,0);return(s.CreateEvent(s.SavePerformance(title),venue,plan,at),at,venueName);
  }
  private static void Check(bool value,string message){if(!value)throw new Exception(message);}
 }

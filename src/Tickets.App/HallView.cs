@@ -16,12 +16,19 @@ public sealed class HallView : FrameworkElement
     private DrawingGroup drawing=new();
     private IReadOnlyList<SectorInfo> sectors=[];
     private decimal? focusPrice;
+    private HallStatus030? focusStatus030;
     /// <summary>Visual price focus, preserved across reloads until the caller clears it.</summary>
     public decimal? FocusPrice
     {
         get=>focusPrice;
-        set { if(focusPrice==value)return; focusPrice=value; RebuildDrawing(); InvalidateVisual(); }
+        set { if(focusPrice==value&&focusStatus030 is null)return; focusPrice=value; focusStatus030=null; RebuildDrawing(); InvalidateVisual(); }
     }
+    public HallStatus030? FocusStatus030
+    {
+        get=>focusStatus030;
+        set { if(focusStatus030==value&&focusPrice is null)return; focusStatus030=value; focusPrice=null; RebuildDrawing(); InvalidateVisual(); }
+    }
+    public void ClearFocus030()=>FocusPrice=null;
     private Rect bounds=new(0,0,100,100);
     private double zoom=1;
     private Vector offset;
@@ -182,7 +189,7 @@ public sealed class HallView : FrameworkElement
                 var rect=new Rect(s.X,s.Y,16,16);
                 var occupied=s.TicketId.HasValue || s.IsReserved || s.IsTicketlandSold;
                 var printed=s.IsTicketlandSold || (occupied && s.IsPrinted && !s.IsReserved);
-                var dimmed=focusPrice.HasValue && s.Amount!=focusPrice.Value;
+                var dimmed=(focusPrice.HasValue && s.Amount!=focusPrice.Value)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
                 var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
                 if(occupied && !s.IsBlocked && !dimmed)

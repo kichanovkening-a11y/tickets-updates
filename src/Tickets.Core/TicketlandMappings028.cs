@@ -33,38 +33,16 @@ public sealed partial class Store
 
     public IReadOnlyList<TicketlandShow028> TicketlandShows028()
     {
-        var local=Events();using var c=Open();var bindings=TicketlandBindings028(c);
-        using var q=Command(c,"SELECT title,starts_at,count(*) FROM ticketland_sale_028 GROUP BY title,starts_at ORDER BY starts_at,title");
-        using var r=q.ExecuteReader();var result=new List<TicketlandShow028>();
-        while(r.Read())
-        {
-            var title=r.GetString(0);var at=TicketlandAt028(DateTime.Parse(r.GetString(1),CultureInfo.InvariantCulture));
-            var candidates=local.Where(e=>TicketlandAt028(DateTime.Parse(e.SortDate,CultureInfo.InvariantCulture))==at).ToArray();
-            long? eventId=null;
-            if(bindings.TryGetValue((title,at),out var bound)){if(candidates.Any(e=>e.Id==bound))eventId=bound;}
-            else{var exact=candidates.Where(e=>CatalogText.Key(e.Title)==title).ToArray();if(exact.Length==1)eventId=exact[0].Id;}
-            result.Add(new(title,at,r.GetInt32(2),eventId));
-        }
-        return result;
+        return TicketlandSourceTotals030().Select(x=>new TicketlandShow028(x.Title,x.StartsAt,x.TicketCount,x.EventId)).ToArray();
     }
 
     public void BindTicketlandShow028(string title,DateTime startsAt,long eventId)
     {
-        if(string.IsNullOrWhiteSpace(title)||startsAt==default)throw new TicketException("Выберите показ Ticketland.");
-        title=CatalogText.Key(title);startsAt=TicketlandAt028(startsAt);
-        using var c=Open();using var tx=c.BeginTransaction(deferred:false);RequireActiveEvent(c,tx,eventId);
-        using(var q=Command(c,"SELECT starts_at FROM event WHERE id=$e","$e",eventId))
-        {
-            q.Transaction=tx;var value=q.ExecuteScalar() as string;
-            if(value is null||!DateTime.TryParse(value,CultureInfo.InvariantCulture,DateTimeStyles.None,out var at)||TicketlandAt028(at)!=startsAt)
-                throw new TicketException("Связать можно только показы с одинаковыми датой и временем.");
-        }
-        var serialized=startsAt.ToString("O",CultureInfo.InvariantCulture);
-        using(var q=Command(c,"SELECT count(*) FROM ticketland_sale_028 WHERE title=$t AND starts_at=$at","$t",title,"$at",serialized))
-        {q.Transaction=tx;if(Convert.ToInt64(q.ExecuteScalar())==0)throw new TicketException("Показ отсутствует в последнем сохранённом отчёте Ticketland.");}
-        using(var q=Command(c,"INSERT INTO ticketland_show_map_028(title,starts_at,event_id) VALUES($t,$at,$e) ON CONFLICT(title,starts_at) DO UPDATE SET event_id=excluded.event_id","$t",title,"$at",serialized,"$e",eventId))
-        {q.Transaction=tx;q.ExecuteNonQuery();}
-        tx.Commit();
+        using var c=Open();using var tx=c.BeginTransaction();var shows=Local029(c,tx);
+        var sales=ReadTicketlandSales029(c,tx).Where(s=>CatalogText.Key(s.Title)==CatalogText.Key(title)&&s.StartsAt==TicketlandAt028(startsAt)).ToArray();
+        if(sales.Length==0||sales.Any(s=>Exact030(s,shows) is var exact&&(exact.Length!=1||exact[0].Id!=eventId)))
+            throw new TicketException("Показ должен однозначно совпадать по названию, дате, времени и площадке. Связывать разные показы запрещено.");
+        // Kept for compatibility: exact shows require no manual show binding.
     }
 
     public IReadOnlyList<string> TicketlandSectors028(string title,DateTime at)
@@ -76,27 +54,9 @@ public sealed partial class Store
 
     public void BindTicketlandSector028(string title,DateTime at,string sourceSector,long eventId,string localSector)
     {
-        if(string.IsNullOrWhiteSpace(title)||string.IsNullOrWhiteSpace(sourceSector)||string.IsNullOrWhiteSpace(localSector)||at==default)throw new TicketException("Выберите исходный и местный секторы.");
-        title=CatalogText.Key(title);sourceSector=CatalogText.Key(sourceSector);localSector=CatalogText.Key(localSector);at=TicketlandAt028(at);
-        var serialized=at.ToString("O",CultureInfo.InvariantCulture);
-        using var c=Open();using var tx=c.BeginTransaction(deferred:false);RequireActiveEvent(c,tx,eventId);
-        if(!TicketlandBindings028(c,tx).TryGetValue((title,at),out var bound)||bound!=eventId)throw new TicketException("Сначала свяжите этот показ Ticketland с выбранным местным показом.");
-        using(var q=Command(c,"SELECT starts_at FROM event WHERE id=$e","$e",eventId))
-        {q.Transaction=tx;if(q.ExecuteScalar() is not string value||TicketlandAt028(DateTime.Parse(value,CultureInfo.InvariantCulture))!=at)throw new TicketException("Дата и время связанного показа изменились.");}
-        using(var q=Command(c,"SELECT count(*) FROM ticketland_sale_028 WHERE title=$t AND starts_at=$at AND sector=$z","$t",title,"$at",serialized,"$z",sourceSector))
-        {q.Transaction=tx;if(Convert.ToInt64(q.ExecuteScalar())==0)throw new TicketException("Исходный сектор отсутствует в отчёте Ticketland.");}
-        var found=0;
-        using(var q=Command(c,"""
-            SELECT z.name FROM sector z JOIN event e ON e.venue_id=z.venue_id WHERE e.id=$e
-            AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(z.venue_id AS TEXT)||':'||CAST(z.id AS TEXT))
-            ""","$e",eventId))
-        {q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(CatalogText.Key(r.GetString(0))==localSector)found++;}
-        if(found!=1)throw new TicketException("Выберите существующий сектор зала этого показа.");
-        using(var q=Command(c,"""
-            INSERT INTO ticketland_sector_map_028(title,starts_at,source_sector,event_id,local_sector) VALUES($t,$at,$z,$e,$local)
-            ON CONFLICT(title,starts_at,source_sector,event_id) DO UPDATE SET local_sector=excluded.local_sector
-            ""","$t",title,"$at",serialized,"$z",sourceSector,"$e",eventId,"$local",localSector))
-        {q.Transaction=tx;q.ExecuteNonQuery();}tx.Commit();
+        var reviews=TicketlandSectorReviews030().Where(g=>g.EventId==eventId&&g.StartsAt==TicketlandAt028(at)&&Text029(g.SourceSector)==Text029(sourceSector)&&Title029(g.Title)==Title029(title)).ToArray();
+        if(reviews.Length!=1)throw new TicketException("Выберите сектор единственного точного показа Ticketland.");
+        AcceptTicketlandSector030(reviews[0].Key,localSector);
     }
 
     private static Dictionary<(string Title,DateTime At,string Sector,long Event),string> TicketlandSectorBindings028(SqliteConnection c,SqliteTransaction tx)

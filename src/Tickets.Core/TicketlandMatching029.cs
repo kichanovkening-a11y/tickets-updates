@@ -14,7 +14,7 @@ public sealed partial class Store
     private sealed record TlShow029(long Id,long VenueId,string Title,string Venue,DateTime At,List<TlSeat029> Seats);
     private sealed record TlMatch029(long? Event,long? Seat,TicketlandIssue029? Issue);
     private static string Text029(string text)=>Regex.Replace((text??"").Normalize().ToUpperInvariant().Replace('Ё','Е'),@"[^\p{L}\p{Nd}]+"," ").Trim();
-    private static string Title029(string text)=>Regex.Replace(Text029(text),@"^(?:СПЕКТАКЛЬ|КОНЦЕРТ|МЮЗИКЛ|БАЛЕТ|ОПЕРА|ТЕАТРАЛЬНОЕ ПРЕДСТАВЛЕНИЕ)\s+","");
+    private static string Title029(string text)=>Regex.Replace(Text029(text),@"^(?:(?:ПРЕМЬЕРА(?: СПЕКТАКЛЯ)?|СПЕКТАКЛЬ|КОНЦЕРТ|МЮЗИКЛ|БАЛЕТ|ОПЕРА|ТЕАТРАЛЬНОЕ ПРЕДСТАВЛЕНИЕ)\s+)+","");
     // These pairs are observed Ticketland HallBuildingName values and local catalogue names.
     // Keep stage and address distinctions outside this explicit list intact.
     private static string Venue029(string text)=>Text029(text) switch
@@ -39,7 +39,7 @@ public sealed partial class Store
         }
         return key;
     }
-    private static List<TlShow029> Local029(SqliteConnection c,SqliteTransaction tx)
+    private static List<TlShow029> Local029(SqliteConnection c,SqliteTransaction tx,bool loadSeats=true)
     {
         var result=new List<TlShow029>();
         var hiddenPerformances=new HashSet<string>(StringComparer.Ordinal);
@@ -47,6 +47,7 @@ public sealed partial class Store
         {q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())hiddenPerformances.Add(r.GetString(0));}
         using(var q=Command(c,"SELECT e.id,e.venue_id,e.title,v.name,e.starts_at FROM event e JOIN venue v ON v.id=e.venue_id WHERE NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='venue' AND h.entity_key=CAST(e.venue_id AS TEXT))"))
         {q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(!hiddenPerformances.Contains(CatalogText.Key(r.GetString(2)))&&DateTime.TryParse(r.GetString(4),CultureInfo.InvariantCulture,DateTimeStyles.None,out var at))result.Add(new(r.GetInt64(0),r.GetInt64(1),r.GetString(2),r.GetString(3),TicketlandAt028(at),[]));}
+        if(!loadSeats)return result;
         var byVenue=new Dictionary<long,List<TlSeat029>>();
         foreach(var show in result)
         {
@@ -61,63 +62,37 @@ public sealed partial class Store
         return result;
     }
     private static string Hash029(string text)=>Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text)));
+    private static TlShow029[] Exact030(TicketlandSale028 sale,List<TlShow029> shows)=>string.IsNullOrWhiteSpace(sale.Venue)?[]:shows.Where(s=>s.At==sale.StartsAt&&Title029(s.Title)==Title029(sale.Title)&&Venue029(s.Venue)==Venue029(sale.Venue)).ToArray();
+    private static bool General030(TicketlandSale028 sale)=>string.IsNullOrWhiteSpace(sale.Row)||string.IsNullOrWhiteSpace(sale.Seat)||sale.Row=="--"||sale.Seat=="--";
+    private static string SectorKey030(TicketlandSale028 sale,TlShow029 show)=>Hash029($"{show.Id}|{Title029(show.Title)}|{show.At:O}|{Venue029(show.Venue)}|{Text029(sale.Sector)}|"+string.Join("/",show.Seats.OrderBy(s=>s.Id).Select(s=>$"{s.Id}:{s.Sector}:{s.Row}:{s.Number}")));
+    private static void EnsureDecisions030(SqliteConnection c,SqliteTransaction tx)
+    {
+        using var q=Command(c,"CREATE TABLE IF NOT EXISTS ticketland_sector_decision_030(issue_key TEXT PRIMARY KEY,rejected INTEGER NOT NULL,local_sector TEXT)");q.Transaction=tx;q.ExecuteNonQuery();
+    }
+    private static (bool Rejected,string? Sector) Decision030(SqliteConnection c,SqliteTransaction tx,string key)
+    {
+        using var q=Command(c,"SELECT rejected,local_sector FROM ticketland_sector_decision_030 WHERE issue_key=$k","$k",key);q.Transaction=tx;using var r=q.ExecuteReader();return r.Read()?(r.GetInt64(0)!=0,r.IsDBNull(1)?null:r.GetString(1)):(false,null);
+    }
     private static TlMatch029 Match029(SqliteConnection c,SqliteTransaction tx,TicketlandSale028 sale,List<TlShow029> shows,Dictionary<(string Title,DateTime At),long> bindings,Dictionary<(string Title,DateTime At,string Sector,long Event),string> sectorBindings,string collision="")
     {
-        var hasBinding=bindings.TryGetValue((sale.Title,sale.StartsAt),out var bound);
-        var exact=shows.Where(s=>s.At==sale.StartsAt&&(hasBinding?s.Id==bound:Title029(s.Title)==Title029(sale.Title))&&(string.IsNullOrWhiteSpace(sale.Venue)||Venue029(s.Venue)==Venue029(sale.Venue))).ToArray();
-        var general=string.IsNullOrWhiteSpace(sale.Row)||string.IsNullOrWhiteSpace(sale.Seat)||sale.Row=="--"||sale.Seat=="--";
-        TlSeat029[] Seats(TlShow029 show,bool strict)
-        {
-            if(general)return [];
-            var sector=hasBinding&&sectorBindings.TryGetValue((sale.Title,sale.StartsAt,sale.Sector,show.Id),out var mapped)?mapped:sale.Sector;
-            var seats=show.Seats.Where(s=>CatalogText.Key(s.Row)==sale.Row&&CatalogText.Key(s.Number)==sale.Seat).ToArray();
-            if(!strict)return seats.Length>0?seats:show.Seats.Where(s=>Sector029(s.Sector)==Sector029(sector)&&(CatalogText.Key(s.Row)==sale.Row||CatalogText.Key(s.Number)==sale.Seat)).ToArray();
-            var literal=seats.Where(s=>CatalogText.Key(s.Sector)==sector).ToArray();
-            return literal.Length>0?literal:seats.Where(s=>Sector029(s.Sector)==Sector029(sector)).ToArray();
-        }
-        if(exact.Length==1&&!general&&collision.Length==0)
-        {var seats=Seats(exact[0],true);if(seats.Length==1)return new(exact[0].Id,seats[0].Id,null);}
-        var plausible=shows.Where(s=>exact.Contains(s)||s.At==sale.StartsAt||Title029(s.Title)==Title029(sale.Title)||(!string.IsNullOrWhiteSpace(sale.Venue)&&Venue029(s.Venue)==Venue029(sale.Venue))).OrderBy(s=>s.Id).ToArray();
-        var candidates=new List<TicketlandCandidate029>();
-        foreach(var show in plausible)
-        {
-            var differences=new List<string>();
-            if(collision.Length>0)differences.Add("разные исходные места претендуют на одно местное место");
-            if(Title029(show.Title)!=Title029(sale.Title))differences.Add($"название: «{sale.Title}» → «{show.Title}»");
-            if(show.At.Date!=sale.StartsAt.Date)differences.Add($"дата: {sale.StartsAt:dd.MM.yyyy} → {show.At:dd.MM.yyyy}");
-            if(show.At.TimeOfDay!=sale.StartsAt.TimeOfDay)differences.Add($"время: {sale.StartsAt:HH:mm:ss} → {show.At:HH:mm:ss}");
-            if(!string.IsNullOrWhiteSpace(sale.Venue)&&Venue029(show.Venue)!=Venue029(sale.Venue))differences.Add($"площадка: «{sale.Venue}» → «{show.Venue}»");
-            var seats=Seats(show,false);
-            if(general)differences.Add("ряд или место отсутствуют; конкретное место не определено");
-            else if(seats.Length==0)differences.Add($"ряд {sale.Row}, место {sale.Seat}: отсутствуют в зале");
-            if(exact.Length>1)differences.Add("показ неоднозначен");
-            if(seats.Length==0)candidates.Add(new(show.Id,null,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}, {show.Venue}",string.Join("; ",differences)));
-            foreach(var seat in seats)
-            {
-                var d=new List<string>(differences);
-                if(CatalogText.Key(seat.Row)!=sale.Row)d.Add($"ряд: «{sale.Row}» → «{seat.Row}»");
-                if(CatalogText.Key(seat.Number)!=sale.Seat)d.Add($"место: «{sale.Seat}» → «{seat.Number}»");
-                if(Sector029(seat.Sector)!=Sector029(sale.Sector))d.Add($"сектор: «{sale.Sector}» → «{seat.Sector}»");
-                if(seats.Length>1)d.Add("ряд и место встречаются в нескольких секторах");
-                candidates.Add(new(show.Id,seat.Id,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}, {show.Venue}; {seat.Sector}, ряд {seat.Row}, место {seat.Number}",string.Join("; ",d)));
-            }
-        }
-        var local=string.Join("\n",plausible.Select(s=>$"{s.Id}|{s.Title}|{s.Venue}|{s.At:O}|"+string.Join("/",s.Seats.OrderBy(x=>x.Id).Select(x=>$"{x.Id}:{x.Sector}:{x.Row}:{x.Number}"))));
-        var key=Hash029($"{sale.Barcode}|{sale.Title}|{sale.StartsAt:O}|{sale.Venue}|{sale.Sector}|{sale.Row}|{sale.Seat}|{sale.Nominal.ToString(CultureInfo.InvariantCulture)}|{local}|{collision}");
-        using(var q=Command(c,"SELECT rejected,event_id,seat_id FROM ticketland_decision_029 WHERE issue_key=$k","$k",key))
-        {
-            q.Transaction=tx;using var r=q.ExecuteReader();if(r.Read())
-            {
-                if(r.GetInt64(0)!=0)return new(null,null,null);
-                var evt=r.GetInt64(1);long? seat=r.IsDBNull(2)?null:r.GetInt64(2);
-                if(candidates.Any(x=>x.EventId==evt&&x.SeatId==seat))return new(evt,seat,null);
-            }
-        }
-        var reason=collision.Length>0?"Разные исходные места нельзя автоматически объединить в одно местное место.":general?"Не указаны ряд или место.":exact.Length>1?"Несколько показов соответствуют названию, дате, времени и площадке.":exact.Length==1?"Сектор, ряд и место не определяют одно местное место.":"Нет единственного показа с совпадающими названием, датой, временем и площадкой.";
-        return new(null,null,new(key,$"{sale.Title}, {sale.StartsAt:dd.MM.yyyy HH:mm:ss}; {sale.Venue}; {sale.Sector}, ряд {sale.Row}, место {sale.Seat}; {sale.Barcode}{(string.IsNullOrWhiteSpace(sale.SourceChannel)?"":" · "+sale.SourceChannel)}",reason,candidates));
+        // Legacy show/seat approvals cannot override the four source show identifiers.
+        var exact=Exact030(sale,shows);
+        if(exact.Length!=1||General030(sale))return new(null,null,null);
+        var show=exact[0];var key=SectorKey030(sale,show);var decision=Decision030(c,tx,key);
+        if(decision.Rejected)return new(null,null,null);
+        var sector=decision.Sector??sale.Sector;
+        var positions=show.Seats.Where(s=>CatalogText.Key(s.Row)==CatalogText.Key(sale.Row)&&CatalogText.Key(s.Number)==CatalogText.Key(sale.Seat)).ToArray();
+        var seats=positions.Where(s=>Text029(s.Sector)==Text029(sector)).ToArray();
+        if(seats.Length==0&&decision.Sector is null)seats=positions.Where(s=>Sector029(s.Sector)==Sector029(sector)).ToArray();
+        if(seats.Length==1&&collision.Length==0)return new(show.Id,seats[0].Id,null);
+        var reason=collision.Length>0?"Разные исходные места нельзя объединить в одно местное место.":positions.Length==0?"Исходные ряд и место отсутствуют в местном зале. Изменение номера ряда или места запрещено.":"Требуется подтверждение названия сектора в этом показе.";
+        // Compatibility view exposes only exact row/seat identities, never renumbering guesses.
+        var candidates=collision.Length>0?new List<TicketlandCandidate029>():positions.Select(s=>new TicketlandCandidate029(show.Id,s.Id,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}, {show.Venue}; {s.Sector}, ряд {s.Row}, место {s.Number}","сектор: «"+sale.Sector+"» → «"+s.Sector+"»")).ToList();
+        return new(null,null,new(key,$"{show.Title}, {show.At:dd.MM.yyyy HH:mm}; {show.Venue}; {sale.Sector}",reason,candidates));
     }
     private static Dictionary<string,TlMatch029> Matches029(SqliteConnection c,SqliteTransaction tx,IReadOnlyCollection<TicketlandSale028> sales,List<TlShow029> shows,Dictionary<(string Title,DateTime At),long> bindings,Dictionary<(string Title,DateTime At,string Sector,long Event),string> sectors)
     {
+        EnsureDecisions030(c,tx);
         var result=sales.ToDictionary(s=>s.Barcode,s=>Match029(c,tx,s,shows,bindings,sectors));
         foreach(var group in sales.Where(s=>result[s.Barcode].Event.HasValue&&result[s.Barcode].Seat.HasValue).GroupBy(s=>(result[s.Barcode].Event,result[s.Barcode].Seat)))
         {
@@ -131,17 +106,15 @@ public sealed partial class Store
     public IReadOnlyList<TicketlandIssue029> TicketlandIssues029()
     {
         var report=CachedTicketlandReport028();using var c=Open();using var tx=c.BeginTransaction();var shows=Local029(c,tx);var bindings=TicketlandBindings028(c,tx);var sectors=TicketlandSectorBindings028(c,tx);
-        return Matches029(c,tx,report.Sales.ToArray(),shows,bindings,sectors).Values.Select(s=>s.Issue).Where(x=>x is not null).Cast<TicketlandIssue029>().ToArray();
+        return Matches029(c,tx,report.Sales.ToArray(),shows,bindings,sectors).Values.Select(s=>s.Issue).Where(x=>x is not null).Cast<TicketlandIssue029>().DistinctBy(x=>x.Key).ToArray();
     }
     public void AcceptTicketlandIssue029(string key,long eventId,long? seatId)
     {
-        var issue=TicketlandIssues029().SingleOrDefault(x=>x.Key==key);
-        if(issue is null||!issue.Candidates.Any(x=>x.EventId==eventId&&x.SeatId==seatId))throw new TicketException("Предложение изменилось. Обновите список расхождений Ticketland.");
-        using var c=Open();using var q=Command(c,"INSERT OR REPLACE INTO ticketland_decision_029(issue_key,rejected,event_id,seat_id) VALUES($k,0,$e,$s)","$k",key,"$e",eventId,"$s",(object?)seatId??DBNull.Value);q.ExecuteNonQuery();
+        var group=TicketlandSectorReviews030().SingleOrDefault(x=>x.Key==key&&x.EventId==eventId);
+        if(group is null||!seatId.HasValue)throw new TicketException("Подтверждать можно только название сектора точного показа.");
+        using var c=Open();using var q=Command(c,"SELECT z.name FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE s.id=$id","$id",seatId.Value);
+        if(q.ExecuteScalar() is not string sector)throw new TicketException("Место отсутствует в зале.");
+        AcceptTicketlandSector030(key,sector);
     }
-    public void RejectTicketlandIssue029(string key)
-    {
-        if(!TicketlandIssues029().Any(x=>x.Key==key))throw new TicketException("Предложение изменилось. Обновите список расхождений Ticketland.");
-        using var c=Open();using var q=Command(c,"INSERT OR REPLACE INTO ticketland_decision_029(issue_key,rejected,event_id,seat_id) VALUES($k,1,NULL,NULL)","$k",key);q.ExecuteNonQuery();
-    }
+    public void RejectTicketlandIssue029(string key)=>RejectTicketlandSector030(key);
 }

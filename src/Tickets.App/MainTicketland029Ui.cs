@@ -1,5 +1,4 @@
 using System.Windows;
-using System.Windows.Controls;
 
 namespace Tickets.App;
 
@@ -14,7 +13,6 @@ public partial class MainWindow
         ticketlandUiInitialized029=true;
         TicketlandStatusChanged028+=UpdateTicketlandRefreshState029;
         Closed+=(_,_)=>TicketlandStatusChanged028-=UpdateTicketlandRefreshState029;
-        RefreshTicketlandButton029.SizeChanged+=(_,_)=>UpdateCompactLayout();
         UpdateTicketlandRefreshState029();UpdateCompactLayout();
     }
 
@@ -35,16 +33,9 @@ public partial class MainWindow
         }
     }
 
-    private void RefreshTicketlandBringIntoView029(object sender,RequestBringIntoViewEventArgs e)
-    {
-        var right=Canvas.GetLeft(RefreshTicketlandButton029)+OrdinaryActionsScroll.HorizontalOffset+
-            RefreshTicketlandButton029.ActualWidth+RefreshTicketlandButton029.Margin.Left+RefreshTicketlandButton029.Margin.Right;
-        OrdinaryActionsScroll.ScrollToHorizontalOffset(Math.Max(0,right-OrdinaryActionsScroll.ViewportWidth));e.Handled=true;
-    }
-
     internal void HandleTicketlandReview029()
     {
-        if(ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||store.TicketlandIssues029().Count==0)return;
+        if(ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||store.TicketlandSectorReviews030().Count==0)return;
         var existing=Application.Current.Windows.OfType<TicketlandMappingWindow028>().FirstOrDefault();
         if(existing is not null){existing.Activate();return;}
         var window=new TicketlandMappingWindow028(store,this);

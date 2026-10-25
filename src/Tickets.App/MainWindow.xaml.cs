@@ -77,7 +77,7 @@ public partial class MainWindow : Window
                 var label=new TextBlock{TextWrapping=TextWrapping.Wrap,MaxWidth=180,Margin=new Thickness(0,6,0,6)};
                 label.Inlines.Add(new System.Windows.Documents.Run(show.Date){FontSize=19});label.Inlines.Add(new System.Windows.Documents.Run("\n"+show.Venue));
                 var item=new TreeViewItem{Header=label,Tag=show};
-                if(past)item.ContextMenu=CleanupMenu023(new[]{show.Id},"Удалить показ окончательно");
+                item.ContextMenu=CleanupMenu023(new[]{show.Id},"Удалить показ окончательно");
                 var normal=past?Brushes.Gray:Brushes.SteelBlue;label.Foreground=normal;
                 item.Selected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.DarkSlateBlue;label.Foreground=Brushes.White;}};
                 item.Unselected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.Transparent;label.Foreground=normal;}};
@@ -173,19 +173,12 @@ public partial class MainWindow : Window
         EventSubtitle.Text=$"Всего мест: {seats.Count} · Свободно с ценой: {seats.Count(s=>s.Available)} · Бронь: {seats.Count(s=>s.IsReserved)} · Без печати: {seats.Count(s=>s.TicketId.HasValue&&!s.IsReserved&&!s.IsPrinted)} · Напечатано: {seats.Count(s=>s.IsPrinted)}";
         EventTitle.ToolTip=EventSubtitle.Text;UpdateCompactLayout();
         PriceBox.Clear();
-        if(fit){Hall.FocusPrice=null;ClearIssuanceRecipient();}
+        if(fit){Hall.ClearFocus030();ClearIssuanceRecipient();}
         Hall.Load(seats,store.Sectors(current.VenueId),fit);
         LoadJournal();RefreshRecipients();RefreshSenders();
         RenderHallLegend(seats);
-        HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
+        RefreshHallTotals030(seats);
         UpdateNumber();
-    }
-    private void AddLegend(string text,Brush brush)
-    {
-        var panel=new StackPanel {Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,12,4)};
-        panel.Children.Add(new Border {Background=brush,Width=12,Height=12,CornerRadius=new CornerRadius(2),Margin=new Thickness(0,0,5,0)});
-        panel.Children.Add(new TextBlock {Text=text,FontSize=14.3,VerticalAlignment=VerticalAlignment.Center});
-        StatusLegendPanel.Children.Add(panel);
     }
     private void UpdateSelection()
     {

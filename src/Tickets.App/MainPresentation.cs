@@ -20,9 +20,6 @@ public partial class MainWindow
             UndoPriceButton.ActualWidth+UndoPriceButton.Margin.Left+UndoPriceButton.Margin.Right+
             ExtendInvoiceButton.ActualWidth+ExtendInvoiceButton.Margin.Left+ExtendInvoiceButton.Margin.Right-OrdinaryActionsScroll.HorizontalOffset);
         Canvas.SetTop(SquareShowActions,0);
-        Canvas.SetLeft(RefreshTicketlandButton029,Canvas.GetLeft(SquareShowActions)+SquareShowActions.ActualWidth);
-        Canvas.SetTop(RefreshTicketlandButton029,0);
-        UpperActions.Margin=new Thickness(0,0,RefreshTicketlandButton029.ActualWidth+RefreshTicketlandButton029.Margin.Left+RefreshTicketlandButton029.Margin.Right,0);
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
             var navigation=layout.ActualWidth<1050?236d:280d;
@@ -71,7 +68,7 @@ public partial class MainWindow
             LegendPanel.Children.Add(button);
         }
         PriceSummaryLayout.Arrange(LegendPanel);
-        AddLegend("Бронь / накладная",Brushes.Black);AddLegend("Распечатаны",Brushes.Red);AddLegend("× Заблокировано",Brushes.Gray);AddLegend("Нет цены",Brushes.Gainsboro);
-        if(seats.Any(s=>s.IsTicketlandSold))AddLegend("Продано Ticketland",Brushes.Red);
+        AddStatusLegend030("Бронь / накладная",Brushes.Black,HallStatus030.Reserved);AddStatusLegend030("Распечатаны",Brushes.Red,HallStatus030.Printed);AddStatusLegend030("× Заблокировано",Brushes.Gray,HallStatus030.Blocked);AddStatusLegend030("Нет цены",Brushes.Gainsboro,HallStatus030.NoPrice);
+        AddStatusLegend030("Продано Ticketland",Brushes.Red,HallStatus030.TicketlandSold);
     }
 }

@@ -74,7 +74,7 @@ internal static class TicketlandCurrent0281Checks
             var time=DateTimeOffset.UtcNow;var wrong=new TicketlandSale028("4стр. из 19 Личный кабинет backstage",new DateTime(2026,10,24,18,22,20),"Партер","1","2","123456789",500);
             store.ApplyTicketlandReport028(new([wrong],time),true);
             var constructor=typeof(TicketlandReport028).GetConstructor([typeof(IReadOnlyList<TicketlandSale028>),typeof(DateTimeOffset),typeof(bool)]);Check(constructor is not null,"current XML migration marker missing");
-            var corrected=(TicketlandReport028)constructor!.Invoke([new[]{wrong with{Title="Дубровский",StartsAt=at}},time.AddMinutes(1),true]);
+            var corrected=(TicketlandReport028)constructor!.Invoke([new[]{wrong with{Title="Дубровский",StartsAt=at,Venue="0281 migration"}},time.AddMinutes(1),true]);
             store.ApplyTicketlandReport028(corrected,true);Check(store.Seats(ev).Single().IsTicketlandSold,"footer correction did not map actual showing");
             var cached=store.CachedTicketlandReport028();Check(cached.Sales.Single().Title==CatalogText.Key("Дубровский"),"invalid page heading retained");store.ApplyTicketlandReport028(cached,true);
         });

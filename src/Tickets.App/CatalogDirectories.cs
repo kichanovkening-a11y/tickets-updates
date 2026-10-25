@@ -23,7 +23,7 @@ internal sealed class PerformanceWindow : EditorWindow
         var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);root.Children.Add(header);
         var name=Field(header,"Название нового спектакля");
         var search= new TextBox{Margin=new Thickness(0,10,0,8)};
-        var tree=new TreeView();
+        var tree=new TreeView();var openingContext=false;
         Button(header,"Создать спектакль",()=>Try(()=>{store.SavePerformance(name.Text);name.Clear();Refresh();}));
         header.Children.Add(new TextBlock{Text="Поиск спектакля",Margin=new Thickness(0,10,0,0)});header.Children.Add(search);
         root.Children.Add(tree);
@@ -49,6 +49,18 @@ internal sealed class PerformanceWindow : EditorWindow
                             if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),leaf))
                             {e.Handled=true;SelectedEventId=showing.Id;Finish(true);}
                         };
+                        var leafMenu=new ContextMenu();leaf.ContextMenu=leafMenu;
+                        var removeShow=new MenuItem{Header="Удалить показ окончательно"};leafMenu.Items.Add(removeShow);
+                        removeShow.Click+=(_,_)=>Try(()=>{
+                            if(!CatalogCleanup023.Confirm(DialogOwner,1))return;
+                            try{store.DeleteEventsPermanently(new[]{showing.Id});}
+                            finally{Refresh();}
+                        });
+                        leaf.PreviewMouseRightButtonDown+=(_,e)=>{
+                            openingContext=true;
+                            try{leaf.IsSelected=true;}finally{openingContext=false;}
+                            e.Handled=true;leafMenu.IsOpen=true;
+                        };
                         parent.Items.Add(leaf);
                     }
                 }
@@ -65,12 +77,12 @@ internal sealed class PerformanceWindow : EditorWindow
                     if(MessageBox.Show(DialogOwner,$"Полностью удалить спектакль «{performance.Title}»?\n\nПоказы: {linked.Shows}. Накладные: {linked.Issues}. Билеты (включая возвраты): {linked.Tickets}.\nСвязанные выдачи и документы будут удалены. Перед удалением сохранится резервная копия.","Удаление спектакля",MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
                     store.DeletePerformance(performance.Id);Refresh();
                 });
-                node.PreviewMouseRightButtonDown+=(_,e)=>{e.Handled=true;if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),node)){node.IsSelected=true;menu.IsOpen=true;}};
+                node.PreviewMouseRightButtonDown+=(_,e)=>{if(e.OriginalSource is DependencyObject source&&ReferenceEquals(NearestItem(source),node)){e.Handled=true;node.IsSelected=true;menu.IsOpen=true;}};
             }
         }
         tree.SelectedItemChanged+=(_,_)=>{
             if(tree.SelectedItem is not TreeViewItem item)return;
-            if(item.Tag is Tickets.Core.EventInfo showing){SelectedEventId=showing.Id;Finish(true);}
+            if(item.Tag is Tickets.Core.EventInfo showing){if(!openingContext){SelectedEventId=showing.Id;Finish(true);}}
             else if(item.Tag is not PerformanceInfo)item.IsExpanded=true;
         };
         search.TextChanged+=(_,_)=>Try(Refresh);Refresh();

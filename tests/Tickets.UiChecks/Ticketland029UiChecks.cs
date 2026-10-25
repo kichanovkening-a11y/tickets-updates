@@ -53,33 +53,59 @@ internal static class Ticketland029UiChecks
     }
     internal static void CheckReview(Store store,MainWindow main)
     {
-        var name="Review UI029 "+Guid.NewGuid().ToString("N");
-        var venue=store.CreateHall(name,"",new[]{new DraftSeat{Sector="Партер",Row="1",Number="1",X=0,Y=0},new DraftSeat{Sector="Балкон",Row="1",Number="2",X=40,Y=0}});
+        var token=Guid.NewGuid().ToString("N");var name="Ёлка UI030 "+token;
+        var venueName="Зал UI030 "+token;
+        var venue=store.CreateHall(venueName,"",new[]{
+            new DraftSeat{Sector="Партер",Row="1",Number="1",X=0,Y=0},
+            new DraftSeat{Sector="Партер",Row="1",Number="2",X=40,Y=0},
+            new DraftSeat{Sector="Балкон",Row="1",Number="3",X=80,Y=0}});
         var ids=store.VenueSeats(venue).OrderBy(s=>s.Number).Select(s=>s.Id).ToArray();
         var plan=store.SavePlan(venue,name,ids.Select(id=>new PriceValue(id,500,"#6EA8E0")).ToArray());
         var starts=DateTime.Today.AddDays(45).AddSeconds(Random.Shared.Next(10000));
         var eventId=store.CreateEvent(store.SavePerformance(name),venue,plan,starts);
-        var source=name+" другое название";
-        store.ApplyTicketlandReport028(new([new(source,starts,"Источник партер","1","1",name+"A",500),new(source,starts,"Источник балкон","1","2",name+"B",500)],(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1)),replace:true);
+        var otherId=store.CreateEvent(store.SavePerformance("Другой UI030 "+token),venue,plan,starts);
+        var sales=new[]{
+            new TicketlandSale028(name,starts,"Источник партер","1","1",token+"A",500){Venue=venueName},
+            new TicketlandSale028(name,starts,"Источник партер","1","2",token+"B",500){Venue=venueName},
+            new TicketlandSale028(name,starts,"Источник балкон","1","3",token+"C",500){Venue=venueName},
+            new TicketlandSale028(name,starts,"Источник отсутствует","7","99",token+"D",500){Venue=venueName},
+            new TicketlandSale028("Нет местного показа "+token,starts,"Источник партер","1","1",token+"E",500){Venue=venueName},
+            new TicketlandSale028("Подарочный сертификат "+token,starts,"Сертификат","--","--",token+"F",500){Venue=venueName}};
+        store.ApplyTicketlandReport028(new(sales,(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1)),replace:true);
         typeof(MainWindow).GetMethod("ReadEventCatalog",Private)!.Invoke(main,null);typeof(MainWindow).GetMethod("ApplyFilter",Private)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
         var window=new TicketlandMappingWindow028(store,main);window.Show();Pump();
         try
         {
             var controls=Walk(window).ToArray();
-            Check(!controls.OfType<ComboBox>().Any(),"review has no routine show or sector mapping dropdowns");
-            var lists=controls.OfType<ListBox>().ToArray();var issues=lists.Single(l=>l.Name=="TicketlandIssues029");var candidates=lists.Single(l=>l.Name=="TicketlandCandidates029");
-            Check(issues.Items.Count==2,"review lists unresolved proposals");
-            var issue=issues.Items.Cast<TicketlandIssue029>().Single(i=>i.Source.Contains(name+"A",StringComparison.Ordinal));issues.SelectedItem=issue;
-            var candidate=issue.Candidates.Single(c=>c.EventId==eventId&&c.SeatId==ids[0]);candidates.SelectedItem=candidate;Pump();
-            Check(controls.OfType<TextBlock>().Any(t=>t.Text==candidate.Differences&&t.Text.Contains("название",StringComparison.Ordinal)&&t.Text.Contains("сектор",StringComparison.Ordinal)),"review displays exact field differences");
-            Corrections025UiChecks.Capture(window,"029-ticketland-discrepancies");
+            Check(!controls.OfType<ComboBox>().Any(),"review has no manual show selector");
+            var issues=controls.OfType<ListBox>().Single(l=>l.Name=="TicketlandIssues029");
+            var candidates=controls.OfType<ListBox>().Single(l=>l.Name=="TicketlandCandidates029");
+            Check(issues.Items.Count==3,"030 groups tickets by exact show and source sector, excludes absent shows and gifts");
+            var search=controls.OfType<TextBox>().Single(t=>t.Name=="TicketlandSearch030");
+            search.Text="еЛкА ui030";Pump();Check(issues.Items.Count==3,"030 performance search supports partial text, case and ё/е");
+            search.Text="лКа ui03";Pump();Check(issues.Items.Count==3,"030 performance search matches text within the title");
+            search.Text="нет местного";Pump();Check(issues.Items.Count==0,"030 absent show cannot become an actionable search result");
+            search.Text="";Pump();
+            var issue=issues.Items.Cast<TicketlandSectorReview030>().Single(i=>i.SourceSector.Contains("партер",StringComparison.OrdinalIgnoreCase));issues.SelectedItem=issue;Pump();
+            Check(issue.TicketCount==2&&issue.EventId==eventId,"030 one issue carries both tickets for the automatically identified exact show");
+            Check(candidates.Items.Cast<TicketlandSectorCandidate030>().Select(c=>c.Sector).Distinct().Count()==candidates.Items.Count&&candidates.Items.Cast<TicketlandSectorCandidate030>().All(c=>!c.Caption.Contains("ряд",StringComparison.OrdinalIgnoreCase)),"030 candidates are local sectors without seat proposals");
+            var candidate=issue.Candidates.Single(c=>c.Sector.Equals("Партер",StringComparison.OrdinalIgnoreCase));candidates.SelectedItem=candidate;Pump();
+            Check(controls.OfType<TextBlock>().Any(t=>t.Text.Contains("Билетов: 2",StringComparison.Ordinal)&&t.Text.Contains(venueName,StringComparison.Ordinal)&&t.Text.Contains(starts.ToString("dd.MM.yyyy HH:mm:ss"),StringComparison.Ordinal)),"030 exact title, date, time, venue and grouped ticket count are visible");
+            Corrections025UiChecks.Capture(window,"030-ticketland-grouped-review");
             controls.OfType<Button>().Single(b=>Equals(b.Content,"Согласиться")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
-            var hall=(HallView)main.FindName("Hall");hall.SetSelection([ids[0]]);Pump();
-            Check(store.Seats(eventId).Single(s=>s.Id==ids[0]).IsTicketlandSold&&hall.SelectedSeats.Single().IsTicketlandSold,"agreement persists decision and refreshes open hall");
-            Check(issues.Items.Count==1,"accepted proposal disappears from review");
+            var hall=(HallView)main.FindName("Hall");hall.SetSelection([ids[0],ids[1]]);Pump();
+            Check(store.Seats(eventId).Where(s=>ids.Take(2).Contains(s.Id)).All(s=>s.IsTicketlandSold)&&hall.SelectedSeats.All(s=>s.IsTicketlandSold),"030 accepting a sector applies every grouped ticket and refreshes the open hall");
+            Check(!store.Seats(otherId).Any(s=>s.IsTicketlandSold),"030 accepting sector never confirms another show");
+            Check(issues.Items.Count==2,"030 accepted sector group disappears");
+            issues.SelectedItem=issues.Items.Cast<TicketlandSectorReview030>().Single(i=>i.SourceSector.Contains("балкон",StringComparison.OrdinalIgnoreCase));Pump();
             controls.OfType<Button>().Single(b=>Equals(b.Content,"Отказаться")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
-            Check(issues.Items.Count==0&&store.TicketlandIssues029().Count==0,"refusal removes unresolved proposal");
-            main.ReapplyTicketlandMappings028();Check(store.TicketlandIssues029().Count==0&&!store.Seats(eventId).Single(s=>s.Id==ids[1]).IsTicketlandSold,"refusal survives cached report reapplication");
+            Check(issues.Items.Count==1,"030 refusal resolves the whole source sector group");
+            var missing=issues.Items.Cast<TicketlandSectorReview030>().Single();issues.SelectedItem=missing;Pump();
+            Check(missing.MissingSeats.Any()&&controls.OfType<TextBlock>().Any(t=>t.Text.Contains("99",StringComparison.Ordinal)),"030 missing-seat group explains unresolved source row and seat");
+            Check(!controls.OfType<Button>().Single(b=>Equals(b.Content,"Согласиться")).IsEnabled,"030 missing seat cannot be approved as a guessed seat");
+            controls.OfType<Button>().Single(b=>Equals(b.Content,"Отказаться")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
+            main.ReapplyTicketlandMappings028();
+            Check(issues.Items.Count==0&&store.TicketlandSectorReviews030().Count==0&&!store.Seats(eventId).Single(s=>s.Id==ids[2]).IsTicketlandSold,"030 refusal persists through cached reapplication");
         }
         finally{window.Close();}
     }

@@ -39,10 +39,9 @@ internal static class TicketlandConnection028UiChecks
             typeof(MainWindow).GetMethod("ReadEventCatalog",Private)!.Invoke(main,null);
             typeof(MainWindow).GetMethod("ApplyFilter",Private)!.Invoke(main,null);
             main.SelectEvent(eventId);Pump();
-            Ticketland029UiChecks.CheckLayout(main);
             var hall=(HallView)main.FindName("Hall");
             var at=(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1);
-            var report=new TicketlandReport028([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500)],at);
+            var report=new TicketlandReport028([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500){Venue=fixture}],at);
             var calls=0;
             main.TicketlandFetch028=(saved,_)=>{Check(saved==login,"fetch receives original login or login recovered from Windows vault");calls++;return Task.FromResult(report);};
             Wait(main.ConnectTicketland028(login,CancellationToken.None));
@@ -63,7 +62,7 @@ internal static class TicketlandConnection028UiChecks
             Check(calls==3&&store.Seats(eventId).Single(s=>s.Id==ids[0]).Available,"refresh recovers saved credentials and frees sales absent from complete snapshot");
             Check(store.Seats(eventId).Single(s=>s.Id==ids[1]).IsBlocked&&store.Seats(eventId).Single(s=>s.Id==ids[2]).TicketId==local.Id,"snapshot replacement preserves manual block and local ticket");
 
-            report=new([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500)],at.AddMinutes(2));
+            report=new([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500){Venue=fixture}],at.AddMinutes(2));
             Directory.CreateDirectory(settingsPath+".tmp");
             try{Wait(main.ConnectTicketland028(login,CancellationToken.None));throw new Exception("Expected settings persistence failure.");}
             catch(TicketException){Check(main.TicketlandStatus028.StartsWith("Отчёт Ticketland загружен. Не удалось сохранить подключение",StringComparison.Ordinal)&&!main.TicketlandStatus028.Contains("Предыдущие данные",StringComparison.Ordinal),"post-commit persistence failure accurately reports loaded report");}

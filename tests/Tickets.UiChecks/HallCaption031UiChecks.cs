@@ -16,7 +16,7 @@ internal static class HallCaption031UiChecks
         var id=store.CreateHall("031 angular caption "+Guid.NewGuid().ToString("N"),"",[
             new(){Sector="Балкон справа",Row="1",Number="1",X=20,Y=40,SectorCaption=caption},
             new(){Sector="Балкон справа",Row="1",Number="2",X=60,Y=40,SectorCaption=caption}]);
-        var before=store.VenueSeats(id);var plan=store.SavePlan(id,"031 caption",before.Select(s=>new PriceValue(s.Id,500,"#ABCDEF")).ToArray());
+        var before=store.VenueSeats(id);var plan=store.SavePlan(id,"031 caption",before.Select(s=>new PriceValue(s.Id,500,store.PriceColors().FirstOrDefault(p=>p.Amount==500)?.Color??PricePalette.NextAvailable(store.PriceColors().Select(p=>p.Color)))).ToArray());
         var evt=store.CreateEvent(store.SavePerformance("031 caption "+Guid.NewGuid().ToString("N")),id,plan,DateTime.Today.AddDays(33));
         store.Issue(evt,[before[0].Id],"031 caption","CU031",1);
         var editor=new HallEditorWindow(store,store.Venues().Single(v=>v.Id==id),true);Exception? failure=null;SectorCaption029? expected=null;

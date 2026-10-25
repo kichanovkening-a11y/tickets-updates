@@ -16,7 +16,7 @@ internal static class HallConflicts031UiChecks
         var name="Конфликт031 "+Guid.NewGuid().ToString("N");
         var venue=store.CreateHall(name,"",Enumerable.Range(1,3).Select(n=>new DraftSeat{Sector="Партер",Row="1",Number=n.ToString(),X=n*40,Y=40}).ToArray());
         var ids=store.VenueSeats(venue).OrderBy(s=>s.Number).Select(s=>s.Id).ToArray();
-        var plan=store.SavePlan(venue,name,ids.Select(id=>new PriceValue(id,500,"#FFD600")).ToArray());
+        var plan=store.SavePlan(venue,name,ids.Select(id=>new PriceValue(id,500,store.PriceColors().FirstOrDefault(p=>p.Amount==500)?.Color??PricePalette.NextAvailable(store.PriceColors().Select(p=>p.Color)))).ToArray());
         var at=DateTime.Today.AddDays(71);var evt=store.CreateEvent(store.SavePerformance(name),venue,plan,at);
         store.Issue(evt,[ids[0]],"Получатель конфликта","CF031",1);
         var fetched=(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddSeconds(1);

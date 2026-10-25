@@ -65,7 +65,6 @@ public sealed partial class Store
         var prepared=new List<(TicketlandSale028 Sale,long? Event,long? Seat)>();
         foreach(var sale in sales.Values)
         {
-            long? priorEvent=null;long? priorSeat=null;
             // Across fetches a barcode cannot silently move to another seat or amount.
             using(var q=Command(c,"SELECT title,starts_at,sector,row_label,seat_label,nominal,event_id,seat_id,source_venue FROM ticketland_sale_028 WHERE barcode=$b","$b",sale.Barcode))
             {
@@ -77,14 +76,7 @@ public sealed partial class Store
                     static bool Footer(string title)=>Regex.IsMatch(title,@"^\d+СТР\. ИЗ \d+ ЛИЧНЫЙ КАБИНЕТ BACKSTAGE$",RegexOptions.CultureInvariant,TimeSpan.FromSeconds(1));
                     var repairFooter=replace&&report.IsCurrentEventSnapshot&&Footer(r.GetString(0))&&!Footer(sale.Title);
                     if((!repairFooter&&(r.GetString(0)!=sale.Title||DateTime.Parse(r.GetString(1),CultureInfo.InvariantCulture)!=sale.StartsAt))||r.GetString(2)!=sale.Sector||r.GetString(3)!=sale.Row||r.GetString(4)!=sale.Seat||decimal.Parse(r.GetString(5),CultureInfo.InvariantCulture)!=sale.Nominal)throw new TicketException("Штрихкод Ticketland изменил место или стоимость. Последняя успешная загрузка сохранена.");
-                    if(!repairFooter&&!r.IsDBNull(6)&&!r.IsDBNull(7))
-                    {
-                        var venueUnchanged=r.GetString(8)==sale.Venue;
-                        // The old report did not carry venue provenance. An upgrade can keep a
-                        // proven marker only when the newly supplied venue identifies its hall.
-                        var knownVenueUpgrade=r.GetString(8).Length==0&&sale.Venue.Length>0&&local029.Any(show=>show.Id==r.GetInt64(6)&&Venue029(show.Venue)==Venue029(sale.Venue));
-                        if(venueUnchanged||knownVenueUpgrade){priorEvent=r.GetInt64(6);priorSeat=r.GetInt64(7);}
-                    }
+
                 }
             }
             long? eventId=null;long? seatId=null;
@@ -100,24 +92,30 @@ public sealed partial class Store
                 if(Convert.ToInt64(occupied.ExecuteScalar())>0)conflicts++;
             }
             else unmatched++;
-            // Preserve a proven seat through sector/row/seat label edits only while its
-            // source still identifies this same unique exact show. Old cross-show manual
-            // approvals and subsequently ambiguous show identities cannot bypass strict matching.
-            if(eventId is null&&priorEvent.HasValue&&priorSeat.HasValue&&Exact030(sale,local029) is var priorExact030&&priorExact030.Length==1&&priorExact030[0].Id==priorEvent.Value)
+            // A current name-first resolution establishes provenance for legitimate later
+            // local caption edits. Pre-0.32 marker IDs alone are never proof of correctness.
+            if(resolved.Event.HasValue&&resolved.Seat.HasValue)
             {
-                using var valid=Command(c,"SELECT z.name FROM event e JOIN seat s ON s.venue_id=e.venue_id JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id WHERE e.id=$e AND s.id=$s","$e",priorEvent.Value,"$s",priorSeat.Value);valid.Transaction=tx;
-                // Preserve ordinary arbitrary caption edits, but an old marker cannot
-                // override an explicit opposing side, different family or section number.
-                if(valid.ExecuteScalar() is string priorSector&&CompatibleSector031(sale.Sector,priorSector))
-                {
-                    eventId=priorEvent;seatId=priorSeat;
-                    using var occupied=Command(c,"SELECT count(*) FROM ticket WHERE event_id=$e AND seat_id=$s AND returned_at IS NULL","$e",eventId.Value,"$s",seatId.Value);occupied.Transaction=tx;
-                    if(Convert.ToInt64(occupied.ExecuteScalar())>0)conflicts++;
-                }
+                var show=local029.Single(x=>x.Id==resolved.Event.Value);
+                RememberSector032(c,tx,sale,show,show.Seats.Single(x=>x.Id==resolved.Seat.Value));
             }
+            // Keep original proof while this barcode remains in the source snapshot.
+            // It prevents repeated cache reapplication from choosing a collision winner
+            // or erasing an explicit original sector family after a failed resolution.
             prepared.Add((sale,eventId,seatId));
         }
-        if(replace){using var clear=Command(c,"DELETE FROM ticketland_sale_028");clear.Transaction=tx;clear.ExecuteNonQuery();}
+        if(!replace)
+        foreach(var cached in matchingSales029.Values.Where(x=>!sales.ContainsKey(x.Barcode)&&matches029[x.Barcode].Issue?.Reason.Contains("Разные исходные",StringComparison.Ordinal)==true))
+        {
+            using var clear=Command(c,"UPDATE ticketland_sale_028 SET event_id=NULL,seat_id=NULL WHERE barcode=$b","$b",cached.Barcode);clear.Transaction=tx;clear.ExecuteNonQuery();
+        }
+        if(replace)
+        {
+            using var clear=Command(c,"DELETE FROM ticketland_sale_028");clear.Transaction=tx;clear.ExecuteNonQuery();
+            var retained=sales.Keys.ToHashSet(StringComparer.Ordinal);var removed=new List<string>();
+            using(var q=Command(c,"SELECT barcode FROM ticketland_match_proof_032")){q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(!retained.Contains(r.GetString(0)))removed.Add(r.GetString(0));}
+            foreach(var barcode in removed){using var q=Command(c,"DELETE FROM ticketland_match_proof_032 WHERE barcode=$b","$b",barcode);q.Transaction=tx;q.ExecuteNonQuery();}
+        }
         foreach(var row in prepared)
         {
             var sale=row.Sale;

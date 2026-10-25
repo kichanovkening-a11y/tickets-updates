@@ -17,7 +17,7 @@ internal static class TicketlandMatching031Checks
   });
   run("031 normalized markers and approvals survive portable copy and failed refresh",s=>{
    var automatic=Fixture(s,"Ложа правая партера");var approved=Fixture(s,"Ложа левая бельэтажа");var now=DateTimeOffset.UtcNow;
-   var sales=new[]{Sale(automatic,"ЛОЖА ПАРТЕРА ПРАВАЯ","portable-auto"),Sale(approved,"Неизвестное название","portable-approved")};
+   var sales=new[]{Sale(automatic,"ЛОЖА ПАРТЕРА ПРАВАЯ","portable-auto"),Sale(approved,"Ложа левая бельэтажа Источник","portable-approved")};
    s.ApplyTicketlandReport028(new(sales,now),true);var review=s.TicketlandSectorReviews030().Single();s.AcceptTicketlandSector030(review.Key,"Ложа левая бельэтажа");
    s.ApplyTicketlandReport028(s.CachedTicketlandReport028(),true);
    var directory=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(s.Path)!,"another-usb-folder");Directory.CreateDirectory(directory);var copy=System.IO.Path.Combine(directory,"tickets.db");s.Backup(copy);var reopened=new Store(copy);

@@ -13,7 +13,7 @@ internal sealed class TicketlandMappingWindow028:EditorWindow
         EventId031=eventId;
         var form=new DockPanel{Margin=new Thickness(20)};Content=form;
         var header=new StackPanel();DockPanel.SetDock(header,Dock.Top);form.Children.Add(header);
-        header.Children.Add(new TextBlock{Text="Название, дата, время и площадка определяются автоматически. Подтвердите только написание сектора: решение применяется ко всем билетам группы.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
+        header.Children.Add(new TextBlock{Text="Показ определяется по названию, дате, времени и площадке. Ряд и место проверяются только внутри указанного сектора. Здесь показаны причины расхождений; подтвердить можно только равнозначное название сектора.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,12)});
         header.Children.Add(new TextBlock{Text="Поиск по спектаклю",Margin=new Thickness(0,0,0,4)});
         var search=new TextBox{Name="TicketlandSearch030",Margin=new Thickness(0,0,0,12)};header.Children.Add(search);
         var commands=new StackPanel{Orientation=Orientation.Horizontal,HorizontalAlignment=HorizontalAlignment.Center};
@@ -28,8 +28,10 @@ internal sealed class TicketlandMappingWindow028:EditorWindow
         foreach(var field in new[]{"Title","StartsAt","Venue","SourceSector","TicketCount"})caption.Bindings.Add(new Binding(field));
         row.SetBinding(TextBlock.TextProperty,caption);issues.ItemTemplate=new DataTemplate{VisualTree=row};
         var detail=new DockPanel();Grid.SetColumn(detail,1);body.Children.Add(detail);
-        var reason=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};DockPanel.SetDock(reason,Dock.Top);detail.Children.Add(reason);
-        var differences=new TextBlock{TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,10,0,0)};DockPanel.SetDock(differences,Dock.Bottom);detail.Children.Add(differences);
+        var reason=new TextBlock{Name="TicketlandReason032",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
+        var reasonView=new ScrollViewer{Content=reason,MaxHeight=200,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};DockPanel.SetDock(reasonView,Dock.Top);detail.Children.Add(reasonView);
+        var differences=new TextBlock{Name="TicketlandDifferences032",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,10,0,0)};
+        var differencesView=new ScrollViewer{Content=differences,MaxHeight=120,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Disabled};DockPanel.SetDock(differencesView,Dock.Bottom);detail.Children.Add(differencesView);
         var candidates=new ListBox{Name="TicketlandCandidates029",DisplayMemberPath="Caption",HorizontalContentAlignment=HorizontalAlignment.Stretch};detail.Children.Add(candidates);
         IReadOnlyList<TicketlandSectorReview030> pending=[];
         void UpdateCommands(){agree.IsEnabled=!main.TicketlandIsUpdating028&&issues.SelectedItem is TicketlandSectorReview030&&candidates.SelectedItem is TicketlandSectorCandidate030;reject.IsEnabled=!main.TicketlandIsUpdating028&&issues.SelectedItem is TicketlandSectorReview030;}
@@ -47,7 +49,7 @@ internal sealed class TicketlandMappingWindow028:EditorWindow
             {
                 reason.Text=$"{issue.Title}\n{issue.StartsAt:dd.MM.yyyy HH:mm:ss}; {issue.Venue}\nСектор Ticketland: {issue.SourceSector}\nБилетов: {issue.TicketCount}\n{issue.Reason}";
                 candidates.ItemsSource=issue.Candidates;candidates.SelectedIndex=issue.Candidates.Count==1?0:-1;
-                differences.Text=issue.MissingSeats.Count>0?"Не определены места: "+string.Join("; ",issue.MissingSeats):"Выберите местный сектор этого показа. Ряд и место каждого билета проверяются автоматически.";
+                differences.Text=issue.MissingSeats.Count>0?"Не определены места в указанном секторе: "+string.Join("; ",issue.MissingSeats):issue.Candidates.Count>0?"Подтвердите равнозначное название этого сектора. Ряд и место проверяются только внутри него.":"Подходящего соответствия нет. Причина указана выше. Места других секторов не используются.";
             }
             else{reason.Text="";candidates.ItemsSource=null;differences.Text="";}
             UpdateCommands();

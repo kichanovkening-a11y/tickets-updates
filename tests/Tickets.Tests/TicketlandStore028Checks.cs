@@ -85,7 +85,7 @@ internal static class TicketlandStore028Checks
             var venue=s.Events().Single(e=>e.Id==f.Event).VenueId;var hall=s.Venues().Single(v=>v.Id==venue);var draft=s.HallDraft(venue);
             HallEditing027.RenameSector(draft,"Партер","Новый партер");s.SaveEditedHall(venue,hall.Name,hall.Address,draft);
             var result=s.ApplyTicketlandReport028(new(new[]{sale},at.AddSeconds(1)),true);
-            Check(result.Matched==0&&result.Unmatched==1&&s.Seats(f.Event).Single(x=>x.Id==f.Seats[0]).IsTicketlandSold,"full snapshot freed a live barcode after local rename");
+            Check(result.Matched==1&&result.Unmatched==0&&s.Seats(f.Event).Single(x=>x.Id==f.Seats[0]).IsTicketlandSold,"full snapshot freed a live barcode after local rename");
             Reject(()=>s.Issue(f.Event,new[]{f.Seats[0]},"local","TLREN028",1));
             s.ApplyTicketlandReport028(new(Array.Empty<TicketlandSale028>(),at.AddSeconds(2)),true);
             Check(s.Seats(f.Event).Single(x=>x.Id==f.Seats[0]).Available,"authoritative missing barcode did not release returned sale");
@@ -131,15 +131,15 @@ internal static class TicketlandStore028Checks
         });
         run("028 Ticketland explicit show and sector binding preserves local hall",s=>{
             var f=Fixture(s);var source=f.Title;var at=DateTimeOffset.UtcNow;
-            var sale=Sale(f,"1","sector-bound") with{Title=source,Sector="ИМЯ УДАЛЕННОГО СЕКТОРА"};
+            var sale=Sale(f,"1","sector-bound") with{Title=source,Sector="ПАРТЕР ИМЯ ИСТОЧНИКА"};
             var before=s.Seats(f.Event).Select(x=>(x.Id,x.Sector,x.Row,x.Number,x.X,x.Y)).ToArray();
             s.ApplyTicketlandReport028(new(new[]{sale},at),true);s.BindTicketlandShow028(source,f.At,f.Event);
-            Check(s.TicketlandSectors028(source,f.At).SequenceEqual(new[]{"ИМЯ УДАЛЕННОГО СЕКТОРА"}),"raw source sectors unavailable");
-            Reject(()=>s.BindTicketlandSector028(source,f.At,"ИМЯ УДАЛЕННОГО СЕКТОРА",f.Event,"does not exist"));
-            s.BindTicketlandSector028(source,f.At,"ИМЯ УДАЛЕННОГО СЕКТОРА",f.Event,"Партер");var reopened=new Store(s.Path);
+            Check(s.TicketlandSectors028(source,f.At).SequenceEqual(new[]{"ПАРТЕР ИМЯ ИСТОЧНИКА"}),"raw source sectors unavailable");
+            Reject(()=>s.BindTicketlandSector028(source,f.At,"ПАРТЕР ИМЯ ИСТОЧНИКА",f.Event,"does not exist"));
+            s.BindTicketlandSector028(source,f.At,"ПАРТЕР ИМЯ ИСТОЧНИКА",f.Event,"Партер");var reopened=new Store(s.Path);
             Check(reopened.ApplyTicketlandReport028(reopened.CachedTicketlandReport028(),true).Matched==1,"explicit sector mapping failed after reopening");
             Check(reopened.Seats(f.Event).Select(x=>(x.Id,x.Sector,x.Row,x.Number,x.X,x.Y)).SequenceEqual(before)&&reopened.Events().Single(e=>e.Id==f.Event).Title==f.Title,"explicit mapping modified approved local names or geometry");
-            var other=Fixture(s,at:f.At);Reject(()=>s.BindTicketlandSector028(source,f.At,"ИМЯ УДАЛЕННОГО СЕКТОРА",other.Event,"Партер"));
+            var other=Fixture(s,at:f.At);Reject(()=>s.BindTicketlandSector028(source,f.At,"ПАРТЕР ИМЯ ИСТОЧНИКА",other.Event,"Партер"));
         });
         run("028 Ticketland external markers cascade with explicit event deletion",s=>{
             var f=Fixture(s);s.ApplyTicketlandReport028(new(new[]{Sale(f,"1","purge")},DateTimeOffset.UtcNow),false);

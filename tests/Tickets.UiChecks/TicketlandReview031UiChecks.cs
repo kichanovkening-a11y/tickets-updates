@@ -19,7 +19,7 @@ internal static class TicketlandReview031UiChecks
         var second=store.CreateEvent(performance,venue,plan,starts.AddDays(1));
         var other=store.CreateEvent(store.SavePerformance(otherTitle),venue,plan,starts.AddDays(2));
         var clean=store.CreateEvent(store.SavePerformance("Винокур UI031 "+token),venue,plan,starts.AddDays(3));
-        TicketlandSale028 Sale(string name,DateTime at,string suffix,string seat="1")=>new(name,at,"Источник "+suffix,"1",seat,token+suffix,500){Venue=venueName};
+        TicketlandSale028 Sale(string name,DateTime at,string suffix,string seat="1")=>new(name,at,"Партер Источник "+suffix,"1",seat,token+suffix,500){Venue=venueName};
         var sales=new[]{Sale(title,starts,"A"),Sale(title,starts.AddDays(1),"B"),Sale(otherTitle,starts.AddDays(2),"C")};
         var fetchedAt=(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1);
         TicketlandReport028 Report(TicketlandSale028[] rows)=>new(rows,fetchedAt=fetchedAt.AddMinutes(1));

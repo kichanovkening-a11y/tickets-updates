@@ -22,6 +22,9 @@ public partial class MainWindow
 
     private void InitializeTicketland028()
     {
+        try{store.ReapplyCachedTicketland032();}
+        catch(TicketException){SetTicketlandStatus028("Ticketland: не удалось сопоставить сохранённый отчёт. Предыдущие данные сохранены.");}
+        catch(Exception){SetTicketlandStatus028("Ticketland: не удалось прочитать сохранённые продажи. Повторите обновление.");}
         try
         {
             if(File.Exists(TicketlandSettingsPath028))

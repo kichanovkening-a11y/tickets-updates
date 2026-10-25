@@ -16,23 +16,25 @@ public sealed partial class Store
         {
             var sale=group.First();var show=Exact030(sale,shows).Single();
             var all=sales.Where(s=>!General030(s)&&Exact030(s,shows) is var exact&&exact.Length==1&&exact[0].Id==show.Id&&Text029(s.Sector)==Text029(sale.Sector)).ToArray();
-            var reasons=group.Select(s=>matches[s.Barcode].Issue!.Reason).Distinct();
-            var missing=all.Where(s=>!show.Seats.Any(p=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat)))
-                .Select(s=>$"ряд {s.Row}, место {s.Seat}").Distinct().OrderBy(s=>s).ToArray();
-            // Only a sector containing every unchanged source position can be approved.
-            // A partial sector mapping would hide missing rows or move seats implicitly.
+            var resolution=ResolveSector032(sale.Sector,show);
+            var decision=SectorDecision032(c,tx,sale,show);
+            var sector=ApprovedSector032(sale.Sector,show,decision.Sector)??resolution.Sector;
+            var target=sector??(resolution.Aliases.Count==1?resolution.Aliases[0]:null);
+            var missing=target is null?[]:all.Where(s=>show.Seats.Count(p=>p.Sector==target&&CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))!=1)
+                .Select(s=>$"сектор «{sale.Sector}» → «{target}», ряд {s.Row}, место {s.Seat}").Distinct().OrderBy(s=>s).ToArray();
             var groupBarcodes=all.Select(s=>s.Barcode).ToHashSet(StringComparer.Ordinal);
             var outside=sales.Where(s=>!groupBarcodes.Contains(s.Barcode)).Select(s=>s.Barcode).ToHashSet(StringComparer.Ordinal);
             var claimed=matches.Where(x=>outside.Contains(x.Key)&&x.Value.Event==show.Id&&x.Value.Seat.HasValue).Select(x=>x.Value.Seat!.Value).ToHashSet();
-            // An unchanged proven marker remains occupied even when its current labels no
-            // longer resolve. A new sector approval must not claim that seat for another source.
-            using(var q=Command(c,"SELECT barcode,seat_id FROM ticketland_sale_028 WHERE event_id=$e AND seat_id IS NOT NULL","$e",show.Id))
-            {q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(outside.Contains(r.GetString(0)))claimed.Add(r.GetInt64(1));}
-            var candidates=show.Seats.GroupBy(s=>s.Sector).Where(sector=>CompatibleSector031(sale.Sector,sector.Key)&&all.All(s=>sector.Count(p=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))==1)
-                &&!sector.Any(p=>claimed.Contains(p.Id)&&all.Any(s=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))))
-                .Select(g=>new TicketlandSectorCandidate030(g.Key,g.Key)).OrderBy(x=>x.Sector).ToArray();
-            if(group.Any(s=>matches[s.Barcode].Issue!.Reason.StartsWith("Разные исходные",StringComparison.Ordinal)))candidates=[];
-            result.Add(new(group.Key,show.Id,show.Title,show.At,show.Venue,sale.Sector,all.Length,string.Join(" ",reasons),missing,candidates));
+            // Only current matches claim seats: unchecked legacy IDs cannot reserve a
+            // different sector or authorize an alias through coincident positions.
+            var occupied=target is not null&&show.Seats.Any(p=>p.Sector==target&&claimed.Contains(p.Id)&&all.Any(s=>CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat)));
+            var collision=group.Any(s=>matches[s.Barcode].Issue!.Reason.Contains("Разные исходные",StringComparison.Ordinal));
+            var candidates=sector is null&&resolution.Aliases.Count==1&&missing.Length==0&&!occupied&&!collision
+                ?new[]{new TicketlandSectorCandidate030(resolution.Aliases[0],resolution.Aliases[0])}:Array.Empty<TicketlandSectorCandidate030>();
+            var reasons=group.Select(s=>matches[s.Barcode].Issue!.Reason).ToList();
+            if(target is not null)reasons.AddRange(all.Where(s=>show.Seats.Count(p=>p.Sector==target&&CatalogText.Key(p.Row)==CatalogText.Key(s.Row)&&CatalogText.Key(p.Number)==CatalogText.Key(s.Seat))!=1).Select(s=>MissingPosition032(show,target,s)));
+            if(occupied)reasons.Add($"Сектор «{sale.Sector}» → «{target}»: место занято другим исходным сектором.");
+            result.Add(new(group.Key,show.Id,show.Title,show.At,show.Venue,sale.Sector,all.Length,string.Join(" ",reasons.Distinct()),missing,candidates));
         }
         return result.OrderBy(x=>x.StartsAt).ThenBy(x=>x.Title).ThenBy(x=>x.SourceSector).ToArray();
     }

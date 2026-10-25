@@ -14,16 +14,18 @@ internal static class TicketlandMatching030Checks
    Check(s.ApplyTicketlandReport028(new(new[]{sale with{Barcode="no-venue",Venue=""}},DateTimeOffset.UtcNow.AddSeconds(1)),true).Matched==0,"missing venue guessed");
   });
   run("030 sector approval covers group future barcodes and invalidates on layout edit",s=>{
-   var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Remote sector","1","1","group1",70){Venue=f.Venue};
+   var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Партер Источник","1","1","group1",70){Venue=f.Venue};
    var now=DateTimeOffset.UtcNow;s.ApplyTicketlandReport028(new(new[]{sale,sale with{Barcode="group2",Seat="2",Nominal=90}},now),true);
    var group=s.TicketlandSectorReviews030().Single();Check(group.TicketCount==2&&group.Candidates.Single().Sector=="Партер","not one complete sector group");
    s.AcceptTicketlandSector030(group.Key,"Партер");s=new Store(s.Path);
    var future=sale with{Barcode="future"};Check(s.ApplyTicketlandReport028(new(new[]{sale,sale with{Barcode="group2",Seat="2",Nominal=90},future},now.AddSeconds(1)),true).Matched==3,"group approval not persistent for future tickets");
    var venue=s.Events().Single(e=>e.Id==f.Event).VenueId;var hall=s.Venues().Single(v=>v.Id==venue);var draft=s.HallDraft(venue);HallEditing027.RenameSector(draft,"Партер","New sector");s.SaveEditedHall(venue,hall.Name,hall.Address,draft);
-   Check(s.TicketlandSectorReviews030().Single().Key!=group.Key,"layout change did not invalidate approval");
+   Check(s.ReapplyCachedTicketland032()?.Matched==3&&s.TicketlandSectorReviews030().Count==0,"proven existing barcodes lost after label edit");
+   var cached=s.CachedTicketlandReport028();s.ApplyTicketlandReport028(new(cached.Sales.Append(sale with{Barcode="after-layout-new"}).ToArray(),cached.FetchedAt.AddSeconds(1)),true);
+   Check(s.TicketlandSectorReviews030().Single().Key!=group.Key,"layout change did not invalidate approval for new barcodes");
   });
   run("030 refusal persists across new source tickets but layout change reopens",s=>{
-   var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Remote sector","1","1","refuse1",70){Venue=f.Venue};var now=DateTimeOffset.UtcNow;
+   var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Партер Источник","1","1","refuse1",70){Venue=f.Venue};var now=DateTimeOffset.UtcNow;
    s.ApplyTicketlandReport028(new(new[]{sale},now),true);var group=s.TicketlandSectorReviews030().Single();s.RejectTicketlandSector030(group.Key);s=new Store(s.Path);
    s.ApplyTicketlandReport028(new(new[]{sale,sale with{Barcode="refuse2",Seat="2"}},now.AddSeconds(1)),true);Check(s.TicketlandSectorReviews030().Count==0&&!s.Seats(f.Event).Any(x=>x.IsTicketlandSold),"refusal lost on new barcode");
    var venue=s.Events().Single(e=>e.Id==f.Event).VenueId;var hall=s.Venues().Single(v=>v.Id==venue);var draft=s.HallDraft(venue);HallEditing027.RenameSector(draft,"Партер","Updated");s.SaveEditedHall(venue,hall.Name,hall.Address,draft);
@@ -31,7 +33,7 @@ internal static class TicketlandMatching030Checks
   });
   run("030 missing seats never offer renumbering and totals include raw unmatched and gifts",s=>{
    var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Партер","1","1","total1",70){Venue=f.Venue};
-   var missing=sale with{Barcode="missing",Sector="Unknown",Row="99",Nominal=120};var gift=sale with{Barcode="totalgift",Row="--",Seat="--",Nominal=0};
+   var missing=sale with{Barcode="missing",Sector="Партер Источник",Row="99",Nominal=120};var gift=sale with{Barcode="totalgift",Row="--",Seat="--",Nominal=0};
    s.ApplyTicketlandReport028(new(new[]{sale,missing,gift,sale},DateTimeOffset.UtcNow),true);
    var group=s.TicketlandSectorReviews030().Single();Check(group.MissingSeats.Single().Contains("99")&&group.Candidates.Count==0,"invented missing row correction");
    var total=s.TicketlandSourceTotals030().Single(t=>t.EventId==f.Event);Check(total.TicketCount==3&&total.Nominal==190,"total used local price or dropped unmapped/gift rows");
@@ -47,7 +49,7 @@ internal static class TicketlandMatching030Checks
   });
 
   run("030 distinct source sector collision remains unmapped after manual sector confirmation",s=>{
-   var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Remote","1","1","manual-collision",70){Venue=f.Venue};var now=DateTimeOffset.UtcNow;
+   var f=Fixture(s);var sale=new TicketlandSale028("Ёлка",f.At,"Партер Источник","1","1","manual-collision",70){Venue=f.Venue};var now=DateTimeOffset.UtcNow;
    s.ApplyTicketlandReport028(new(new[]{sale},now),true);s.AcceptTicketlandSector030(s.TicketlandSectorReviews030().Single().Key,"Партер");
    var other=sale with{Barcode="auto-collision",Sector="Партер"};var result=s.ApplyTicketlandReport028(new(new[]{sale,other},now.AddSeconds(1)),true);
    Check(result.Matched==0&&result.Unmatched==2&&!s.Seats(f.Event).Any(x=>x.IsTicketlandSold),"manual sector mapped distinct source seats together");
@@ -57,7 +59,7 @@ internal static class TicketlandMatching030Checks
   run("030 sector approval cannot claim a seat already proven for another source sector",s=>{
    var f=Fixture(s);var now=DateTimeOffset.UtcNow;var proven=new TicketlandSale028("Ёлка",f.At,"Партер","1","1","proven-sector",70){Venue=f.Venue};
    s.ApplyTicketlandReport028(new(new[]{proven},now),true);
-   var unknown=proven with{Sector="Remote",Barcode="new-sector"};s.ApplyTicketlandReport028(new(new[]{proven,unknown},now.AddSeconds(1)),true);
+   var unknown=proven with{Sector="Партер Источник",Barcode="new-sector"};s.ApplyTicketlandReport028(new(new[]{proven,unknown},now.AddSeconds(1)),true);
    var group=s.TicketlandSectorReviews030().Single();Check(group.Candidates.Count==0,"occupied target offered for manual sector approval");
    try{s.AcceptTicketlandSector030(group.Key,"Партер");throw new Exception("occupied target accepted");}catch(TicketException){}
    Check(s.Seats(f.Event).Single(x=>x.Number=="1").IsTicketlandSold,"proven marker lost on rejected mapping");

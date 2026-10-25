@@ -68,7 +68,7 @@ internal static class Ticketland029UiChecks
             new TicketlandSale028(name,starts,"Источник партер","1","1",token+"A",500){Venue=venueName},
             new TicketlandSale028(name,starts,"Источник партер","1","2",token+"B",500){Venue=venueName},
             new TicketlandSale028(name,starts,"Источник балкон","1","3",token+"C",500){Venue=venueName},
-            new TicketlandSale028(name,starts,"Источник отсутствует","7","99",token+"D",500){Venue=venueName},
+            new TicketlandSale028(name,starts,"Партер","7","99",token+"D",500){Venue=venueName},
             new TicketlandSale028("Нет местного показа "+token,starts,"Источник партер","1","1",token+"E",500){Venue=venueName},
             new TicketlandSale028("Подарочный сертификат "+token,starts,"Сертификат","--","--",token+"F",500){Venue=venueName}};
         store.ApplyTicketlandReport028(new(sales,(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1)),replace:true);
@@ -86,7 +86,7 @@ internal static class Ticketland029UiChecks
             search.Text="лКа ui03";Pump();Check(issues.Items.Count==3,"030 performance search matches text within the title");
             search.Text="нет местного";Pump();Check(issues.Items.Count==0,"030 absent show cannot become an actionable search result");
             search.Text="";Pump();
-            var issue=issues.Items.Cast<TicketlandSectorReview030>().Single(i=>i.SourceSector.Contains("партер",StringComparison.OrdinalIgnoreCase));issues.SelectedItem=issue;Pump();
+            var issue=issues.Items.Cast<TicketlandSectorReview030>().Single(i=>i.SourceSector.Contains("партер",StringComparison.OrdinalIgnoreCase)&&i.TicketCount==2);issues.SelectedItem=issue;Pump();
             Check(issue.TicketCount==2&&issue.EventId==eventId,"030 one issue carries both tickets for the automatically identified exact show");
             Check(candidates.Items.Cast<TicketlandSectorCandidate030>().Select(c=>c.Sector).Distinct().Count()==candidates.Items.Count&&candidates.Items.Cast<TicketlandSectorCandidate030>().All(c=>!c.Caption.Contains("ряд",StringComparison.OrdinalIgnoreCase)),"030 candidates are local sectors without seat proposals");
             var candidate=issue.Candidates.Single(c=>c.Sector.Equals("Партер",StringComparison.OrdinalIgnoreCase));candidates.SelectedItem=candidate;Pump();

@@ -22,9 +22,9 @@ internal static class TicketlandMatching029Checks
    var ids=s.VenueSeats(venue).Select(x=>x.Id).ToArray();var plan=s.SavePlan(venue,"p",ids.Select(id=>new PriceValue(id,500,"#FF0000")).ToArray());
    var at=new DateTime(2030,5,7,19,0,0);var title="Ambiguous seats "+Guid.NewGuid();var evt=s.CreateEvent(s.SavePerformance(title),venue,plan,at);
    var sale=new TicketlandSale028(title,at,"Партер","1","1","amb",500){Venue=s.Venues().Single(v=>v.Id==venue).Name};s.ApplyTicketlandReport028(new(new[]{sale},DateTimeOffset.UtcNow),true);
-   var issue=s.TicketlandIssues029().Single();Check(!s.Seats(evt).Any(x=>x.IsTicketlandSold)&&issue.Candidates.Count==2,"canonical aliases collapsed seats");
-   s.AcceptTicketlandIssue029(issue.Key,evt,ids[1]);s=new Store(s.Path);Check(s.TicketlandIssues029().Count==0,"approval not persisted");
-   s.ApplyTicketlandReport028(s.CachedTicketlandReport028(),true);Check(s.Seats(evt).Single(x=>x.Id==ids[1]).IsTicketlandSold&&!s.Seats(evt).Single(x=>x.Id==ids[0]).IsTicketlandSold,"approved wrong ambiguous seat");
+   var issue=s.TicketlandIssues029().Single();Check(!s.Seats(evt).Any(x=>x.IsTicketlandSold)&&issue.Candidates.Count==0,"ambiguous sector must not offer side choices based on positions");
+   try{s.AcceptTicketlandIssue029(issue.Key,evt,ids[1]);throw new Exception("ambiguous side accepted");}catch(TicketException){}
+   s.ApplyTicketlandReport028(s.CachedTicketlandReport028(),true);Check(!s.Seats(evt).Any(x=>x.IsTicketlandSold),"ambiguous sector approved");
   });
   run("030 differing show title and time cannot be manually approved",s=>{
    var f=Fixture(s,"Local name","Партер");var sale=new TicketlandSale028("Remote name",f.At.AddMinutes(1),"Партер","1","1","approval",500){Venue=f.Venue};

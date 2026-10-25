@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--corrections032")&&!name.StartsWith("032"))return;
     if(args.Contains("--corrections031")&&!(name.StartsWith("031")||name.StartsWith("030")&&name.Contains("Ticketland")||name.StartsWith("029")&&(name.Contains("Ticketland")||name.Contains("caption"))||name.StartsWith("028")&&name.Contains("Ticketland")))return;
     if(args.Contains("--corrections030")&&!(name.StartsWith("030")||name.StartsWith("028")&&name.Contains("Ticketland")))return;
     if(args.Contains("--corrections029")&&!name.StartsWith("029"))return;
@@ -47,11 +48,12 @@ Hall024Checks.Register(Test);
 DeletedVenue028Checks.Register(Test);
 TicketlandClient028Checks.Register(Test);
 TicketlandCurrent0281Checks.Register(Test);
-TicketlandStore028Checks.Register(Test);
-TicketlandMatching029Checks.Register((name,body)=>Test(args.Contains("--corrections031")?"031 regression "+name:name,body));
-TicketlandMatching030Checks.Register((name,body)=>Test(args.Contains("--corrections031")?"031 regression "+name:name,body));
-TicketlandMatching031Checks.Register(Test);
-TicketlandPersistence031Checks.Register(Test);
+TicketlandStore028Checks.Register((name,body)=>Test(args.Contains("--corrections032")?"032 regression "+name:name,body));
+TicketlandMatching029Checks.Register((name,body)=>Test(args.Contains("--corrections032")?"032 regression "+name:args.Contains("--corrections031")?"031 regression "+name:name,body));
+TicketlandMatching030Checks.Register((name,body)=>Test(args.Contains("--corrections032")?"032 regression "+name:args.Contains("--corrections031")?"031 regression "+name:name,body));
+TicketlandMatching031Checks.Register((name,body)=>Test(args.Contains("--corrections032")?"032 regression "+name:name,body));
+TicketlandMatching032Checks.Register(Test);
+TicketlandPersistence031Checks.Register((name,body)=>Test(args.Contains("--corrections032")?"032 regression "+name:name,body));
 HallFocus030Checks.Register(Test);
 FutureSessionDeletion030Checks.Register(Test);
 TicketlandAllChannels029Checks.Register(Test);

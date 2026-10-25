@@ -69,8 +69,8 @@ internal static class TicketlandReview031UiChecks
             Check(store.TicketlandSectorReviews030().Any(issue=>issue.EventId==other),"unrelated discrepancies remain available when the selected show needs no popup");
 
             var diagnosticSource="Владимир Винокур. Новогодняя программа UI031 "+token;
-            store.ApplyTicketlandReport028(Report(sales.Append(Sale(diagnosticSource,starts.AddDays(3),"diagnostic")).ToArray()),true);
-            main.SelectEvent(clean);Pump();
+            main.TicketlandFetch028=(_,_)=>Task.FromResult(Report(sales.Append(Sale(diagnosticSource,starts.AddDays(3),"diagnostic")).ToArray()));
+            ObserveReview(main,()=>ClickRefresh(main),_=>{},0);
             var hallTotals=(TextBlock)main.FindName("HallTotals");
             Check(hallTotals.Text.Contains("нет точного совпадения")&&hallTotals.ToolTip is TextBlock explanation&&explanation.Text.Contains(diagnosticSource)&&explanation.Text.Contains("Не совпадает: название"),"unmatched showing explains source title instead of a silent zero");
 

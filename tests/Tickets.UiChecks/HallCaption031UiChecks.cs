@@ -26,6 +26,9 @@ internal static class HallCaption031UiChecks
                 var hall=(HallView)typeof(HallEditorWindow).GetField("preview",Private)!.GetValue(editor)!;
                 var draft=(IEnumerable<DraftSeat>)typeof(HallEditorWindow).GetField("seats",Private)!.GetValue(editor)!;
                 var geometry=draft.Select(s=>(s.X,s.Y,s.Row,s.Number)).ToArray();var commits=0;hall.SectorCaptionChanged029+=(_,_)=>commits++;
+                hall.AddHandler(Mouse.LostMouseCaptureEvent,new MouseEventHandler((_,e)=>Trace(hall,$"lost-capture source={e.OriginalSource?.GetType().Name} captured={Mouse.Captured?.GetType().Name}")),true);
+                hall.AddHandler(Mouse.MouseDownEvent,new MouseButtonEventHandler((_,e)=>Trace(hall,$"mouse-down {e.ChangedButton} clicks={e.ClickCount} handled={e.Handled}")),true);
+                hall.AddHandler(Mouse.MouseMoveEvent,new MouseEventHandler((_,e)=>Trace(hall,$"mouse-move handled={e.Handled}")),true);
                 BeginRotation(hall);Drag(hall,false);
                 Check(commits==0&&draft.All(s=>s.SectorCaption==caption),"angular drag previews without committing metadata");
                 Check(Math.Abs(hall.SectorCaption029ForEdit("Балкон справа").Angle-caption.Angle)>30,"caption follows angular mouse movement");
@@ -42,7 +45,7 @@ internal static class HallCaption031UiChecks
                 BeginRotation(hall);Drag(hall,true);expected=draft.First().SectorCaption;
                 Logical(editor).OfType<Button>().Single(b=>Equals(b.Content,"Сохранить изменения")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             }
-            catch(Exception ex){failure=ex;mouse_event(4,0,0,0,UIntPtr.Zero);editor.Close();}
+            catch(Exception ex){failure=ex;try{Corrections025UiChecks.Capture(editor,"031-caption-angular-failure");}catch(Exception captureError){Console.WriteLine("TRACE 031 capture failure "+captureError.Message);}mouse_event(4,0,0,0,UIntPtr.Zero);editor.Close();}
         }));
         try
         {
@@ -61,20 +64,31 @@ internal static class HallCaption031UiChecks
         var menu=hall.ContextMenu!;
         Check(menu.Items.OfType<MenuItem>().Select(i=>i.Header?.ToString()).SequenceEqual(new[]{"Изменить название","Повернуть название"}),"caption menu has one rename and one rotation action");
         menu.Items.OfType<MenuItem>().Single(i=>Equals(i.Header,"Повернуть название")).RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));menu.IsOpen=false;PumpInput();
+        Trace(hall,"rotation selected, menu closed");
         Check(hall.Cursor==Cursors.Cross,"caption rotation uses sector angular drag cursor");
     }
     private static void Drag(HallView hall,bool release)
     {
         var centres=(Dictionary<string,Point>)typeof(HallView).GetField("sectorCaptionCentres031",Private)!.GetValue(hall)!;var centre=centres.Single().Value;
-        Move(hall,new Point(centre.X+35,centre.Y));mouse_event(2,0,0,0,UIntPtr.Zero);PumpInput();
-        Move(hall,new Point(centre.X,centre.Y+35));
+        Move(hall,new Point(centre.X+35,centre.Y));Trace(hall,"before native down");mouse_event(2,0,0,0,UIntPtr.Zero);PumpInput();Trace(hall,"after native down");
+        Move(hall,new Point(centre.X,centre.Y+35));Trace(hall,"after angular native move");
         if(release){mouse_event(4,0,0,0,UIntPtr.Zero);PumpInput();}
     }
     private static void Move(HallView hall,Point world)
     {
         var point=(Point)typeof(HallView).GetMethod("Screen",Private)!.Invoke(hall,[world])!;var screen=hall.PointToScreen(point);
-        SetCursorPos((int)screen.X,(int)screen.Y);PumpInput();
+        var moved=SetCursorPos((int)screen.X,(int)screen.Y);PumpInput();
+        Console.WriteLine($"TRACE 031 Move requested-world={world} local={point} screen={screen} success={moved} hall-size={hall.ActualWidth},{hall.ActualHeight}");
     }
+    private static void Trace(HallView hall,string stage)
+    {
+        object? Field(string name)=>typeof(HallView).GetField(name,Private)!.GetValue(hall);
+        GetCursorPos(out var physical);var local=Mouse.GetPosition(hall);
+        var world=(Point)typeof(HallView).GetMethod("World",Private)!.Invoke(hall,[local])!;
+        Console.WriteLine($"TRACE 031 {stage}: rotating={Field("rotatingCaption031")??"null"} caption-drag={Field("draggingCaption029")??"null"} dragging={Field("dragging")} moved={Field("captionMoved029")} transform={Field("transformSector")??"null"} anchor={Field("worldAnchor")} centre={Field("captionCentre031")} angle={hall.SectorCaption029ForEdit("Балкон справа").Angle} captured={hall.IsMouseCaptured} mouse-captured={Mouse.Captured?.GetType().Name??"null"} cursor={hall.Cursor} physical={physical.X},{physical.Y} local={local} world={world} left={Mouse.LeftButton} focused={hall.IsKeyboardFocusWithin}");
+    }
+    [StructLayout(LayoutKind.Sequential)]private struct NativePoint{public int X;public int Y;}
+    [DllImport("user32.dll")]private static extern bool GetCursorPos(out NativePoint point);
     private static void PumpInput(){var until=DateTime.UtcNow.AddMilliseconds(65);while(DateTime.UtcNow<until){Pump();Thread.Sleep(5);}}
     private static void Pump()=>Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static IEnumerable<DependencyObject> Logical(DependencyObject node){yield return node;foreach(var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>())foreach(var item in Logical(child))yield return item;}

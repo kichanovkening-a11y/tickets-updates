@@ -50,6 +50,7 @@ internal sealed class UpdateWindow : EditorWindow
                 if(plan.Files.Count==0){status.Text="Все файлы уже обновлены.";return;}
                 cancel.Token.ThrowIfCancellationRequested();status.Text="Подготовка к установке…";
                 store.Backup(Path.Combine(AppContext.BaseDirectory,"Backups",$"tickets-before-update-{DateTime.Now:yyyyMMdd-HHmmss}.db"));
+                LocalBackupRetention036.Prune(store,Path.Combine(AppContext.BaseDirectory,"Backups"));
                 var runner=Path.Combine(work,"runner");Directory.CreateDirectory(runner);
                 await Task.Run(()=>{
                     foreach(var file in Directory.EnumerateFiles(AppContext.BaseDirectory))

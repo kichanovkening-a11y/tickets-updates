@@ -24,6 +24,7 @@ public partial class App : Application
             Directory.CreateDirectory(backup);
             var daily=Path.Combine(backup,$"tickets-{DateTime.Now:yyyy-MM-dd}.db");
             if(!File.Exists(daily)) store.Backup(daily);
+            LocalBackupRetention036.Prune(store,backup);
             MainWindow=new MainWindow(store); MainWindow.Show();
             try{Shortcut023.Ensure(AppContext.BaseDirectory);}catch(IOException){}catch(System.Runtime.InteropServices.COMException){}catch(System.Reflection.TargetInvocationException){}catch(UnauthorizedAccessException){}
         }

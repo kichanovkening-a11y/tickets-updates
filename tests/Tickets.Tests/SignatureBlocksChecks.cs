@@ -55,6 +55,8 @@ internal static class SignatureBlocksChecks
         foreach(var cell in names.Elements(W+"tc"))
         {
             if(string.IsNullOrWhiteSpace(Text(cell)))continue;
+            if(kind.Contains("bill")&&Text(cell).Contains("Бухгалтер:"))
+            {if(Text(cell).Contains("Баринов"))throw new Exception("director copied into accountant");continue;}
             var paragraphs=cell.Elements(W+"p").ToArray();
             if(paragraphs.Length<2)throw new Exception("position and name must be separate paragraphs "+kind);
             var expectedAlignment=cell==names.Elements(W+"tc").First()?"left":"right";

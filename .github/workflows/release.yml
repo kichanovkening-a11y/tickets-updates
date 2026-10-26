@@ -37,6 +37,8 @@ jobs:
           retention-days: 7
       - name: Test accounting and updater
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections033
+      - name: Verify document corrections
+        run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --documents035
       - name: Verify matching regression
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections032
       - name: Publish portable Windows app

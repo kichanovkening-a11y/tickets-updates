@@ -60,7 +60,7 @@ internal sealed class InvoiceWindow : EditorWindow
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveText);};
         reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};Refresh();
         Closing+=(_,e)=>{
-            try{PersistSender();SaveText();}
+            try{PersistSender();if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{SaveText();var info=Store.CustomIssueDocument(eventId,issueId,"invoice");if(info is not null)InvoiceDocuments.SaveIssueDocumentWord(info,destination);else InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});}
             catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Отправитель",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
         // Printing is always an explicit choice in the document toolbar.
@@ -143,7 +143,7 @@ internal sealed class InvoiceWindow : EditorWindow
         var doc=new FlowDocument{FontFamily=new FontFamily("Arial"),FontSize=13,PageWidth=pageWidth,PagePadding=new Thickness(25),ColumnWidth=Math.Max(100,pageWidth-50)};
         void Text(string text,bool bold=false,double size=13)=>doc.Blocks.Add(new Paragraph(new Run(text)){FontWeight=bold?FontWeights.Bold:FontWeights.Normal,FontSize=size,Margin=new Thickness(0,0,0,7)});
         Text($"НАКЛАДНАЯ № {invoice.Id}",true,22);Text("на передачу билетов");Text("Дата выдачи: "+invoice.Date);
-        Text("Мероприятие: "+invoice.Title,true);Text("Дата и время: "+invoice.EventDate);Text("Площадка: "+invoice.Venue);Text("От кого: "+invoice.Sender);Text("Получатель: "+invoice.Recipient);
+        Text("Мероприятие: "+invoice.Title,true);Text("Дата и время: "+invoice.EventDate);Text("Площадка: "+invoice.Venue);Text("От кого: "+invoice.DocumentSender);Text("Получатель: "+invoice.DocumentRecipient);
 
         var table=new Table{CellSpacing=0,BorderThickness=new Thickness(0.5),BorderBrush=Brushes.SlateGray};
         foreach(var width in new[]{1.5,.6,2.5,.8,1.0,1.1})table.Columns.Add(new TableColumn{Width=new GridLength((pageWidth-50)*width/7.5)});

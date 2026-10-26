@@ -9,7 +9,7 @@ public sealed record OrganizationExtraField(string Label,string Value);
 public sealed record OrganizationDetails(string Name="",string Inn="",string Kpp="",string Ogrn="",string Address="",string Bank="",string Account="",string CorrespondentAccount="",string Bik="",string Signatory="",string Position="",string Phone="",string Okpo="",string Okved="",string Okato="",IReadOnlyList<OrganizationExtraField>? ExtraFields=null,string LegalName="",string Authority="")
 {
     public bool HasRequisites=>new[]{LegalName,Authority,Inn,Kpp,Ogrn,Address,Bank,Account,CorrespondentAccount,Bik,Signatory,Position,Phone,Okpo,Okved,Okato}.Any(value=>!string.IsNullOrWhiteSpace(value))||(ExtraFields?.Any(field=>!string.IsNullOrWhiteSpace(field.Label)&&!string.IsNullOrWhiteSpace(field.Value))??false);
-    public string DisplayText=>string.Join("\n",new[]{Name,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Основание полномочий",Authority),Line("Телефон",Phone)}.Concat((ExtraFields??[]).Where(field=>!string.IsNullOrWhiteSpace(field.Label)).Select(field=>Line(field.Label,field.Value))).Where(x=>x.Length>0));
+    public string DisplayText=>string.Join("\n",new[]{string.IsNullOrWhiteSpace(LegalName)?Name:LegalName,Line("ИНН",Inn),Line("КПП",Kpp),Line("ОГРН / ОГРНИП",Ogrn),Line("Адрес",Address),Line("ОКПО",Okpo),Line("ОКВЭД",Okved),Line("ОКАТО",Okato),Line("Банк",Bank),Line("Расчётный счёт",Account),Line("Корр. счёт",CorrespondentAccount),Line("БИК",Bik),Line("Подписант",Signatory),Line("Должность",Position),Line("Основание полномочий",Authority),Line("Телефон",Phone)}.Concat((ExtraFields??[]).Where(field=>!string.IsNullOrWhiteSpace(field.Label)).Select(field=>Line(field.Label,field.Value))).Where(x=>x.Length>0));
     private static string Line(string label,string value)=>string.IsNullOrWhiteSpace(value)?"":label+": "+value;
 }
 
@@ -74,7 +74,13 @@ public sealed partial class Store
         using var c=Open();using var cmd=Command(c,"SELECT details FROM issue_organization_details WHERE issue_id=$i AND role=$r","$i",issueId,"$r",sender?"sender":"recipient");
         var oldJson=cmd.ExecuteScalar() as string;
         var snapshot=oldJson is not null?JsonSerializer.Deserialize<OrganizationDetails>(oldJson):null;
-        if(snapshot?.HasRequisites==true)return snapshot;
+        if(snapshot?.HasRequisites==true)
+        {
+            using var party=Command(c,sender?"SELECT sender FROM issue_batch WHERE id=$i":"SELECT recipient FROM issue_batch WHERE id=$i","$i",issueId);
+            var alias=party.ExecuteScalar() as string??snapshot.Name;
+            var legal=GetOrganizationDetails(alias,sender).LegalName;
+            return string.IsNullOrWhiteSpace(legal)?snapshot:snapshot with{LegalName=legal};
+        }
         using var original=Command(c,sender?"SELECT sender FROM issue_batch WHERE id=$i":"SELECT recipient FROM issue_batch WHERE id=$i","$i",issueId);
         var name=original.ExecuteScalar() as string??snapshot?.Name??"";
         if(string.IsNullOrWhiteSpace(name))return snapshot??new();
@@ -136,7 +142,7 @@ public sealed partial class Store
             while(rows.Read())if(CatalogText.Key(rows.GetString(1))==CatalogText.Key(name))
             {
                 var snapshot=JsonSerializer.Deserialize<OrganizationDetails>(rows.GetString(2))??new(Name:name);
-                snapshots.Add((rows.GetInt64(0),snapshot with{Signatory=details.Signatory,Position=details.Position}));
+                snapshots.Add((rows.GetInt64(0),snapshot with{Signatory=details.Signatory,Position=details.Position,LegalName=details.LegalName}));
             }
         }
         foreach(var snapshot in snapshots)

@@ -9,7 +9,7 @@ public static class SignatureBlocks
     public static bool IsIndividualEntrepreneur(InvoiceInfo invoice)=>Regex.IsMatch(invoice.Sender.Trim(),@"^ИП(?:\s|$)",RegexOptions.IgnoreCase);
     private static readonly XNamespace W="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     public static (string Position,string Name) Sender(InvoiceInfo invoice)=>Identity(IsIndividualEntrepreneur(invoice)?DocumentParties.Sender(invoice) with {Position=""}:DocumentParties.Sender(invoice));
-    public static (string Position,string Name) Recipient(InvoiceInfo invoice)=>Identity(invoice.RecipientDetails??new(),invoice.Recipient);
+    public static (string Position,string Name) Recipient(InvoiceInfo invoice)=>Identity(invoice.RecipientDetails??new(),invoice.DocumentRecipient);
     private static (string Position,string Name) Identity(OrganizationDetails details,string fallback="")=>(details.Position,Name(string.IsNullOrWhiteSpace(details.Signatory)?fallback:details.Signatory));
     public static string Name(string value)
     {
@@ -60,7 +60,15 @@ public static class SignatureBlocks
                 var text=string.Concat(p.Descendants(W+"t").Select(t=>t.Value));
                 var token=Regex.Match(text,@"\{(?<party>sender|recipient)Signatory\}|\{receivedBy\}");
                 if(!token.Success||p.Descendants(W+"drawing").Any())continue;
-                var sender=token.Groups["party"].Value=="sender";var identity=sender?Sender(invoice):Recipient(invoice);
+                var sender=token.Groups["party"].Value=="sender";
+                // A reused sender field in the accountant cell is not evidence
+                // that the director is also the accountant. Preserve the blank line.
+                if(sender&&!IsIndividualEntrepreneur(invoice)&&Regex.IsMatch(text,@"(?i)бухгалтер"))
+                {
+                    var accountantProps=p.Element(W+"pPr");var accountantFormat=p.Descendants(W+"rPr").FirstOrDefault();
+                    p.ReplaceNodes(accountantProps is null?null:new XElement(accountantProps),new XElement(W+"r",accountantFormat is null?null:new XElement(accountantFormat),new XElement(W+"t","Бухгалтер: ____________________")));continue;
+                }
+                var identity=sender?Sender(invoice):Recipient(invoice);
                 var prefix=text[..token.Index].Replace("{senderPosition}",identity.Position).Replace("{recipientPosition}",identity.Position).TrimEnd();
                 // The invoice starter contains only a name field; its position belongs above the name too.
                 if(!text.Contains("Position}")&&!string.IsNullOrWhiteSpace(identity.Position))prefix+=" "+identity.Position;

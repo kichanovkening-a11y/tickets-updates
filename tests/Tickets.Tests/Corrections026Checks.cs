@@ -15,7 +15,7 @@ internal static class Corrections026Checks
                 var bytes=CustomDocumentForms.Fill(input.ToArray(),invoice with {Sender=sender,SenderDetails=new(Name:sender,Signatory:"Баринов А.С.")},"bill",DateTime.Today);
                 using var zip=new ZipArchive(new MemoryStream(bytes));using var stream=zip.GetEntry("word/document.xml")!.Open();var xml=XDocument.Load(stream);XNamespace w="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
                 var table=xml.Root!.Element(w+"body")!.Elements(w+"tbl").Last();var names=table.Descendants(w+"t").Count(t=>t.Value.Replace('\u00a0',' ')=="Баринов А.С.");
-                if(names!=(sender.StartsWith("ИП")?1:2))throw new Exception("Wrong number of sender signatures: "+names);
+                if(names!=1)throw new Exception("Wrong number of sender signatures: "+names);
                 if(sender.StartsWith("ИП")&&table.Descendants(w+"tr").First().Elements(w+"tc").Take(1).Any(c=>c.Descendants(w+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value))))throw new Exception("Left signature remains");
             }
         });

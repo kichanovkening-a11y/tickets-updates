@@ -19,6 +19,20 @@ internal static class WordDocumentStructure
     };
     public static void Normalize(XDocument document)
     {
+        // Use the physical Word 2007 properties in LTR documents. The starter
+        // contract mixes logical and physical properties that older Word repairs.
+        // Keep RTL documents' logical interpretation unchanged.
+        if(!document.Descendants().Any(e=>(e.Name==W+"bidi"||e.Name==W+"bidiVisual")&&(string?)e.Attribute(W+"val") is not ("0" or "false")))
+        {
+            foreach(var group in document.Descendants().Where(e=>e.Name.Namespace==W&&e.Name.LocalName is "tcBorders" or "tblBorders" or "tcMar" or "tblCellMar"))
+            foreach(var pair in new[]{("start","left"),("end","right")})
+            {
+                var logical=group.Element(W+pair.Item1);if(logical is null)continue;
+                group.Elements(W+pair.Item2).Remove();logical.Name=W+pair.Item2;
+            }
+            foreach(var ind in document.Descendants(W+"ind"))foreach(var pair in new[]{("start","left"),("end","right"),("startChars","leftChars"),("endChars","rightChars")})
+            {var logical=ind.Attribute(W+pair.Item1);if(logical is null)continue;ind.SetAttributeValue(W+pair.Item2,logical.Value);logical.Remove();}
+        }
         foreach(var table in document.Descendants(W+"tbl").ToArray())WordTableGrid.Compact(table);
         foreach(var group in document.Descendants().Where(e=>e.Name.Namespace==W&&Orders.ContainsKey(e.Name.LocalName)).ToArray())
         {

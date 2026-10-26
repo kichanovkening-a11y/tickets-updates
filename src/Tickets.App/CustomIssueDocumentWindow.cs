@@ -42,7 +42,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,kind)!,kind);
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveForNavigation);};
-        Closing+=(_,e)=>{try{SaveForNavigation();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
+        Closing+=(_,e)=>{try{if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>{SaveForNavigation();InvoiceDocuments.SaveIssueDocumentWord(Info,destination);});}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
         preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)Refresh();};
         Refresh();status.Text="Форма получателя подготовлена для текущей выдачи.";
         DocumentFlag025.Apply(this,root,Info.Invoice.Recipient,issueId,Tickets.Core.Store.RecipientDocumentName(kind));

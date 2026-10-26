@@ -2,7 +2,13 @@ using Microsoft.Data.Sqlite;
 
 namespace Tickets.Core;
 
-public sealed record SpecificationInfo(long Id,string Recipient,string Sender,string Title,string Body,string UpdatedAt);
+public sealed record SpecificationInfo(long Id,string Recipient,string Sender,string Title,string Body,string UpdatedAt)
+{
+    public string RecipientLegalName{get;init;}="";
+    public string SenderLegalName{get;init;}="";
+    public string DocumentRecipient=>string.IsNullOrWhiteSpace(RecipientLegalName)?Recipient:RecipientLegalName;
+    public string DocumentSender=>string.IsNullOrWhiteSpace(SenderLegalName)?Sender:SenderLegalName;
+}
 
 public sealed partial class Store
 {
@@ -60,7 +66,7 @@ public sealed partial class Store
     public List<SpecificationInfo> Specifications()
     {
         using var c=Open();using var cmd=Command(c,"SELECT id,recipient,sender,title,body,updated_at FROM specification ORDER BY recipient COLLATE NOCASE");using var read=cmd.ExecuteReader();var result=new List<SpecificationInfo>();
-        while(read.Read())result.Add(new(read.GetInt64(0),read.GetString(1),read.GetString(2),read.GetString(3),read.GetString(4),read.GetString(5)));return result;
+        while(read.Read())result.Add(new(read.GetInt64(0),read.GetString(1),read.GetString(2),read.GetString(3),read.GetString(4),read.GetString(5)){RecipientLegalName=GetOrganizationDetails(read.GetString(1),false).LegalName,SenderLegalName=GetOrganizationDetails(read.GetString(2),true).LegalName});return result;
     }
     public SpecificationInfo SaveSpecification(string recipient,string sender,string title,string body)
     {
@@ -71,7 +77,7 @@ public sealed partial class Store
             INSERT INTO specification(recipient,recipient_key,sender,title,body,updated_at) VALUES($r,$k,$s,$t,$b,$u)
             ON CONFLICT(recipient_key) DO UPDATE SET recipient=excluded.recipient,sender=excluded.sender,title=excluded.title,body=excluded.body,updated_at=excluded.updated_at RETURNING id
             ""","$r",recipient,"$k",CatalogText.Key(recipient),"$s",sender,"$t",title,"$b",body,"$u",timestamp);cmd.Transaction=tx;var id=Convert.ToInt64(cmd.ExecuteScalar());AddRecipient(c,tx,recipient);RememberSender(c,tx,sender);tx.Commit();
-        return new(id,recipient,sender,title,body,timestamp);
+        return new(id,recipient,sender,title,body,timestamp){RecipientLegalName=GetOrganizationDetails(recipient,false).LegalName,SenderLegalName=GetOrganizationDetails(sender,true).LegalName};
     }
     public string SaveSpecificationDocument(SpecificationInfo specification)
     {

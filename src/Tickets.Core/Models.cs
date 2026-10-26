@@ -47,6 +47,8 @@ public sealed record InvoiceInfo(long Id,long EventId,string Title,string Venue,
     public DateTime? ContractDate { get; init; }
     public OrganizationDetails? SenderDetails { get; init; }
     public OrganizationDetails? RecipientDetails { get; init; }
+    public string DocumentRecipient=>string.IsNullOrWhiteSpace(RecipientDetails?.LegalName)?Recipient:RecipientDetails.LegalName;
+    public string DocumentSender=>string.IsNullOrWhiteSpace(SenderDetails?.LegalName)?Sender:SenderDetails.LegalName;
     public decimal Total=>Tickets.Sum(t=>(decimal)t.Amount);
     public int ActiveCount=>Tickets.Count(t=>t.ReturnedAt is null);
     public decimal ActiveTotal=>Tickets.Where(t=>t.ReturnedAt is null).Sum(t=>(decimal)t.Amount);

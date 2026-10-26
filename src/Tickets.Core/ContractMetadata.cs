@@ -63,6 +63,6 @@ internal static class DocumentParties
     public static string ReceivedBy(InvoiceInfo invoice)
     {
         var recipient=invoice.RecipientDetails;
-        return string.IsNullOrWhiteSpace(recipient?.Signatory)?invoice.Recipient:string.Join(" ",new[]{recipient.Position,recipient.Signatory}.Where(x=>!string.IsNullOrWhiteSpace(x)));
+        return string.IsNullOrWhiteSpace(recipient?.Signatory)?invoice.DocumentRecipient:string.Join(" ",new[]{recipient.Position,recipient.Signatory}.Where(x=>!string.IsNullOrWhiteSpace(x)));
     }
 }

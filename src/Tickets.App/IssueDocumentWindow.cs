@@ -40,9 +40,8 @@ internal sealed class IssueDocumentWindow:EditorWindow
         DocumentFlag025.Apply(this,root,info.Invoice.Recipient,issueId,IssueDocumentKinds.Name(kind));
         Closing+=(_,e)=>{
             if(template.Text==original)return;
-            var answer=MessageBox.Show(DialogOwner,"Сохранить изменения документа?",Title,MessageBoxButton.YesNoCancel,MessageBoxImage.Question);
-            if(answer==MessageBoxResult.Cancel){e.Cancel=true;return;}
-            if(answer==MessageBoxResult.Yes)try{Save();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
+            try{e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx",destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});}
+            catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
     }
     internal void SaveForNavigation(){if(template.Text!=original)Save();}

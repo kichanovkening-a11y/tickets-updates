@@ -7,6 +7,11 @@ namespace Tickets.App;
 
 internal static class DocumentSaveDialog
 {
+    internal static bool SaveOnClose(Store store,Window owner,string fileName,Action<string> write)
+    {
+        var answer=MessageBox.Show(owner,"Сохранить изменения документа?",owner.Title,MessageBoxButton.YesNoCancel,MessageBoxImage.Question);
+        return answer==MessageBoxResult.No||(answer==MessageBoxResult.Yes&&Save(store,owner,fileName,write) is not null);
+    }
     internal static string? Save(Store store,Window owner,string fileName,Action<string> write)
     {
         var dialog=new SaveFileDialog{Title="Сохранить документ",Filter="Документ Word (*.docx)|*.docx",DefaultExt=".docx",AddExtension=true,FileName=fileName};

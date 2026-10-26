@@ -21,6 +21,7 @@ void Test(string name, Action<Store> body)
     if(args.Contains("--hall027")&&!(name.StartsWith("027")&&(name.Contains("hall")||name.Contains("sector")||name.Contains("aisle"))))return;
     if(args.Contains("--corrections027")&&!name.StartsWith("027"))return;
     if(args.Contains("--corrections026")&&!name.StartsWith("026"))return;
+    if(args.Contains("--documents035")&&!(name.Contains("signature")||name.Contains("document")||name.Contains("requisite")||name.StartsWith("033 035")||name.Contains("legal")||name.Contains("organization")))return;
     total++;
     var caseDirectory=System.IO.Path.Combine(root,total.ToString());
     Directory.CreateDirectory(caseDirectory);
@@ -45,6 +46,7 @@ void Reject(Action action)
     }
     throw new Exception("seed has no event with 3 priced seats");
 }
+Documents035Checks.Register(Test);
 Transfer033Checks.Register(Test);
 Ticketland033Checks.Register(Test);
 Hall024Checks.Register(Test);

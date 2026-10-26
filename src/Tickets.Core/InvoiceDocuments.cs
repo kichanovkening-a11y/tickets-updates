@@ -27,8 +27,8 @@ public static class InvoiceDocuments
             Paragraph($"НАКЛАДНАЯ № {invoice.Id}",true,32),
             Paragraph("на передачу билетов",false,24),Paragraph("Дата выдачи: "+invoice.Date),
             Paragraph("Мероприятие: "+invoice.Title,true),Paragraph("Дата и время: "+invoice.EventDate),
-            Paragraph("Площадка: "+invoice.VenueWithAddress),Paragraph("Отправитель: "+invoice.Sender),
-            Paragraph("Получатель: "+invoice.Recipient),Paragraph(""));
+            Paragraph("Площадка: "+invoice.VenueWithAddress),Paragraph("Отправитель: "+invoice.DocumentSender),
+            Paragraph("Получатель: "+invoice.DocumentRecipient),Paragraph(""));
 
         var widths=new[]{1500,800,2700,1000,1300,1300};
         var table=new XElement(W+"tbl",new XElement(W+"tblPr",
@@ -186,8 +186,8 @@ public static class InvoiceDocuments
     public static void SaveSpecificationWord(SpecificationInfo specification,string destination)
     {
         var body=new XElement(W+"body",Paragraph("СПЕЦИФИКАЦИЯ № "+specification.Id,true,32),
-            Paragraph(specification.Title,true,26),Paragraph("Отправитель: "+specification.Sender),
-            Paragraph("Получатель: "+specification.Recipient),Paragraph("Дата изменения: "+specification.UpdatedAt),Paragraph(""));
+            Paragraph(specification.Title,true,26),Paragraph("Отправитель: "+specification.DocumentSender),
+            Paragraph("Получатель: "+specification.DocumentRecipient),Paragraph("Дата изменения: "+specification.UpdatedAt),Paragraph(""));
         foreach(var line in specification.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n'))body.Add(Paragraph(line));
         body.Add(Paragraph(""),Paragraph("Отправитель: ____________________    Получатель: ____________________"));
         SaveDocument(body,destination);

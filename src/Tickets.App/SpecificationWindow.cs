@@ -61,9 +61,9 @@ internal sealed class SpecificationWindow : EditorWindow
         Load(match,recipient);
         Closing+=(_,e)=>{
             if(!dirty)return;
-            var result=MessageBox.Show(DialogOwner,"Сохранить изменения спецификации перед закрытием?","Спецификация",MessageBoxButton.YesNoCancel,MessageBoxImage.Question);
-            if(result==MessageBoxResult.Cancel){e.Cancel=true;return;}
-            if(result==MessageBoxResult.Yes){try{if(Save() is null)e.Cancel=true;}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Спецификация",MessageBoxButton.OK,MessageBoxImage.Warning);}}
+            try{e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"Спецификация-{current?.Id.ToString()??"новая"}.docx",destination=>{
+                var info=ForOutput()??throw new TicketException("Спецификация не сохранена.");InvoiceDocuments.SaveSpecificationWord(info,destination);
+            });}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Спецификация",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
     }
 
@@ -151,7 +151,7 @@ internal sealed class SpecificationWindow : EditorWindow
     {
         var doc=new FlowDocument{FontFamily=new FontFamily("Arial"),FontSize=13,PageWidth=794,PagePadding=new Thickness(35),ColumnWidth=724};
         void Text(string text,bool bold=false,double size=13)=>doc.Blocks.Add(new Paragraph(new Run(text)){FontSize=size,FontWeight=bold?FontWeights.Bold:FontWeights.Normal,Margin=new Thickness(0,0,0,12)});
-        Text(info.Title,true,22);Text("От кого: "+info.Sender);Text("Получатель: "+info.Recipient);
+        Text(info.Title,true,22);Text("От кого: "+info.DocumentSender);Text("Получатель: "+info.DocumentRecipient);
         foreach(var line in info.Body.Replace("\r\n","\n").Replace('\r','\n').Split('\n'))Text(line);
         Text("\nОтправитель: ____________________    Получатель: ____________________");return doc;
     }

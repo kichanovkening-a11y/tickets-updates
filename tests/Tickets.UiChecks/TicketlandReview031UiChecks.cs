@@ -55,7 +55,7 @@ internal static class TicketlandReview031UiChecks
             try
             {
                 ObserveReview(main,()=>Walk(connectionWindow).OfType<Button>().Single(button=>Equals(button.Content,"Расхождения")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent)),window=>{
-                    Check(window.EventId031 is null&&Issues(window).Items.Count==4,"settings discrepancy command opens global review");
+                    Check(window.EventId031==first&&Issues(window).Items.Count==1&&Issues(window).Items.Cast<TicketlandSectorReview030>().All(issue=>issue.EventId==first),"settings discrepancy command opens only selected show review");
                 },1);
             }
             finally{connectionWindow.Close();}

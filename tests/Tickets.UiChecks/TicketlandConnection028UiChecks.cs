@@ -32,6 +32,8 @@ internal static class TicketlandConnection028UiChecks
             var starts=DateTime.Today.AddDays(20).AddHours(19);
             while(store.Events().Any(e=>DateTime.Parse(e.SortDate,CultureInfo.InvariantCulture)==starts))starts=starts.AddSeconds(1);
             var eventId=store.CreateEvent(store.SavePerformance(fixture),venue,plan,starts);
+            var otherEvent=store.CreateEvent(store.SavePerformance(fixture),venue,plan,starts.AddHours(3));
+            store.Issue(otherEvent,[ids[0]],"Ticketland other session","TL034",1);
             store.SetSeatsBlocked(eventId,[ids[1]],true);
             var issue=store.Issue(eventId,[ids[2]],"Ticketland UI028 local","TL028",1);
             var local=store.Invoice(eventId,issue).Tickets.Single();
@@ -41,11 +43,18 @@ internal static class TicketlandConnection028UiChecks
             main.SelectEvent(eventId);Pump();
             var hall=(HallView)main.FindName("Hall");
             var at=(store.TicketlandLastSync028??DateTimeOffset.UtcNow).AddMinutes(1);
-            var report=new TicketlandReport028([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500){Venue=fixture}],at);
+            var report=new TicketlandReport028([new(fixture,starts,"Партер","1","1","TL028-"+Guid.NewGuid().ToString("N"),500){Venue=fixture},new(fixture,starts.AddHours(3),"Партер","1","1","TL028-other-1",500){Venue=fixture},new(fixture,starts.AddHours(3),"Партер","1","2","TL028-other-2",500){Venue=fixture}],at);
             var calls=0;
             main.TicketlandFetch028=(saved,_)=>{Check(saved==login,"fetch receives original login or login recovered from Windows vault");calls++;return Task.FromResult(report);};
             Wait(main.ConnectTicketland028(login,CancellationToken.None));
             Check(calls==1&&store.Seats(eventId).Single(s=>s.Id==ids[0]).IsTicketlandSold&&store.TicketlandLastSync028==at,"connect commits exact local seat and report timestamp");
+            Check(main.TicketlandStatus028.Contains("Отмечено на схеме: 1")&&!main.TicketlandStatus028.Contains("всем показам"),"status is scoped to selected show after sync");
+            Check(Equals(((Button)main.FindName("TicketlandConflictsButton033")).Content,"Конфликтов нет"),"other show conflict excluded from selected button");
+            var scopedConflicts=new TicketlandConflictsWindow033(store,eventId);scopedConflicts.Show();Pump();
+            Check(Walk(scopedConflicts).OfType<DataGrid>().Single().Items.Count==0,"conflict list excludes other show");scopedConflicts.Close();
+            main.SelectEvent(otherEvent);Pump();Check(main.TicketlandStatus028.Contains("Отмечено на схеме: 2"),"changing selection refreshes scoped summary from cache");
+            Check(Equals(((Button)main.FindName("TicketlandConflictsButton033")).Content,"Конфликтов: 1"),"selected conflict count updates on switching shows");
+            main.SelectEvent(eventId);Pump();Check(main.TicketlandStatus028.Contains("Отмечено на схеме: 1"),"switching back restores selected-show count");
             Ticketland029UiChecks.CheckRefreshButton(main);
             var json=File.ReadAllText(settingsPath);
             using(var document=JsonDocument.Parse(json))Check(document.RootElement.GetProperty("ConnectionId").GetString()==connection&&document.RootElement.GetProperty("Enabled").GetBoolean(),"nonsecret settings enable the same random connection");

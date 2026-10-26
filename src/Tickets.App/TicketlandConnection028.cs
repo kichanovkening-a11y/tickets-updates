@@ -22,7 +22,7 @@ public partial class MainWindow
 
     private void InitializeTicketland028()
     {
-        try{var cached=store.ReapplyCachedTicketland032();if(cached is not null)UpdateConflictCount033(cached.Conflicts);}
+        try{var cached=store.ReapplyCachedTicketland032();if(cached is not null)UpdateSelectedTicketlandStatus034();}
         catch(TicketException){SetTicketlandStatus028("Ticketland: не удалось сопоставить сохранённый отчёт. Предыдущие данные сохранены.");}
         catch(Exception){SetTicketlandStatus028("Ticketland: не удалось прочитать сохранённые продажи. Повторите обновление.");}
         try
@@ -39,6 +39,22 @@ public partial class MainWindow
         ticketlandTimer028.Tick+=async(_,_)=>await RefreshTicketland028();
         Loaded+=async(_,_)=>{if(ticketlandSettings028.Enabled){ticketlandTimer028.Start();await RefreshTicketland028();}};
         Closed+=(_,_)=>{ticketlandTimer028.Stop();ticketlandLifetime028.Cancel();};
+    }
+
+    internal long? SelectedTicketlandEvent034=>current?.Id;
+    internal void UpdateSelectedTicketlandStatus034()
+    {
+        if(current is null)
+        {
+            UpdateConflictCount033(0);
+            SetTicketlandStatus028("Ticketland: выберите показ.");return;
+        }
+        var summary=store.TicketlandShowSummary034(current.Id);
+        UpdateConflictCount033(summary.Conflicts);
+        var fetched=store.TicketlandLastSync028;
+        SetTicketlandStatus028($"Ticketland · {current.Title}, {current.Date}"+
+            (fetched.HasValue?$" · {fetched.Value.LocalDateTime:dd.MM.yyyy HH:mm}":"")+
+            $" · Отмечено на схеме: {summary.Matched} · Не удалось сопоставить: {summary.Unmatched} · Без ряда или места в отчёте: {summary.GeneralAdmission}");
     }
 
     private void SaveTicketlandSettings028(TicketlandSettings028 settings)
@@ -107,8 +123,7 @@ public partial class MainWindow
                     SaveTicketlandSettings028(ticketlandSettings028 with{Enabled=true});
                     ticketlandTimer028?.Start();
                 }
-                UpdateConflictCount033(summary.Conflicts);
-                SetTicketlandStatus028($"Ticketland по всем показам: {report.FetchedAt.LocalDateTime:dd.MM.yyyy HH:mm} · Отмечено на схемах: {summary.Matched} · Не удалось сопоставить: {summary.Unmatched} · Без ряда или места в отчёте: {summary.GeneralAdmission}");
+                UpdateSelectedTicketlandStatus034();
             });
         }
         catch(OperationCanceledException){SetTicketlandStatus028("Ticketland: получение отчёта остановлено. Предыдущие данные сохранены.");throw;}
@@ -132,8 +147,7 @@ public partial class MainWindow
         if(ticketlandGate028.CurrentCount==0)throw new TicketException("Дождитесь окончания обновления Ticketland.");
         var report=store.CachedTicketlandReport028();var summary=store.ApplyTicketlandReport028(report,replace:true);
         if(current is not null){var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();LoadEvent(false);Hall.SetSelection(ids);}
-        UpdateConflictCount033(summary.Conflicts);
-        SetTicketlandStatus028($"Ticketland по всем показам · Отмечено на схемах: {summary.Matched} · Не удалось сопоставить: {summary.Unmatched} · Без ряда или места в отчёте: {summary.GeneralAdmission}");
+        UpdateSelectedTicketlandStatus034();
     }
 }
 
@@ -154,7 +168,7 @@ internal sealed class TicketlandConnectionWindow028:EditorWindow
         var connect=Button(commands,"Подключить",()=>{});
         var refresh=Button(commands,"Обновить",()=>{});
         var disconnect=Button(commands,"Отключить",()=>Try(main.DisconnectTicketland028));
-        Button(form,"Расхождения",()=>Try(()=>new TicketlandMappingWindow028(store,main).ShowDialog()));
+        Button(form,"Расхождения",()=>Try(()=>new TicketlandMappingWindow028(store,main,main.SelectedTicketlandEvent034??-1).ShowDialog()));
         void Changed()=>status.Text=main.TicketlandStatus028;
         main.TicketlandStatusChanged028+=Changed;Closed+=(_,_)=>main.TicketlandStatusChanged028-=Changed;
         connect.Click+=async(_,_)=>{

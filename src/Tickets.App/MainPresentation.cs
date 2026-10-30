@@ -6,6 +6,12 @@ using Tickets.Core;
 namespace Tickets.App;
 public partial class MainWindow
 {
+    private bool hallExpanded038;
+    private void ToggleHallClick038(object sender,RoutedEventArgs e)
+    {
+        hallExpanded038=!hallExpanded038;
+        UpdateCompactLayout();
+    }
     private void WorkspaceTabChanged(object sender,SelectionChangedEventArgs e)
     {
         if(!ReferenceEquals(e.OriginalSource,WorkspaceTabs))return;
@@ -22,7 +28,8 @@ public partial class MainWindow
         Canvas.SetTop(SquareShowActions,0);
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
-            var expanded=Workspace.Visibility==Visibility.Visible;
+            var expanded=Workspace.Visibility==Visibility.Visible&&hallExpanded038;
+            ToggleHallButton038.Content=expanded?"Свернуть зал":"Раскрыть зал";
             var navigation=expanded?0:layout.ActualWidth<1050?236d:280d;
             WorkspaceNavigation.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
             if(layout.ColumnDefinitions[0].Width.Value!=navigation)layout.ColumnDefinitions[0].Width=new GridLength(navigation);

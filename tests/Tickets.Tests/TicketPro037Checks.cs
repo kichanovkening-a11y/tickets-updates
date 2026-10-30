@@ -43,6 +43,18 @@ internal static class TicketPro037Checks
             var issue=s.Issue(f.Event,[f.Seats[1]],"recipient","P37",1);Check(s.Invoice(f.Event,issue).Tickets.Count==1,"released invitation cannot be issued");
             Check(s.History(f.Event).Count==1,"source states polluted local history");
         });
+        run("038 PRO automatically matches title date time and venue without manual selection",s=>{
+            var f=Fixture(s);var venue=s.Events().Single(e=>e.Id==f.Event).Venue;
+            Check((long?)Call(s,typeof(Store),"MatchTicketProShow038","Спектакль. "+f.Title,f.At,venue)==f.Event,"exact source show not discovered");
+            Check(Call(s,typeof(Store),"MatchTicketProShow038",f.Title,f.At.AddHours(1),venue) is null,"different time matched");
+            Check(Call(s,typeof(Store),"MatchTicketProShow038",f.Title,f.At,"Another hall") is null,"different venue matched");
+            Check(Call(s,typeof(Store),"MatchTicketProShow038","Another title",f.At,venue) is null,"different title matched");
+        });
+        run("038 PRO automatic match rejects duplicate local identities",s=>{
+            var f=Fixture(s);var show=s.Events().Single(e=>e.Id==f.Event);
+            using(var c=new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={s.Path}")){c.Open();using var q=c.CreateCommand();q.CommandText="DROP TRIGGER IF EXISTS event_slot_insert; INSERT INTO event(venue_id,title,starts_at,legacy_date) SELECT venue_id,title,starts_at,legacy_date FROM event WHERE id=$e";q.Parameters.AddWithValue("$e",f.Event);q.ExecuteNonQuery();}
+            Reject(()=>Call(s,typeof(Store),"MatchTicketProShow038",f.Title,f.At,show.Venue));
+        });
         run("037 PRO real sale revokes local release and blocks printing extension and issue",s=>{
             var f=Fixture(s);var at=DateTimeOffset.UtcNow;Apply(s,f.Event,Json(f.Title,["Забронировано","Не использовать","В продаже"]),at);
             Release(s,f.Event,[f.Seats[0],f.Seats[1]]);var issue=s.Issue(f.Event,[f.Seats[0]],"recipient","P37B",1);

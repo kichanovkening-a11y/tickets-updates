@@ -37,7 +37,9 @@ public partial class MainWindow
         var body=editor.Content as UIElement??throw new InvalidOperationException("Нет содержимого формы.");editor.Content=null;editor.IsInline=true;
         var page=new Grid{Background=new SolidColorBrush(Color.FromArgb(105,15,23,42))};
         var card=new Border{Background=Brushes.White,BorderBrush=Brushes.SlateGray,BorderThickness=new Thickness(1),Margin=new Thickness(12),
-            MaxWidth=editor is PriceEditorWindow?double.PositiveInfinity:editor.Width,MaxHeight=editor is PriceEditorWindow?double.PositiveInfinity:editor.Height,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch};
+            MaxWidth=editor.Width,MaxHeight=editor.Height,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch};
+        if(editor is PriceEditorWindow expandable)
+            expandable.HallExpansionChanged038+=()=>{card.MaxWidth=expandable.HallExpanded038?double.PositiveInfinity:editor.Width;card.MaxHeight=expandable.HallExpanded038?double.PositiveInfinity:editor.Height;};
         TextElement.SetFontFamily(card,editor.FontFamily);TextElement.SetFontSize(card,editor.FontSize);TextElement.SetFontWeight(card,editor.FontWeight);
         var panel=new DockPanel();card.Child=panel;
         if(editor.DocumentTab is {} tab)

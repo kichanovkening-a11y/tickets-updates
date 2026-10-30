@@ -48,6 +48,15 @@ public static class TicketPro037
 
 public sealed partial class Store
 {
+    public bool TicketProTitleIsRelevant038(string title)=>Events().Any(e=>!IsEventArchived(e.Id)&&Title029(e.Title)==Title029(title));
+    public long? MatchTicketProShow038(string title,DateTime at,string venue)
+    {
+        using var c=Open();using var tx=c.BeginTransaction();
+        var matches=Exact030(new TicketlandSale028(title,at,"","","","",0){Venue=venue},Local029(c,tx,false))
+            .Where(e=>!IsEventArchived(e.Id)).ToArray();
+        if(matches.Length>1)throw new TicketException("Ticket PRO: несколько показов совпадают по названию, дате, времени и площадке. Автоматическое подключение отменено.");
+        return matches.Length==1?matches[0].Id:null;
+    }
     private void EnsureTicketPro037()
     {
         using var c=Open();using var q=Command(c,"""

@@ -23,7 +23,8 @@ void Test(string name, Action<Store> body)
     if(args.Contains("--corrections026")&&!name.StartsWith("026"))return;
     if(args.Contains("--documents035")&&!(name.Contains("signature")||name.Contains("document")||name.Contains("requisite")||name.StartsWith("033 035")||name.Contains("legal")||name.Contains("organization")))return;
     if(args.Contains("--backups036")&&!name.StartsWith("036 backups"))return;
-    if(args.Contains("--ticketpro037")&&!name.StartsWith("037"))return;
+    if(args.Contains("--ticketpro037")&&!(name.StartsWith("037")||name.StartsWith("038")))return;
+    if(args.Contains("--legacy012")&&!name.StartsWith("all eleven original Crystal"))return;
     total++;
     var caseDirectory=System.IO.Path.Combine(root,total.ToString());
     Directory.CreateDirectory(caseDirectory);

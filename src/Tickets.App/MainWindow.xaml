@@ -64,7 +64,7 @@
               <DockPanel>
                 <Grid x:Name="HallToolbar030" DockPanel.Dock="Top" Margin="10,4"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                   <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" ToolTip="Колесо — масштаб. Правая кнопка — меню или сдвиг при протягивании. Левая кнопка — выбор мест; начните с выбранного, чтобы снять группу.">
-                    <StackPanel Orientation="Horizontal"><Button Content="Весь зал" Height="32" Click="FitClick"/><Button Content="−" Height="32" Width="44" Click="ZoomOutClick"/><Button Content="+" Height="32" Width="44" Click="ZoomInClick"/></StackPanel>
+                    <StackPanel Orientation="Horizontal"><Button x:Name="ToggleHallButton038" Content="Раскрыть зал" ContentTemplate="{x:Null}" Width="Auto" Padding="10,2" Height="32" Click="ToggleHallClick038"/><Button Content="Весь зал" Height="32" Click="FitClick"/><Button Content="−" Height="32" Width="44" Click="ZoomOutClick"/><Button Content="+" Height="32" Width="44" Click="ZoomInClick"/></StackPanel>
                   </ScrollViewer>
                   <Button x:Name="RefreshTicketlandButton029" Grid.Column="1" Width="Auto" Height="32" FontSize="14" ContentTemplate="{x:Null}" Padding="10,2" Content="Обновить" Margin="3,0,0,0" Loaded="InitializeTicketlandUi029" Click="RefreshTicketlandClick029"/>
                 </Grid>

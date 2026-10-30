@@ -64,6 +64,21 @@ internal class EditorWindow : Window
 
 internal sealed class PriceEditorWindow : EditorWindow
 {
+    internal bool HallExpanded038{get;private set;}
+    internal event Action? HallExpansionChanged038;
+    internal void ToggleHall038()
+    {
+        HallExpanded038=!HallExpanded038;
+        if(!IsInline)WindowState=HallExpanded038?WindowState.Maximized:WindowState.Normal;
+        foreach(var button in hallExpansionButtons038)button.Content=HallExpanded038?"Свернуть зал":"Раскрыть зал";
+        HallExpansionChanged038?.Invoke();
+    }
+    private readonly List<Button> hallExpansionButtons038=[];
+    internal Button HallExpansionButton038()
+    {
+        var button=new Button{Content=HallExpanded038?"Свернуть зал":"Раскрыть зал",Width=160,Height=32,ContentTemplate=null,Margin=new Thickness(5)};
+        button.Click+=(_,_)=>ToggleHall038();hallExpansionButtons038.Add(button);return button;
+    }
     private readonly HallView preview=new(){AllowUnavailableSelection=true};
     private List<SeatInfo> seats=[];
     private IReadOnlyList<SectorInfo> previewSectors029=[];
@@ -79,7 +94,6 @@ internal sealed class PriceEditorWindow : EditorWindow
     public PriceEditorWindow(Store store,long? venueId=null):this(store,venueId,null){}
     public PriceEditorWindow(Store store,long? venueId,long? planId):base(store,"Расценовка")
     {
-        WindowState=WindowState.Maximized;
         PriceSummaryLayout.Install(priceSummary);
         var grid=new Grid{Margin=new Thickness(8)};grid.ColumnDefinitions.Add(new ColumnDefinition());grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(6)});grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(250),MinWidth=200,MaxWidth=500});Content=grid;
         var splitter=new GridSplitter{Width=6,HorizontalAlignment=HorizontalAlignment.Stretch,ResizeBehavior=GridResizeBehavior.PreviousAndNext,ResizeDirection=GridResizeDirection.Columns,Background=Brushes.LightGray};Grid.SetColumn(splitter,1);grid.Children.Add(splitter);
@@ -222,6 +236,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         form.Children.Add(new TextBlock{Text="Назначьте цену каждому месту или уберите его из продажи. Цвет каждой цены общий для всех схем.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
         var area=new DockPanel();Grid.SetColumn(area,0);grid.Children.Add(area);
         DockPanel.SetDock(hallTotals,Dock.Top);area.Children.Add(hallTotals);
+        var expand=HallExpansionButton038();expand.HorizontalAlignment=HorizontalAlignment.Left;DockPanel.SetDock(expand,Dock.Top);area.Children.Add(expand);
         var summaryScroll=new ScrollViewer{Content=priceSummary,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled};
         DockPanel.SetDock(summaryScroll,Dock.Top);area.Children.Add(summaryScroll);area.Children.Add(preview);
         void LoadPlans()

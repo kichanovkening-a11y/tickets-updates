@@ -29,7 +29,9 @@ public partial class MainWindow
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
             var expanded=Workspace.Visibility==Visibility.Visible&&hallExpanded038;
-            ToggleHallButton038.Content=expanded?"Свернуть зал":"Раскрыть зал";
+            var toggleName=expanded?"Свернуть зал":"Раскрыть зал";
+            ToggleHallButton038.ToolTip=toggleName;
+            System.Windows.Automation.AutomationProperties.SetName(ToggleHallButton038,toggleName);
             var navigation=expanded?0:layout.ActualWidth<1050?236d:280d;
             WorkspaceNavigation.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
             if(layout.ColumnDefinitions[0].Width.Value!=navigation)layout.ColumnDefinitions[0].Width=new GridLength(navigation);
@@ -77,7 +79,7 @@ public partial class MainWindow
         }
         PriceSummaryLayout.Arrange(LegendPanel);
         AddStatusLegend030("Бронь / накладная",Brushes.Black,HallStatus030.Reserved);AddStatusLegend030("Распечатаны",Brushes.Red,HallStatus030.Printed);AddStatusLegend030("× Заблокировано",Brushes.Gray,HallStatus030.Blocked);AddStatusLegend030("Нет цены",Brushes.Gainsboro,HallStatus030.NoPrice);
-        AddStatusLegend030("Продано Ticketland",Brushes.Red,HallStatus030.TicketlandSold);
+        AddStatusLegend030("Продано "+store.TicketSalesSource041(current?.Id),Brushes.Red,HallStatus030.TicketlandSold);
         if(seats.Any(s=>s.IsTicketlandOccupied))AddStatusLegend030("Занято Ticket PRO",Brushes.DarkOrange,HallStatus030.TicketlandOccupied);
     }
 }

@@ -97,7 +97,7 @@ public partial class MainWindow
     }
     private async Task SyncTicketland028(TicketlandLogin028 login,bool connect,CancellationToken cancellation)
     {
-        if(!await ticketlandGate028.WaitAsync(0,cancellation))throw new TicketException("Обновление Ticketland уже выполняется.");
+        if(!await ticketlandGate028.WaitAsync(0,cancellation))throw new TicketException("Обновление мест уже выполняется.");
         using var linked=CancellationTokenSource.CreateLinkedTokenSource(cancellation,ticketlandLifetime028.Token);
         var applied=false;
         try
@@ -139,14 +139,14 @@ public partial class MainWindow
     }
     internal void DisconnectTicketland028()
     {
-        if(ticketlandGate028.CurrentCount==0)throw new TicketException("Дождитесь окончания обновления Ticketland.");
+        if(ticketlandGate028.CurrentCount==0)throw new TicketException("Дождитесь окончания обновления мест.");
         SaveTicketlandSettings028(ticketlandSettings028 with{Enabled=false});ticketlandTimer028?.Stop();
         TicketlandCredentials028.Delete(ticketlandSettings028.ConnectionId);
         SetTicketlandStatus028("Ticketland отключён. Ранее полученные продажи сохранены.");
     }
     internal void ReapplyTicketlandMappings028()
     {
-        if(ticketlandGate028.CurrentCount==0)throw new TicketException("Дождитесь окончания обновления Ticketland.");
+        if(ticketlandGate028.CurrentCount==0)throw new TicketException("Дождитесь окончания обновления мест.");
         var report=store.CachedTicketlandReport028();var summary=store.ApplyTicketlandReport028(report,replace:true);
         if(current is not null){var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();LoadEvent(false);Hall.SetSelection(ids);}
         UpdateSelectedTicketlandStatus034();

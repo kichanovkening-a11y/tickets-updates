@@ -14,6 +14,8 @@ public partial class MainWindow
     private TicketProSession037? ticketProSession037;
     private bool ticketProEnabled037;
     private string ticketProLastError037="";
+    private TicketProSelection041? ticketProSelection041;
+    internal Func<long,CancellationToken,Task<string>>? TicketProFetch041;
     private string TicketProSettingsPath037=>Path.Combine(Path.GetDirectoryName(store.Path)!,"ticketpro-settings.json");
     private void InitializeTicketPro037()
     {
@@ -25,6 +27,7 @@ public partial class MainWindow
     private void SaveTicketProEnabled037(bool enabled)
     {
         File.WriteAllText(TicketProSettingsPath037+".tmp",JsonSerializer.Serialize(enabled));File.Move(TicketProSettingsPath037+".tmp",TicketProSettingsPath037,true);ticketProEnabled037=enabled;
+        if(!enabled&&ticketProSelection041 is not null)_=ticketProSelection041.RequestAsync(null);
     }
     private TicketProSession037 ProSession037()=>ticketProSession037??=new TicketProSession037(this,store,ticketlandSettings028.ConnectionId,ConnectAutomaticTicketPro038,()=>{
         SaveTicketProEnabled037(false);ticketlandTimer028?.Stop();SetTicketlandStatus028("Ticket PRO: обновление отключено. Последние состояния мест сохранены.");
@@ -45,53 +48,50 @@ public partial class MainWindow
         ProSession037().Hide();
         await RefreshTicketPro037();
     }
-    private async Task RefreshTicketPro037()
+    private Task RefreshTicketPro037()
     {
-        if(!ticketProEnabled037||ticketlandLifetime028.IsCancellationRequested)return;
-        if(!await ticketlandGate028.WaitAsync(0,ticketlandLifetime028.Token))return;
+        if(ticketlandLifetime028.IsCancellationRequested)return Task.CompletedTask;
+        var selected=ticketProEnabled037&&current is not null&&!store.IsEventArchived(current.Id)?current.Id:(long?)null;
+        if(selected is null&&ticketProEnabled037)SetTicketlandStatus028("Ticket PRO: выберите показ для обновления мест.");
+        ticketProSelection041??=new(RefreshSelectedTicketPro041,ticketlandLifetime028.Token);
+        return ticketProSelection041.RequestAsync(selected);
+    }
+    private async Task<string> ReadSelectedTicketPro041(long eventId,CancellationToken token)
+    {
+        var session=ProSession037();
+        if(session.IsVisible)throw new TicketException("Ticket PRO: закройте окно подключения для фонового обновления.");
+        // Finish shared WebView initialization even if selection changes halfway through it.
+        await session.PrepareAsync(true,ticketlandLifetime028.Token);token.ThrowIfCancellationRequested();
+        var url=store.TicketProBindings037().FirstOrDefault(b=>b.EventId==eventId)?.SourceUrl;
+        return await TicketProTarget041.ReadAsync(eventId,url,async cancellation=>
+        {
+            SetTicketlandStatus028("Ticket PRO: ищу сеанс выбранного показа…");
+            return await session.DiscoverShows038Async(cancellation,eventId);
+        },session.ReadSchemeAsync,token);
+    }
+    private async Task RefreshSelectedTicketPro041(long eventId,CancellationToken token)
+    {
+        if(!await ticketlandGate028.WaitAsync(0,token))return;
         try
         {
+            token.ThrowIfCancellationRequested();
+            if(!ticketProEnabled037||current?.Id!=eventId)return;
             ticketProLastError037="";
-            SetTicketlandStatus028("Ticket PRO: обновляю состояния мест…");
-            var session=ProSession037();
-            if(session.IsVisible){SetTicketlandStatus028("Ticket PRO: закройте окно подключения для фонового обновления.");return;}
-            await session.PrepareAsync(true,ticketlandLifetime028.Token);
-            var targets=store.TicketProBindings037().Where(b=>!store.IsEventArchived(b.EventId)).ToDictionary(b=>b.EventId,b=>b.SourceUrl);
-            var errors=new List<string>();long? reloadedEventId=null;
-            var readErrors=await TicketProRefresh040.RunAsync(targets,()=>current?.Id,async()=>
-            {
-                var discovered=await session.DiscoverShows038Async(ticketlandLifetime028.Token);
-                errors.AddRange(discovered.Errors);
-                foreach(var group in discovered.Shows.GroupBy(x=>x.EventId))
-                {
-                    if(targets.ContainsKey(group.Key))continue;
-                    var urls=group.Select(x=>x.Url).Distinct().ToArray();
-                    if(urls.Length==1)targets[group.Key]=urls[0];
-                    else errors.Add("Несколько сеансов совпадают с показом: "+store.Events().First(e=>e.Id==group.Key).Caption);
-                }
-            },async(eventId,url,updated)=>
-            {
-                try
-                {
-                    SetTicketlandStatus028($"Ticket PRO: обновляю {updated} из {targets.Count}…");
-                    var json=await session.ReadSchemeAsync(url,ticketlandLifetime028.Token);
-                    var snapshot=TicketPro037.Parse(json,DateTimeOffset.UtcNow);
-                    await Task.Run(()=>store.ApplyTicketPro037(eventId,snapshot),ticketlandLifetime028.Token);
-                    if(current?.Id==eventId){ReloadProHall038();reloadedEventId=eventId;}
-                }
-                catch(TicketException ex){throw new TicketException(store.Events().First(e=>e.Id==eventId).Caption+": "+ex.Message);}
-            },ticketlandLifetime028.Token);
-            errors.AddRange(readErrors);
-            ticketProLastError037=string.Join(" · ",errors);
-            if(targets.Count==0&&errors.Count==0)ticketProLastError037="Ticket PRO: совпадающие показы не найдены. Сохранённые данные не изменены.";
-            if(current?.Id!=reloadedEventId)ReloadProHall038();
-            if(!UpdateSelectedProStatus037())SetTicketlandStatus028(ticketProLastError037.Length>0?ticketProLastError037:"Ticket PRO: обновление завершено.");
+            SetTicketlandStatus028($"Ticket PRO: обновляю «{current.Title}»…");
+            var json=TicketProFetch041 is null?await ReadSelectedTicketPro041(eventId,token):await TicketProFetch041(eventId,token);
+            token.ThrowIfCancellationRequested();
+            var snapshot=TicketPro037.Parse(json,DateTimeOffset.UtcNow);
+            await Task.Run(()=>store.ApplyTicketPro037(eventId,snapshot),token);token.ThrowIfCancellationRequested();
+            if(current?.Id==eventId){ReloadProHall038();UpdateSelectedProStatus037();}
         }
-        catch(OperationCanceledException) when(ticketlandLifetime028.IsCancellationRequested){}
+        catch(OperationCanceledException) when(token.IsCancellationRequested){}
         catch(Exception ex)
         {
-            ticketProLastError037=ex is TicketException?ex.Message:"Ticket PRO: обновление не выполнено. Последние состояния сохранены.";
-            ReloadProHall038();SetTicketlandStatus028(ticketProLastError037+LastProTime037());
+            if(!token.IsCancellationRequested&&current?.Id==eventId)
+            {
+                ticketProLastError037=ex is TicketException?ex.Message:ex is OperationCanceledException?"Ticket PRO: время загрузки сеанса истекло. Последние данные сохранены.":"Ticket PRO: обновление не выполнено. Последние состояния сохранены.";
+                ReloadProHall038();SetTicketlandStatus028(ticketProLastError037+LastProTime037());
+            }
         }
         finally{ticketlandGate028.Release();if(!Dispatcher.HasShutdownStarted)UpdateTicketlandRefreshState029();}
     }
@@ -111,6 +111,7 @@ public partial class MainWindow
         if(binding is null)
         {
             if(!ticketProEnabled037)return false;
+            UpdateConflictCount033(current is null?0:store.Seats(current.Id).Count(s=>s.IsTicketlandSold&&s.TicketId.HasValue));
             SetTicketlandStatus028("Ticket PRO: этот показ ещё не обновлён. На схеме сохранённые данные отчёта; приглашения могут быть отмечены как продажи."+(ticketProLastError037.Length>0?" · "+ticketProLastError037:""));return true;
         }
         var seats=store.Seats(binding.EventId);var conflicts=seats.Count(s=>s.IsTicketlandSold&&s.TicketId.HasValue);UpdateConflictCount033(conflicts);
@@ -123,7 +124,7 @@ internal sealed partial class TicketProSession037:Window
 {
     private readonly WebView2 view=new();
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8)};
-    private readonly Button connect=new(){Content="Обновить показы",Width=230,Height=38,ContentTemplate=null,Margin=new Thickness(5)};
+    private readonly Button connect=new(){Content="Обновить текущий показ",Width=230,Height=38,ContentTemplate=null,Margin=new Thickness(5)};
     private readonly Func<Task> apply;
     private readonly Store store;
     private readonly string profile;
@@ -135,7 +136,7 @@ internal sealed partial class TicketProSession037:Window
         profile=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"Tickets","TicketPRO",connectionId);
         var panel=new DockPanel();Content=panel;
         var commands=new StackPanel();DockPanel.SetDock(commands,Dock.Top);panel.Children.Add(commands);
-        commands.Children.Add(new TextBlock{Text="Войдите в Ticket PRO. После входа программа сама найдёт и обновит ваши показы. Выбирать мероприятия и открывать схемы вручную не нужно.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8)});
+        commands.Children.Add(new TextBlock{Text="Войдите в Ticket PRO. Откройте нужный показ в программе — его места обновятся автоматически. При переходе к другому показу обновление переключится на него.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(8)});
         var buttons=new WrapPanel();commands.Children.Add(buttons);
         var catalog=new Button{Content="Мероприятия",Width=150,Height=38,ContentTemplate=null,Margin=new Thickness(5)};buttons.Children.Add(catalog);buttons.Children.Add(connect);
         var off=new Button{Content="Отключить обновление",Width=220,Height=38,ContentTemplate=null,Margin=new Thickness(5)};buttons.Children.Add(off);
@@ -159,7 +160,7 @@ internal sealed partial class TicketProSession037:Window
         loginWatch.Tick+=async(_,_)=>{
             if(busy||!initialized||!IsVisible||!autoConnectAllowed038)return;
             try{await OnSignInObserved038(await IsSignedIn038());}
-            catch(Exception ex){status.Text=ex is TicketException?ex.Message:"Ticket PRO: не удалось обновить показы. Последние данные сохранены.";}
+            catch(Exception ex){status.Text=ex is TicketException?ex.Message:"Ticket PRO: не удалось обновить показ. Последние данные сохранены.";}
         };
         IsVisibleChanged+=(_,_)=>{if(IsVisible)loginWatch.Start();else loginWatch.Stop();};
         Closing+=(_,e)=>{if(!disposing){e.Cancel=true;Hide();}};

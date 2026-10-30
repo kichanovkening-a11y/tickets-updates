@@ -48,7 +48,7 @@ public static class TicketPro037
 
 public sealed partial class Store
 {
-    public bool TicketProTitleIsRelevant038(string title)=>Events().Any(e=>!IsEventArchived(e.Id)&&Title029(e.Title)==Title029(title));
+    public bool TicketProTitleIsRelevant038(string title,long? eventId=null)=>Events().Any(e=>(!eventId.HasValue||e.Id==eventId)&&!IsEventArchived(e.Id)&&Title029(e.Title)==Title029(title));
     public long? MatchTicketProShow038(string title,DateTime at,string venue)
     {
         using var c=Open();using var tx=c.BeginTransaction();

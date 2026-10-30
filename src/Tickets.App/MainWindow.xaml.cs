@@ -114,6 +114,7 @@ public partial class MainWindow : Window
     {
         if(!ready) return;
         if(EventsList.SelectedItem is TreeViewItem group&&group.Tag is not EventInfo){group.IsExpanded=true;return;}
+        var previous=current?.Id;
         current=(EventsList.SelectedItem as TreeViewItem)?.Tag as EventInfo;
         if(current is null)
         {
@@ -123,10 +124,12 @@ public partial class MainWindow : Window
         }
         HomePanel.Visibility=Visibility.Collapsed; Workspace.Visibility=Visibility.Visible;
         Run(()=>LoadEvent(true));
+        if(current?.Id!=previous)_=RefreshTicketPro037();
     }
     private void ShowHome()
     {
         HomePanel.Visibility=Visibility.Visible; Workspace.Visibility=Visibility.Collapsed;UpdateCompactLayout();
+        if(ticketProEnabled037)_=RefreshTicketPro037();
     }
     private void HomeClick(object sender,RoutedEventArgs e) { current=null;foreach(var row in EventRows())row.IsSelected=false;ShowHome(); }
     private void FindEventClick(object sender,RoutedEventArgs e) { SearchBox.Focus(); SearchBox.SelectAll(); }
@@ -335,8 +338,5 @@ public partial class MainWindow : Window
         var dialog=new SaveFileDialog {Filter="База билетов (*.db)|*.db",FileName=$"tickets-{DateTime.Now:yyyy-MM-dd-HHmm}.db"};
         if(dialog.ShowDialog(this)==true) { store.Backup(dialog.FileName); StatusText.Text="Резервная копия сохранена: "+dialog.FileName; }
     });
-    private void FitClick(object sender,RoutedEventArgs e)=>Hall.Fit();
-    private void ZoomInClick(object sender,RoutedEventArgs e)=>Hall.Zoom(1.2);
-    private void ZoomOutClick(object sender,RoutedEventArgs e)=>Hall.Zoom(1/1.2);
     private void ClearClick(object sender,RoutedEventArgs e)=>Hall.Clear();
 }

@@ -56,12 +56,12 @@ internal sealed class TicketlandMappingWindow028:EditorWindow
         };
         search.TextChanged+=(_,_)=>Filter();candidates.SelectionChanged+=(_,_)=>UpdateCommands();
         agree.Click+=(_,_)=>Try(()=>{
-            if(main.TicketlandIsUpdating028)throw new TicketException("Дождитесь окончания обновления Ticketland.");
+            if(main.TicketlandIsUpdating028)throw new TicketException("Дождитесь окончания обновления мест.");
             if(issues.SelectedItem is not TicketlandSectorReview030 issue||candidates.SelectedItem is not TicketlandSectorCandidate030 candidate)return;
             store.AcceptTicketlandSector030(issue.Key,candidate.Sector);main.ReapplyTicketlandMappings028();Reload();
         });
         reject.Click+=(_,_)=>Try(()=>{
-            if(main.TicketlandIsUpdating028)throw new TicketException("Дождитесь окончания обновления Ticketland.");
+            if(main.TicketlandIsUpdating028)throw new TicketException("Дождитесь окончания обновления мест.");
             if(issues.SelectedItem is not TicketlandSectorReview030 issue)return;
             store.RejectTicketlandSector030(issue.Key);Reload();
         });

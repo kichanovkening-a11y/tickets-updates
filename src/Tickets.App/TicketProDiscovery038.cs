@@ -95,14 +95,14 @@ internal sealed partial class TicketProSession037
         }
         throw new TicketException("Ticket PRO: список слишком большой. Последние данные сохранены.");
     }
-    internal async Task<Discovery038> DiscoverShows038Async(CancellationToken token)
+    internal async Task<Discovery038> DiscoverShows038Async(CancellationToken token,long? eventId=null)
     {
         await NavigateDocument038("https://pro.ticketland.ru/management/show",token);
         var catalog=await AllPages038<CatalogRow038>(CatalogScript038,"https://pro.ticketland.ru/management/show",token);
         await RememberSignIn039Async();
         var result=new List<DiscoveredShow038>();
         var sessionErrors=new List<string>();
-        var reads=catalog.DistinctBy(x=>x.Url).Where(x=>store.TicketProTitleIsRelevant038(x.Title)).Select(show=>(Func<Task>)(async()=>
+        var reads=catalog.DistinctBy(x=>x.Url).Where(x=>store.TicketProTitleIsRelevant038(x.Title,eventId)).Select(show=>(Func<Task>)(async()=>
         {
             if(!Uri.TryCreate(show.Url,UriKind.Absolute,out var uri)||uri.Scheme!="https"||uri.Host!="pro.ticketland.ru"||!uri.IsDefaultPort||!System.Text.RegularExpressions.Regex.IsMatch(uri.AbsolutePath,@"^/management/show/[1-9]\d*$"))throw new TicketException("Ticket PRO: неизвестная ссылка мероприятия.");
             await NavigateDocument038(show.Url,token);
@@ -111,7 +111,7 @@ internal sealed partial class TicketProSession037
             {
                 if(!TicketPro037.IsSchemeUrl(session.Url)||!DateTime.TryParseExact(session.Date,["dd.MM.yyyy HH:mm","dd.MM.yyyy HH:mm:ss"],CultureInfo.InvariantCulture,DateTimeStyles.None,out var at))throw new TicketException("Ticket PRO: не удалось прочитать дату сеанса.");
                 var id=store.MatchTicketProShow038(show.Title,at,session.Venue);
-                if(id.HasValue)result.Add(new(id.Value,session.Url));
+                if(id.HasValue&&(!eventId.HasValue||id==eventId))result.Add(new(id.Value,session.Url));
                 return Task.CompletedTask;
             }));
             sessionErrors.AddRange(await TicketProBatch038.RunAsync(sessionReads,token));

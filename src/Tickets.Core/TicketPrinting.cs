@@ -36,7 +36,7 @@ public sealed partial class Store
         {
             using var reader=query.ExecuteReader();
             while(reader.Read())if(seatIds.Contains(reader.GetInt64(0)))
-                throw new TicketException("Выбранное место продано Ticketland. Печать билетов с конфликтом отменена.");
+                throw new TicketException($"Выбранное место продано {TicketSalesSource041(c,null,eventId)}. Печать билетов с конфликтом отменена.");
         }
         var active=History(eventId).Where(t=>t.ReturnedAt is null).ToDictionary(t=>t.SeatId);
         if(seatIds.Any(id=>!active.ContainsKey(id)))throw new TicketException("Для повторной печати выберите только выданные и не возвращённые билеты этого показа.");

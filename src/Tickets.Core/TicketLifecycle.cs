@@ -34,7 +34,7 @@ public sealed partial class Store
             ""","$e",eventId,"$i",issueId))
         {
             collision.Transaction=tx;
-            if(Convert.ToInt64(collision.ExecuteScalar())>0)throw new TicketException("Место брони продано Ticketland. Подтверждение отменено целиком.");
+            if(Convert.ToInt64(collision.ExecuteScalar())>0)throw new TicketException($"Место брони продано {TicketSalesSource041(c,tx,eventId)}. Подтверждение отменено целиком.");
         }
         using var update=Command(c,"""
             UPDATE ticket_state SET state='issued' WHERE state='reserved' AND ticket_id IN
@@ -57,7 +57,7 @@ public sealed partial class Store
                 WHERE t.id=$id AND t.event_id=$e AND b.event_id=$e AND t.returned_at IS NULL
                 AND NOT EXISTS(SELECT 1 FROM ticketland_effective_sold_037 tl WHERE tl.event_id=t.event_id AND tl.seat_id=t.seat_id)
                 ""","$id",id,"$e",eventId);check.Transaction=tx;
-            if(Convert.ToInt64(check.ExecuteScalar())!=1)throw new TicketException("Билет возвращён, не найден в этом показе или продан Ticketland. Печать не отмечена.");
+            if(Convert.ToInt64(check.ExecuteScalar())!=1)throw new TicketException($"Билет возвращён, не найден в этом показе или продан {TicketSalesSource041(c,tx,eventId)}. Печать не отмечена.");
             using var update=Command(c,"""
                 INSERT INTO ticket_state(ticket_id,state,printed_at) VALUES($id,'issued',$time)
                 ON CONFLICT(ticket_id) DO UPDATE SET state='issued',printed_at=coalesce(ticket_state.printed_at,excluded.printed_at)

@@ -34,10 +34,10 @@ internal static class TicketPro037UiChecks
         Check(nav.Visibility==Visibility.Visible,"038 showing starts with navigation available");
         Corrections025UiChecks.Capture(main,"038-hall-normal");
         toggle!.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));Pump();
-        Check(nav.Visibility==Visibility.Collapsed&&toggle.IsVisible&&Equals(toggle.Content,"Свернуть зал"),"038 expanded hall hides navigation and keeps restore accessible");
+        Check(nav.Visibility==Visibility.Collapsed&&toggle.IsVisible&&Equals(toggle.ToolTip,"Свернуть зал"),"038 expanded hall hides navigation and keeps restore accessible");
         Corrections025UiChecks.Capture(main,"038-hall-expanded");
         toggle.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));Pump();
-        Check(nav.Visibility==Visibility.Visible&&Equals(toggle.Content,"Раскрыть зал"),"038 restoring hall brings back navigation");
+        Check(nav.Visibility==Visibility.Visible&&Equals(toggle.ToolTip,"Раскрыть зал"),"038 restoring hall brings back navigation");
         Check(((Button)main.FindName("ReserveButton")).Visibility==Visibility.Collapsed,"037 no reservation button clutter");
         var workspace=(Grid)main.FindName("Workspace");Check(workspace.ColumnDefinitions.Count==3&&workspace.ColumnDefinitions[2].ActualWidth>=200&&workspace.ColumnDefinitions[2].ActualWidth<=300,"037 narrow tickets sidebar retained");
         var priceType=typeof(Tickets.App.MainWindow).Assembly.GetType("Tickets.App.PriceEditorWindow")!;

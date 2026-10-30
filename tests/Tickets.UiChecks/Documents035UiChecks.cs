@@ -11,8 +11,8 @@ internal static class Documents035UiChecks
         var settings=new SettingsWindow(store,main);settings.Show();Pump();
         try
         {
-            var buttons=Walk(settings).OfType<Button>().Where(b=>new[]{"Выбрать папку…","Обновление","Резервная копия…","Ticketland","Сохранить","Импорт","Экспорт"}.Contains(b.Content?.ToString())).ToArray();
-            Check(buttons.Select(b=>b.Content?.ToString()).SequenceEqual(new[]{"Выбрать папку…","Обновление","Резервная копия…","Ticketland","Сохранить","Импорт","Экспорт"}),"settings import and export are last");
+            var buttons=Walk(settings).OfType<Button>().Where(b=>new[]{"Выбрать папку…","Обновление","Резервная копия…","Ticket PRO","Сохранить","Импорт","Экспорт"}.Contains(b.Content?.ToString())).ToArray();
+            Check(buttons.Select(b=>b.Content?.ToString()).SequenceEqual(new[]{"Выбрать папку…","Обновление","Резервная копия…","Ticket PRO","Сохранить","Импорт","Экспорт"}),"settings import and export are last");
             var import=buttons[^2];var export=buttons[^1];
             Check(import.Parent is WrapPanel row&&row.HorizontalAlignment==HorizontalAlignment.Left,"transfer buttons are aligned to left");
             Check(import.Parent==export.Parent&&Math.Abs(import.TranslatePoint(new Point(),settings).Y-export.TranslatePoint(new Point(),settings).Y)<1,"import and export share one row");

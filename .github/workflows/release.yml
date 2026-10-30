@@ -33,8 +33,14 @@ jobs:
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-catalog039
       - name: Verify Ticket PRO readonly scheme initialization
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-scheme040
-      - name: Verify Ticket PRO selected-show refresh priority
-        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-refresh040
+      - name: Verify Ticket PRO selected-only refresh queue
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-queue041
+      - name: Verify Ticket PRO selected-source completeness
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-target041
+      - name: Verify Ticket PRO selected-only screen and source labels
+        env:
+          TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro-selection041
       - name: Retain verified interface screenshots
         if: always()
         uses: actions/upload-artifact@v4

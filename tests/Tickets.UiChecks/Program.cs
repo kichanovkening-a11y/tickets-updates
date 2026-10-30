@@ -34,7 +34,10 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
-            if(args.Contains("--ticketpro-refresh040")){TicketPro040RefreshChecks.Run();return 0;}
+            if(args.Contains("--ticketpro-queue041")){TicketPro041QueueChecks.Run();return 0;}
+            if(args.Contains("--ticketpro-target041")){TicketPro041TargetChecks.Run();return 0;}
+            if(args.Contains("--ticketpro-selection041")){TicketPro041UiChecks.Run(args[0]);return 0;}
+            if(args.Contains("--ticketpro-selected-live041")){TicketPro041LiveChecks.Run(args[0],args[2]);return 0;}
             if(args.Contains("--ticketpro-scheme040")){TicketPro040SchemeChecks.Run();return 0;}
             if(args.Contains("--ticketpro-catalog039")){TicketPro039CatalogChecks.Run();return 0;}
             if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}

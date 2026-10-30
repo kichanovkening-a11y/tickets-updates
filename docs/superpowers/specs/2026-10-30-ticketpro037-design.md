@@ -1,0 +1,11 @@
+# Ticket PRO and approved corrections
+
+User authorized implementation on 30 October after selecting Ticket PRO. Read-only integration; no Ticketland inventory writes. Existing .NET 8/WPF portable application and accounting are retained.
+
+Approaches considered: aggregate reports cannot distinguish all occupied seats; Basis API authentication is not authorized for this application; read rendered Ticket PRO scheme using WebView2. Selected Ticket PRO. Use the Windows WebView2 runtime; report absence clearly, do not silently install it. Profile stays in LocalAppData on this PC, never on the portable drive or in backups. No credential extraction or migration from another browser.
+
+Per numbered seat: Продано / Продано агентами => sold; Забронировано / Не использовать => occupied; В продаже => available. Invitation remains occupied. Validate a complete scheme, source URL, event date, unique source identities and complete coverage of all local seats before one atomic snapshot write. Source-only seats absent from the local hall cannot affect local accounting; the full source count remains recorded. Initial title must match; established immutable URL binding survives a later local title edit. Existing matching normalization is reused, ambiguity rejects the update. Complete source supersedes old report sales for covered seats. Older, empty, partial or unknown-status snapshots preserve prior data. Local release persists while occupied and survives refresh/restart. A later real sale removes the release and blocks issue, extension and printing. Local blocks and issued tickets remain intact.
+
+Initial binding: select local show, open Ticket PRO in app, navigate to its scheme, connect this session. Refresh remembered bindings at startup/every five minutes; expired session asks for sign-in and keeps last success with timestamp. Old report refresh is suspended while PRO enabled. No promise of indefinite login.
+
+Approved UI: hall occupies main available area on showing selection, retain narrower resizable right tickets column. Pricing editor opens maximized with controls/tickets column on right. No visible reservation button; keep right-click actions. Date field focuses for typing across entire field and displays caret. Do not redesign unrelated UI.

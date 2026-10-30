@@ -37,13 +37,14 @@ public partial class MainWindow
         {SetTicketlandStatus028("Ticketland: не удалось прочитать настройки подключения.");}
         ticketlandTimer028=new DispatcherTimer{Interval=TimeSpan.FromMinutes(5)};
         ticketlandTimer028.Tick+=async(_,_)=>await RefreshTicketland028();
-        Loaded+=async(_,_)=>{if(ticketlandSettings028.Enabled){ticketlandTimer028.Start();await RefreshTicketland028();}};
+        Loaded+=async(_,_)=>{if(ticketlandSettings028.Enabled&&!Environment.GetCommandLineArgs().Contains("--ticketpro-event")){ticketlandTimer028.Start();await RefreshTicketland028();}};
         Closed+=(_,_)=>{ticketlandTimer028.Stop();ticketlandLifetime028.Cancel();};
     }
 
     internal long? SelectedTicketlandEvent034=>current?.Id;
     internal void UpdateSelectedTicketlandStatus034()
     {
+        if(UpdateSelectedProStatus037())return;
         if(current is null)
         {
             UpdateConflictCount033(0);
@@ -82,6 +83,7 @@ public partial class MainWindow
     }
     internal async Task RefreshTicketland028()
     {
+        if(ticketProEnabled037){await RefreshTicketPro037();return;}
         if(!ticketlandSettings028.Enabled||ticketlandLifetime028.IsCancellationRequested)return;
         try
         {

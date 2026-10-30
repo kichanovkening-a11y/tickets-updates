@@ -32,7 +32,7 @@ public sealed partial class Store
     {
         ValidatePrintSelection(seatIds);
         using(var c=Open())
-        using(var query=Command(c,"SELECT seat_id FROM ticketland_sale_028 WHERE event_id=$e AND seat_id IS NOT NULL","$e",eventId))
+        using(var query=Command(c,"SELECT seat_id FROM ticketland_effective_sold_037 WHERE event_id=$e AND seat_id IS NOT NULL","$e",eventId))
         {
             using var reader=query.ExecuteReader();
             while(reader.Read())if(seatIds.Contains(reader.GetInt64(0)))

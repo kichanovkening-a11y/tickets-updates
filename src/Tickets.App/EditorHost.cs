@@ -37,7 +37,7 @@ public partial class MainWindow
         var body=editor.Content as UIElement??throw new InvalidOperationException("Нет содержимого формы.");editor.Content=null;editor.IsInline=true;
         var page=new Grid{Background=new SolidColorBrush(Color.FromArgb(105,15,23,42))};
         var card=new Border{Background=Brushes.White,BorderBrush=Brushes.SlateGray,BorderThickness=new Thickness(1),Margin=new Thickness(12),
-            MaxWidth=editor.Width,MaxHeight=editor.Height,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch};
+            MaxWidth=editor is PriceEditorWindow?double.PositiveInfinity:editor.Width,MaxHeight=editor is PriceEditorWindow?double.PositiveInfinity:editor.Height,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch};
         TextElement.SetFontFamily(card,editor.FontFamily);TextElement.SetFontSize(card,editor.FontSize);TextElement.SetFontWeight(card,editor.FontWeight);
         var panel=new DockPanel();card.Child=panel;
         if(editor.DocumentTab is {} tab)
@@ -96,7 +96,7 @@ internal sealed class SettingsWindow:EditorWindow
         Button(form,"Выбрать папку…",()=>{var dialog=new Microsoft.Win32.OpenFolderDialog{Title="Папка документов"};if(System.IO.Directory.Exists(directory.Text))dialog.InitialDirectory=directory.Text;if(dialog.ShowDialog(DialogOwner)==true)directory.Text=dialog.FolderName;});
         Button(form,"Обновление",()=>new UpdateWindow(store).ShowDialog());
         Button(form,"Резервная копия…",()=>main.BackupFromSettings());
-        Button(form,"Ticketland",()=>new TicketlandConnectionWindow028(store,main).ShowDialog());
+        Button(form,"Ticketland",()=>main.OpenTicketPro037());
         Button(form,"Сохранить",()=>Try(()=>{var accepted=SenderConfirmation025.Choose(DialogOwner,store.Sender,sender.Text);if(accepted!=sender.Text){sender.Text=accepted;return;}store.SaveDocumentSettings(sender.Text,directory.Text);main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));
         var transfer=new WrapPanel{Margin=new Thickness(0,10,0,0),HorizontalAlignment=HorizontalAlignment.Left};form.Children.Add(transfer);
         Button(transfer,"Импорт",()=>Try(()=>main.ImportFromSettings033(DialogOwner)));

@@ -29,7 +29,7 @@ public sealed partial class Store
             if(Convert.ToInt64(check.ExecuteScalar())==0)throw new TicketException("Активная накладная не найдена в этом показе.");
         }
         using(var collision=Command(c,"""
-            SELECT count(*) FROM ticket t JOIN ticketland_sale_028 tl ON tl.event_id=t.event_id AND tl.seat_id=t.seat_id
+            SELECT count(*) FROM ticket t JOIN ticketland_effective_sold_037 tl ON tl.event_id=t.event_id AND tl.seat_id=t.seat_id
             WHERE t.event_id=$e AND t.issue_id=$i AND t.returned_at IS NULL
             ""","$e",eventId,"$i",issueId))
         {
@@ -55,7 +55,7 @@ public sealed partial class Store
             using var check=Command(c,"""
                 SELECT count(*) FROM ticket t JOIN issue_batch b ON b.id=t.issue_id
                 WHERE t.id=$id AND t.event_id=$e AND b.event_id=$e AND t.returned_at IS NULL
-                AND NOT EXISTS(SELECT 1 FROM ticketland_sale_028 tl WHERE tl.event_id=t.event_id AND tl.seat_id=t.seat_id)
+                AND NOT EXISTS(SELECT 1 FROM ticketland_effective_sold_037 tl WHERE tl.event_id=t.event_id AND tl.seat_id=t.seat_id)
                 ""","$id",id,"$e",eventId);check.Transaction=tx;
             if(Convert.ToInt64(check.ExecuteScalar())!=1)throw new TicketException("Билет возвращён, не найден в этом показе или продан Ticketland. Печать не отмечена.");
             using var update=Command(c,"""
@@ -98,7 +98,7 @@ public sealed partial class Store
                     WHERE p.event_id=$e AND p.seat_id=$s
                     AND NOT EXISTS(SELECT 1 FROM catalog_hidden h WHERE h.kind='sector' AND h.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT))
                     AND NOT EXISTS(SELECT 1 FROM ticket t WHERE t.event_id=$e AND t.seat_id=$s AND t.returned_at IS NULL)
-                    AND NOT EXISTS(SELECT 1 FROM ticketland_sale_028 tl WHERE tl.event_id=$e AND tl.seat_id=$s)
+                    AND NOT EXISTS(SELECT 1 FROM ticketland_unavailable_037 tl WHERE tl.event_id=$e AND tl.seat_id=$s)
                     AND NOT EXISTS(SELECT 1 FROM event_seat_block b WHERE b.event_id=$e AND b.seat_id=$s)
                     ""","$e",eventId,"$s",sid);check.Transaction=tx;
                 var amount=check.ExecuteScalar();

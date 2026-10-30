@@ -25,8 +25,8 @@
         <Button x:Name="TicketlandConflictsButton033" Visibility="Collapsed" Click="TicketlandConflictsClick033" ContentTemplate="{x:Null}" Width="Auto" Height="Auto" MinHeight="0" Padding="5,0" Margin="6,0,0,0" FontSize="13" Background="Transparent" BorderThickness="0" Cursor="Hand"/>
       </WrapPanel>
     </Border>
-    <Grid Margin="12"><Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Border Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
+    <Grid x:Name="MainWorkspaceLayout" Margin="12"><Grid.ColumnDefinitions><ColumnDefinition Width="280"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Border x:Name="WorkspaceNavigation" Background="White" BorderBrush="#E2E8F0" BorderThickness="1" Padding="12">
         <DockPanel>
           <StackPanel DockPanel.Dock="Top"><TextBlock Text="Мероприятия" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
             <WrapPanel Margin="0,0,0,8">
@@ -41,7 +41,7 @@
 
         </DockPanel>
       </Border>
-      <Grid x:Name="Workspace" ClipToBounds="True" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="300"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+      <Grid x:Name="Workspace" ClipToBounds="True" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="250" MinWidth="200" MaxWidth="500"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <StackPanel x:Name="EventSummaryHeader" Margin="8,0,0,4"><ScrollViewer x:Name="EventHeaderScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal"><TextBlock x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold"/><TextBlock x:Name="EventDate" FontSize="19" Margin="10,3,0,0" FontWeight="Bold"/><TextBlock x:Name="EventVenue" FontSize="19" Foreground="#64748B" Margin="10,3,0,0"/></StackPanel></ScrollViewer>
           <TextBlock x:Name="EventSubtitle" FontSize="19" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
         <ScrollViewer x:Name="OrdinaryActionsScroll" Grid.Row="1" Grid.Column="0" ScrollChanged="ActionScrollChanged027" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" VerticalAlignment="Top" Margin="8,0,0,5">
@@ -101,7 +101,8 @@
             </DockPanel>
           </TabItem>
         </TabControl>
-        <Border x:Name="SelectionSidebar" Grid.Column="1" Grid.Row="0" Grid.RowSpan="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="8,0,0,0">
+        <GridSplitter Grid.Column="1" Grid.RowSpan="3" Width="6" HorizontalAlignment="Stretch" Background="#CBD5E1" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns"/>
+        <Border x:Name="SelectionSidebar" Grid.Column="2" Grid.Row="0" Grid.RowSpan="3" Background="#F8FAFC" BorderBrush="#E2E8F0" BorderThickness="1" Padding="9" Margin="8,0,0,0">
           <DockPanel LastChildFill="True">
             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,5">
               <TextBlock x:Name="SelectedSummary" Text="Ничего не выбрано" FontSize="16.8" FontWeight="Bold" Foreground="#C1121F" Margin="0,0,0,7" TextWrapping="Wrap"/>
@@ -127,8 +128,8 @@
                   </StackPanel>
                 </ScrollViewer>
               </Expander>
-              <UniformGrid x:Name="SelectionActions" Columns="3">
-                <Button Style="{StaticResource SeatActionStyle}" x:Name="ReserveButton" ToolTip="{Binding Text, ElementName=SelectionHint}" Content="Забронировать" Padding="0" Width="Auto" MinWidth="0" HorizontalAlignment="Stretch" Click="ReserveClick" IsEnabled="False"/>
+              <UniformGrid x:Name="SelectionActions" Columns="2">
+                <Button Style="{StaticResource SeatActionStyle}" x:Name="ReserveButton" Visibility="Collapsed" ToolTip="{Binding Text, ElementName=SelectionHint}" Content="Забронировать" Padding="0" Width="Auto" MinWidth="0" HorizontalAlignment="Stretch" Click="ReserveClick" IsEnabled="False"/>
                 <Button Style="{StaticResource SeatActionStyle}" x:Name="SaleStateButton" Content="Заблокировать" Padding="0" Width="Auto" MinWidth="0" HorizontalAlignment="Stretch" Click="SaleStateClick" IsEnabled="False"/>
                 <Button Style="{StaticResource SeatActionStyle}" x:Name="ReturnButton" Content="Вернуть выбранные" Padding="0" Width="Auto" MinWidth="0" HorizontalAlignment="Stretch" Click="ReturnClick" IsEnabled="False"/>
               </UniformGrid>

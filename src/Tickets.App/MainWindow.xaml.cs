@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);InitializeTicketland028();
+        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);InitializeTicketland028();InitializeTicketPro037();
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         UpperActions.SizeChanged+=(_,_)=>UpdateCompactLayout();
@@ -126,7 +126,7 @@ public partial class MainWindow : Window
     }
     private void ShowHome()
     {
-        HomePanel.Visibility=Visibility.Visible; Workspace.Visibility=Visibility.Collapsed;
+        HomePanel.Visibility=Visibility.Visible; Workspace.Visibility=Visibility.Collapsed;UpdateCompactLayout();
     }
     private void HomeClick(object sender,RoutedEventArgs e) { current=null;foreach(var row in EventRows())row.IsSelected=false;ShowHome(); }
     private void FindEventClick(object sender,RoutedEventArgs e) { SearchBox.Focus(); SearchBox.SelectAll(); }
@@ -178,14 +178,14 @@ public partial class MainWindow : Window
         LoadJournal();RefreshRecipients();RefreshSenders();
         RenderHallLegend(seats);
         RefreshHallTotals030(seats);
-        if(store.TicketlandLastSync028.HasValue)UpdateSelectedTicketlandStatus034();
+        if(!UpdateSelectedProStatus037()&&store.TicketlandLastSync028.HasValue)UpdateSelectedTicketlandStatus034();
         UpdateNumber();
     }
     private void UpdateSelection()
     {
         if(!ready) return;
         var selected=Hall.SelectedSeats;
-        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0),AlertBrush=s.TicketId.HasValue||s.IsBlocked||s.IsTicketlandSold?Brushes.Red:Brushes.Black}).ToList();
+        SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0),AlertBrush=s.TicketId.HasValue||s.IsBlocked||s.IsTicketlandSold||s.IsTicketlandOccupied?Brushes.Red:Brushes.Black}).ToList();
         SelectedPriceSummary.ItemsSource=selected.GroupBy(s=>s.Amount).OrderByDescending(g=>g.Key).Select(g=>$"{(g.Key.HasValue?InvoiceDocuments.Money(g.Key.Value):"Без цены")} × {g.Count()} = {InvoiceDocuments.Money(g.Sum(s=>s.Amount??0))}").Append($"Всего: {selected.Count} · {InvoiceDocuments.Money(selected.Sum(s=>s.Amount??0))}").ToList();
         IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Получатель: {g.Key} — мест: {g.Count()}"));
         IssuedRecipients.Visibility=string.IsNullOrEmpty(IssuedRecipients.Text)?Visibility.Collapsed:Visibility.Visible;

@@ -35,6 +35,12 @@ public partial class MainWindow
             if(occupiedGroup)
                 foreach(var issueId in Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().Where(id=>id!=seat.IssueId))
                     Action($"Открыть исходную накладную № {issueId}",true,()=>Run(()=>OpenInvoice(issueId)));
+            if(seat.IsTicketlandOccupied&&!seat.TicketId.HasValue&&!currentArchived)
+            {
+                if(!Hall.Selected.Contains(seat.Id))Hall.SetSelection([seat.Id]);
+                var releasable=Hall.SelectedSeats.Where(s=>s.IsTicketlandOccupied&&!s.TicketId.HasValue).Select(s=>s.Id).ToArray();
+                Action("Освободить в программе",releasable.Length>0,()=>Run(()=>{store.ReleaseTicketPro037(current.Id,releasable);LoadEvent(false);Hall.SetSelection(releasable);}));
+            }
             if(seat.IsBlocked&&!currentArchived)
             {
                 if(!Hall.Selected.Contains(seat.Id))Hall.SetSelection([seat.Id]);

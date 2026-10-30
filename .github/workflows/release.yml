@@ -27,6 +27,8 @@ jobs:
         run: |
           dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections033
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Verify Ticket PRO corrections on Windows
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro037
       - name: Retain verified interface screenshots
         if: always()
         uses: actions/upload-artifact@v4
@@ -36,7 +38,7 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Test accounting and updater
-        run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections033
+        run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db
       - name: Verify local backup retention
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --backups036
       - name: Verify document corrections

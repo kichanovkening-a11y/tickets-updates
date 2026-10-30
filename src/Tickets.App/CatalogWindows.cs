@@ -79,9 +79,11 @@ internal sealed class PriceEditorWindow : EditorWindow
     public PriceEditorWindow(Store store,long? venueId=null):this(store,venueId,null){}
     public PriceEditorWindow(Store store,long? venueId,long? planId):base(store,"Расценовка")
     {
+        WindowState=WindowState.Maximized;
         PriceSummaryLayout.Install(priceSummary);
-        var grid=new Grid{Margin=new Thickness(16,5,16,16)};grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(290)});grid.ColumnDefinitions.Add(new ColumnDefinition());Content=grid;
-        var form=new StackPanel{Margin=new Thickness(0,0,15,0)};grid.Children.Add(new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto});
+        var grid=new Grid{Margin=new Thickness(8)};grid.ColumnDefinitions.Add(new ColumnDefinition());grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(6)});grid.ColumnDefinitions.Add(new ColumnDefinition{Width=new GridLength(250),MinWidth=200,MaxWidth=500});Content=grid;
+        var splitter=new GridSplitter{Width=6,HorizontalAlignment=HorizontalAlignment.Stretch,ResizeBehavior=GridResizeBehavior.PreviousAndNext,ResizeDirection=GridResizeDirection.Columns,Background=Brushes.LightGray};Grid.SetColumn(splitter,1);grid.Children.Add(splitter);
+        var form=new StackPanel{Margin=new Thickness(8,0,0,0)};var controls=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetColumn(controls,2);grid.Children.Add(controls);
         var venue=Combo(form,"Зал",store.Venues(),"Name");
         if(venueId.HasValue)venue.SelectedItem=venue.Items.Cast<VenueInfo>().FirstOrDefault(v=>v.Id==venueId.Value);
         var plans=Combo(form,"Существующая расценовка",Array.Empty<PlanInfo>(),"Name");
@@ -218,7 +220,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         var standaloneClose=new Button{Content="Закрыть",Width=110,HorizontalAlignment=HorizontalAlignment.Right,Margin=new Thickness(0)};standaloneClose.Click+=(_,_)=>Close();Grid.SetColumn(standaloneClose,1);standaloneHeader.Children.Add(standaloneClose);
         var shell=new DockPanel();Content=shell;DockPanel.SetDock(standaloneHeader,Dock.Top);shell.Children.Add(standaloneHeader);shell.Children.Add(grid);OnShown(()=>standaloneHeader.Visibility=IsInline?Visibility.Collapsed:Visibility.Visible);
         form.Children.Add(new TextBlock{Text="Назначьте цену каждому месту или уберите его из продажи. Цвет каждой цены общий для всех схем.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,14,0,0)});
-        var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
+        var area=new DockPanel();Grid.SetColumn(area,0);grid.Children.Add(area);
         DockPanel.SetDock(hallTotals,Dock.Top);area.Children.Add(hallTotals);
         var summaryScroll=new ScrollViewer{Content=priceSummary,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto,VerticalScrollBarVisibility=ScrollBarVisibility.Disabled};
         DockPanel.SetDock(summaryScroll,Dock.Top);area.Children.Add(summaryScroll);area.Children.Add(preview);
@@ -318,9 +320,14 @@ internal sealed class EventEditorWindow : EditorWindow
                 // Keep the DatePicker's outer field; its editable part needs neither a second frame nor a watermark.
                 var content=new FrameworkElementFactory(typeof(ScrollViewer),"PART_ContentHost");
                 input.Template=new ControlTemplate(typeof(System.Windows.Controls.Primitives.DatePickerTextBox)){VisualTree=content};
-                input.BorderThickness=new Thickness(0);input.Background=Brushes.Transparent;
+                input.BorderThickness=new Thickness(0);input.Background=Brushes.Transparent;input.HorizontalAlignment=HorizontalAlignment.Stretch;input.VerticalAlignment=VerticalAlignment.Stretch;input.Padding=new Thickness(6,0,6,0);input.IsReadOnly=false;input.Focusable=true;input.CaretBrush=Brushes.Black;input.ApplyTemplate();
             }
         };Grid.SetRow(date,1);dateRow.Children.Add(date);
+        date.PreviewMouseLeftButtonDown+=(_,e)=>{
+            if(date.Template.FindName("PART_TextBox",date) is not TextBox input)return;
+            for(DependencyObject? node=e.OriginalSource as DependencyObject;node is not null&&node!=date;node=node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))if(node==input)return;
+            input.Focus();Keyboard.Focus(input);input.CaretIndex=input.Text.Length;e.Handled=true;
+        };
         OnShown(()=>Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.Input,new Action(()=>{
             date.ApplyTemplate();
             if(date.Template.FindName("PART_TextBox",date) is System.Windows.Controls.Primitives.DatePickerTextBox input)

@@ -26,6 +26,12 @@ public partial class MainWindow
         var total=current is null?null:store.TicketlandSourceTotals030().SingleOrDefault(t=>t.EventId==current.Id);
         HallTotals.Text=$"Всего мест: {seats.Count} · В продаже с ценой: {seats.Count(s=>s.Amount.HasValue&&!s.IsBlocked)} · Общая сумма: {seats.Where(s=>!s.IsBlocked).Sum(s=>(decimal)(s.Amount??0)):N0} ₽"+
             $"\nПродано Ticketland: {total?.TicketCount??0} · Сумма Ticketland: {total?.Nominal??0:N2} ₽";
+        var pro=store.TicketProBindings037().FirstOrDefault(b=>b.EventId==current?.Id);
+        if(pro is not null)
+        {
+            HallTotals.Text=$"Всего мест: {seats.Count} · Продано: {seats.Count(s=>s.IsTicketlandSold)} · Занято: {seats.Count(s=>s.IsTicketlandOccupied)} · В продаже: {seats.Count(s=>s.Available)}";
+            HallTotals.ToolTip=$"Ticket PRO: {pro.FetchedAt.LocalDateTime:dd.MM.yyyy HH:mm}";return;
+        }
         HallTotals.ToolTip=null;
         if(current is not null&&!currentArchived&&total is null)
         {

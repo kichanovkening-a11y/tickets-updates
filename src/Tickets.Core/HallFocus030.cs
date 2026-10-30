@@ -1,6 +1,6 @@
 namespace Tickets.Core;
 
-public enum HallStatus030 { Reserved, Printed, Blocked, NoPrice, TicketlandSold }
+public enum HallStatus030 { Reserved, Printed, Blocked, NoPrice, TicketlandSold, TicketlandOccupied }
 
 /// <summary>Visual legend focus only; never changes selection or seat status.</summary>
 public static class HallFocus030
@@ -15,6 +15,7 @@ public static class HallFocus030
             HallStatus030.Blocked=>seat.IsBlocked,
             HallStatus030.NoPrice=>!seat.IsBlocked&&!seat.IsTicketlandSold&&!occupied&&!seat.Amount.HasValue,
             HallStatus030.TicketlandSold=>seat.IsTicketlandSold,
+            HallStatus030.TicketlandOccupied=>seat.IsTicketlandOccupied,
             _=>false
         };
     }

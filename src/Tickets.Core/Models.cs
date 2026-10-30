@@ -15,9 +15,11 @@ public sealed record SeatInfo(long Id, string Sector, string Row, string Number,
         init=>rowAisleAnchors=value is null?null:new RowAisleAnchorList027(value);
     }
     public bool IsTicketlandSold {get;init;}
-    public bool Available => !IsHidden && !IsTicketlandSold && Amount.HasValue && !TicketId.HasValue && !IsBlocked;
+    public bool IsTicketlandOccupied {get;init;}
+    public string TicketlandSourceStatus {get;init;}="";
+    public bool Available => !IsHidden && !IsTicketlandSold && !IsTicketlandOccupied && Amount.HasValue && !TicketId.HasValue && !IsBlocked;
     public string Label => $"{Sector} · ряд {Row}, место {Number}";
-    public string Status => IsTicketlandSold ? (TicketId.HasValue ? $"Конфликт: продано Ticketland и выдано локально: {Recipient}" : "Продано Ticketland") : TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";
+    public string Status => IsTicketlandSold ? (TicketId.HasValue ? $"Конфликт: продано Ticketland и выдано локально: {Recipient}" : "Продано Ticketland") : TicketId.HasValue ? $"{(IsReserved ? "Забронирован" : IsPrinted ? "Накладная выдана, напечатан" : "Накладная выдана, не напечатан")}: {Recipient}" : IsTicketlandOccupied ? "Занято Ticket PRO · "+TicketlandSourceStatus : IsBlocked ? "Заблокировано" : Amount.HasValue ? "Свободно" : "Нет цены";
 }
 public sealed record SectorInfo(string Name, double X, double Y)
 {public SectorCaption029? Caption {get;init;}}

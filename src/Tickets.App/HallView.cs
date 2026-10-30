@@ -49,7 +49,7 @@ public sealed partial class HallView : FrameworkElement
     public bool AllowUnavailableSelection{get;set;}
     public bool AllowOccupiedSelection{get;set;}
     public bool ShowInactivePlaceholders{get;set;}=true;
-    private bool CanSelect(SeatInfo seat)=>!seat.IsHidden&&seat.Id>0&&(AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked||seat.IsTicketlandSold)));
+    private bool CanSelect(SeatInfo seat)=>!seat.IsHidden&&seat.Id>0&&(AllowUnavailableSelection||SeatSelection.CanSelect(seat)||(AllowOccupiedSelection&&(seat.TicketId.HasValue||seat.IsBlocked||seat.IsTicketlandSold||seat.IsTicketlandOccupied)));
     private void ExcludeOccupiedFromMixedSelection()
     {if(!AllowUnavailableSelection&&SelectedSeats.Any(SeatSelection.CanSelect))Selected.ExceptWith(seats.Where(s=>!SeatSelection.CanSelect(s)).Select(s=>s.Id));}
     public event Action? SelectionChanged;
@@ -201,7 +201,7 @@ public sealed partial class HallView : FrameworkElement
                 var occupied=s.TicketId.HasValue || s.IsReserved || s.IsTicketlandSold;
                 var printed=s.IsTicketlandSold || (occupied && s.IsPrinted && !s.IsReserved);
                 var dimmed=(focusPrice.HasValue && s.Amount!=focusPrice.Value)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
-                var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
+                var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:s.IsTicketlandOccupied?Brushes.DarkOrange:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
                 if(occupied && !s.IsBlocked && !dimmed)
                 {

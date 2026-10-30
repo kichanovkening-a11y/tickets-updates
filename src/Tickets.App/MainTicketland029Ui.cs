@@ -36,7 +36,7 @@ public partial class MainWindow
 
     internal void HandleTicketlandReview029(long eventId)
     {
-        if(ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||current?.Id!=eventId||!store.TicketlandSectorReviews030().Any(issue=>issue.EventId==eventId))return;
+        if(store.TicketProBindings037().Any(b=>b.EventId==eventId)||ticketlandLifetime028.IsCancellationRequested||!IsLoaded||TicketlandIsUpdating028||current?.Id!=eventId||!store.TicketlandSectorReviews030().Any(issue=>issue.EventId==eventId))return;
         var existing=Application.Current.Windows.OfType<TicketlandMappingWindow028>().FirstOrDefault(window=>window.EventId031==eventId);
         if(existing is not null){existing.Activate();return;}
         var window=new TicketlandMappingWindow028(store,this,eventId);

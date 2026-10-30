@@ -22,10 +22,11 @@ public partial class MainWindow
         Canvas.SetTop(SquareShowActions,0);
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
-            var navigation=layout.ActualWidth<1050?236d:280d;
-            var selection=layout.ActualWidth<900?270d:300d;
+            var expanded=Workspace.Visibility==Visibility.Visible;
+            var navigation=expanded?0:layout.ActualWidth<1050?236d:280d;
+            WorkspaceNavigation.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
             if(layout.ColumnDefinitions[0].Width.Value!=navigation)layout.ColumnDefinitions[0].Width=new GridLength(navigation);
-            if(Workspace.ColumnDefinitions[1].Width.Value!=selection)Workspace.ColumnDefinitions[1].Width=new GridLength(selection);
+            layout.ColumnDefinitions[1].Width=new GridLength(expanded?0:8);
         }
     }
     private void ActionScrollChanged027(object sender,ScrollChangedEventArgs e)=>UpdateCompactLayout();
@@ -70,5 +71,6 @@ public partial class MainWindow
         PriceSummaryLayout.Arrange(LegendPanel);
         AddStatusLegend030("Бронь / накладная",Brushes.Black,HallStatus030.Reserved);AddStatusLegend030("Распечатаны",Brushes.Red,HallStatus030.Printed);AddStatusLegend030("× Заблокировано",Brushes.Gray,HallStatus030.Blocked);AddStatusLegend030("Нет цены",Brushes.Gainsboro,HallStatus030.NoPrice);
         AddStatusLegend030("Продано Ticketland",Brushes.Red,HallStatus030.TicketlandSold);
+        if(seats.Any(s=>s.IsTicketlandOccupied))AddStatusLegend030("Занято Ticket PRO",Brushes.DarkOrange,HallStatus030.TicketlandOccupied);
     }
 }

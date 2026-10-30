@@ -34,6 +34,7 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
+            if(args.Contains("--ticketpro-catalog039")){TicketPro039CatalogChecks.Run();return 0;}
             if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();

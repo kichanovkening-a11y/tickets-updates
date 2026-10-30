@@ -120,7 +120,7 @@ public partial class MainWindow
     }
 }
 
-/// <summary>A separate local profile. Only rendered seat attributes are read; no cookies or credentials are extracted.</summary>
+/// <summary>A separate local profile. Saved sign-in is encrypted for the current Windows account.</summary>
 internal sealed partial class TicketProSession037:Window
 {
     private readonly WebView2 view=new();
@@ -170,9 +170,16 @@ internal sealed partial class TicketProSession037:Window
     {
         if(!signedIn||!autoConnectAllowed038||busy)return;
         autoConnectAllowed038=false;busy=true;
-        try{await apply();}finally{busy=false;}
+        try{await RememberSignIn039Async();await apply();}finally{busy=false;}
     }
     private async Task<bool> IsSignedIn038()=>initialized&&await view.ExecuteScriptAsync("!!document.querySelector('a[href=\"/management/statistics\"]')")=="true";
+    private async Task RememberSignIn039Async()
+    {
+        if(!initialized)return;
+        try{await TicketProSessionCache039.SaveAsync(view.CoreWebView2.CookieManager,Path.Combine(profile,"session039.bin"));}
+        catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
+        {status.Text="Ticket PRO: вход выполнен, но не удалось сохранить сессию для следующего запуска.";}
+    }
     internal async Task PrepareForOpen038Async(){if(!await IsSignedIn038())autoConnectAllowed038=true;}
     internal async Task PrepareAsync(bool hidden,CancellationToken token)
     {
@@ -192,6 +199,7 @@ internal sealed partial class TicketProSession037:Window
             view.CoreWebView2.Settings.IsPasswordAutosaveEnabled=false;
             view.CoreWebView2.Settings.IsGeneralAutofillEnabled=false;
             view.CoreWebView2.Settings.AreDevToolsEnabled=false;
+            await TicketProSessionCache039.RestoreAsync(view.CoreWebView2.CookieManager,Path.Combine(profile,"session039.bin"));
             view.CoreWebView2.NewWindowRequested+=(_,e)=>e.Handled=true;
             view.CoreWebView2.PermissionRequested+=(_,e)=>e.State=CoreWebView2PermissionState.Deny;
             view.CoreWebView2.DownloadStarting+=(_,e)=>e.Cancel=true;

@@ -29,6 +29,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify Ticket PRO corrections on Windows
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro037
+      - name: Verify Ticket PRO catalog redirects and saved session
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-catalog039
       - name: Retain verified interface screenshots
         if: always()
         uses: actions/upload-artifact@v4

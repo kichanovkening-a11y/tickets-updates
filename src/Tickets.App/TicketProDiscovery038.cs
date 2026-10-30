@@ -25,7 +25,7 @@ internal sealed partial class TicketProSession037
             return [{title:(cell?.textContent||'').trim(),url:a.href}];
           });
           const next=[...document.querySelectorAll('main .q-table__bottom button')].some(b=>!b.disabled&&['chevron_right','keyboard_arrow_right','navigate_next'].includes(b.querySelector('i')?.textContent.trim()));
-          return JSON.stringify({ready:location.pathname==='/management/show'&&!!table&&!!document.querySelector('main .q-table__bottom'),key:items.map(x=>x.url).join('|'),next,items});
+          return JSON.stringify({ready:/^\/management\/show(?:\/active)?\/?$/.test(location.pathname)&&!!table&&!!document.querySelector('main .q-table__bottom'),key:items.map(x=>x.url).join('|'),next,items});
         })()
         """;
     private const string SessionsScript038="""
@@ -89,6 +89,7 @@ internal sealed partial class TicketProSession037
     {
         await NavigateDocument038("https://pro.ticketland.ru/management/show",token);
         var catalog=await AllPages038<CatalogRow038>(CatalogScript038,token);
+        await RememberSignIn039Async();
         var result=new List<DiscoveredShow038>();
         var sessionErrors=new List<string>();
         var reads=catalog.DistinctBy(x=>x.Url).Where(x=>store.TicketProTitleIsRelevant038(x.Title)).Select(show=>(Func<Task>)(async()=>

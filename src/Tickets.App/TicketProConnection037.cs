@@ -51,13 +51,14 @@ public partial class MainWindow
         if(!await ticketlandGate028.WaitAsync(0,ticketlandLifetime028.Token))return;
         try
         {
+            ticketProLastError037="";
             SetTicketlandStatus028("Ticket PRO: обновляю состояния мест…");
             var session=ProSession037();
             if(session.IsVisible){SetTicketlandStatus028("Ticket PRO: закройте окно подключения для фонового обновления.");return;}
             await session.PrepareAsync(true,ticketlandLifetime028.Token);
             var targets=store.TicketProBindings037().Where(b=>!store.IsEventArchived(b.EventId)).ToDictionary(b=>b.EventId,b=>b.SourceUrl);
-            var errors=new List<string>();
-            try
+            var errors=new List<string>();long? reloadedEventId=null;
+            var readErrors=await TicketProRefresh040.RunAsync(targets,()=>current?.Id,async()=>
             {
                 var discovered=await session.DiscoverShows038Async(ticketlandLifetime028.Token);
                 errors.AddRange(discovered.Errors);
@@ -68,25 +69,22 @@ public partial class MainWindow
                     if(urls.Length==1)targets[group.Key]=urls[0];
                     else errors.Add("Несколько сеансов совпадают с показом: "+store.Events().First(e=>e.Id==group.Key).Caption);
                 }
-            }
-            catch(TicketException ex){errors.Add(ex.Message);}
-            var updated=0;
-            var reads=targets.Select(pair=>(Func<Task>)(async()=>
+            },async(eventId,url,updated)=>
             {
-                var (eventId,url)=pair;
                 try
                 {
-                    SetTicketlandStatus028($"Ticket PRO: обновляю {++updated} из {targets.Count}…");
+                    SetTicketlandStatus028($"Ticket PRO: обновляю {updated} из {targets.Count}…");
                     var json=await session.ReadSchemeAsync(url,ticketlandLifetime028.Token);
                     var snapshot=TicketPro037.Parse(json,DateTimeOffset.UtcNow);
                     await Task.Run(()=>store.ApplyTicketPro037(eventId,snapshot),ticketlandLifetime028.Token);
+                    if(current?.Id==eventId){ReloadProHall038();reloadedEventId=eventId;}
                 }
                 catch(TicketException ex){throw new TicketException(store.Events().First(e=>e.Id==eventId).Caption+": "+ex.Message);}
-            }));
-            errors.AddRange(await TicketProBatch038.RunAsync(reads,ticketlandLifetime028.Token));
+            },ticketlandLifetime028.Token);
+            errors.AddRange(readErrors);
             ticketProLastError037=string.Join(" · ",errors);
             if(targets.Count==0&&errors.Count==0)ticketProLastError037="Ticket PRO: совпадающие показы не найдены. Сохранённые данные не изменены.";
-            ReloadProHall038();
+            if(current?.Id!=reloadedEventId)ReloadProHall038();
             if(!UpdateSelectedProStatus037())SetTicketlandStatus028(ticketProLastError037.Length>0?ticketProLastError037:"Ticket PRO: обновление завершено.");
         }
         catch(OperationCanceledException) when(ticketlandLifetime028.IsCancellationRequested){}
@@ -211,6 +209,13 @@ internal sealed partial class TicketProSession037:Window
             view.CoreWebView2.WebResourceRequested+=(_,e)=>{
                 var method=e.Request.Method;
                 if(method is "GET" or "HEAD" or "OPTIONS")return;
+                // The scheme waits for an empty basket before reading its data. Answer
+                // locally so initialization works without clearing anything on Ticket PRO.
+                if(TicketProReadOnly040.ShouldEmulateEmptyBasket(method,view.CoreWebView2.Source,e.Request.Uri))
+                {
+                    e.Response=environment.CreateWebResourceResponse(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(TicketProReadOnly040.EmptyBasketJson)),200,"OK","Content-Type: application/json\r\nCache-Control: no-store");
+                    return;
+                }
                 var login=Uri.TryCreate(view.CoreWebView2.Source,UriKind.Absolute,out var page)&&page.Host=="pro.ticketland.ru"&&page.AbsolutePath=="/login";
                 var same=Uri.TryCreate(e.Request.Uri,UriKind.Absolute,out var destination)&&destination.Scheme=="https"&&destination.Host=="pro.ticketland.ru"&&destination.IsDefaultPort;
                 if(!login||!same)e.Response=environment.CreateWebResourceResponse(null,403,"Read-only connection","");
@@ -238,13 +243,22 @@ internal sealed partial class TicketProSession037:Window
         if(new Uri(view.CoreWebView2.Source).AbsolutePath=="/login")throw new TicketException("Ticket PRO: требуется вход. Последние данные сохранены.");
         return JsonSerializer.Deserialize<string>(await view.ExecuteScriptAsync(SnapshotScript))??throw new TicketException("Ticket PRO: схема не загружена.");
     }
+    internal static bool SnapshotReady040(JsonElement root,string url)
+    {
+        static bool Filled(JsonElement item,string name)=>item.TryGetProperty(name,out var value)&&value.ValueKind==JsonValueKind.String&&!string.IsNullOrWhiteSpace(value.GetString());
+        if(!Filled(root,"url")||root.GetProperty("url").GetString()!=url||!Filled(root,"title")||!Filled(root,"date")||
+           root.GetProperty("expectedCount").GetInt32()<1||root.GetProperty("places").GetArrayLength()!=root.GetProperty("expectedCount").GetInt32())return false;
+        return root.GetProperty("places").EnumerateArray().All(p=>new[]{"id","sector","row","seat","status","fund","price"}.All(name=>Filled(p,name)));
+    }
     internal async Task<string> ReadSchemeAsync(string url,CancellationToken token)
     {
         if(!TicketPro037.IsSchemeUrl(url))throw new TicketException("Ticket PRO: неверная ссылка на сеанс.");
         var completed=new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         ulong? navigationId=null;
         void Starting(object? _,CoreWebView2NavigationStartingEventArgs e){if(e.Uri==url)navigationId=e.NavigationId;}
-        void Done(object? _,CoreWebView2NavigationCompletedEventArgs e){if(navigationId==e.NavigationId)completed.TrySetResult(e.IsSuccess);}
+        // Initialization can already be navigating before this listener is attached.
+        // The snapshot below still has to match the requested URL and complete count.
+        void Done(object? _,CoreWebView2NavigationCompletedEventArgs e){if(navigationId==e.NavigationId||navigationId is null&&e.IsSuccess&&MatchesRequestedDocument040(url,view.CoreWebView2.Source))completed.TrySetResult(e.IsSuccess);}
         view.NavigationStarting+=Starting;view.NavigationCompleted+=Done;
         try
         {
@@ -256,7 +270,7 @@ internal sealed partial class TicketProSession037:Window
                 timeout.Token.ThrowIfCancellationRequested();
                 var json=await ReadCurrentAsync();
                 using var doc=JsonDocument.Parse(json);var root=doc.RootElement;
-                if(root.GetProperty("url").GetString()==url&&root.GetProperty("expectedCount").GetInt32()>0&&root.GetProperty("places").GetArrayLength()==root.GetProperty("expectedCount").GetInt32())return json;
+                if(SnapshotReady040(root,url))return json;
                 await Task.Delay(500,timeout.Token);
             }
             throw new TicketException("Ticket PRO: схема не загрузилась полностью. Последние данные сохранены.");

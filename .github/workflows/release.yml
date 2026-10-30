@@ -31,6 +31,10 @@ jobs:
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro037
       - name: Verify Ticket PRO catalog redirects and saved session
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-catalog039
+      - name: Verify Ticket PRO readonly scheme initialization
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-scheme040
+      - name: Verify Ticket PRO selected-show refresh priority
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-refresh040
       - name: Retain verified interface screenshots
         if: always()
         uses: actions/upload-artifact@v4

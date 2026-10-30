@@ -34,6 +34,8 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
+            if(args.Contains("--ticketpro-refresh040")){TicketPro040RefreshChecks.Run();return 0;}
+            if(args.Contains("--ticketpro-scheme040")){TicketPro040SchemeChecks.Run();return 0;}
             if(args.Contains("--ticketpro-catalog039")){TicketPro039CatalogChecks.Run();return 0;}
             if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);

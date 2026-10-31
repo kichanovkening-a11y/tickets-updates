@@ -34,6 +34,7 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
+            if(args.Contains("--layout043")){HallLayout043UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--layout042")){HallLayout042UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--ticketpro-queue041")){TicketPro041QueueChecks.Run();return 0;}
             if(args.Contains("--ticketpro-target041")){TicketPro041TargetChecks.Run();return 0;}
@@ -176,7 +177,7 @@ internal static class Program
             Corrections025UiChecks.ConfirmSender(()=>typeof(Tickets.App.MainWindow).GetMethod("ConfirmSender025",BindingFlags.Instance|BindingFlags.NonPublic)!.Invoke(main,null),true);
             ((ComboBox)main.FindName("RecipientBox")).Text="UI recipient";
             store.SaveOrganizationDetails("UI recipient",false,new OrganizationDetails(Name:"UI recipient",Inn:"UI-REQUISITES-MUST-NOT-APPEAR",Signatory:"UI invoice signatory",Position:"UI director"));
-            var summaryLabel=(TextBlock)main.FindName("SelectedSummary");Check(Math.Abs(summaryLabel.FontSize-16.8)<.01&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum retain bold red styling at 70 percent size");
+            var summaryLabel=(Tickets.App.CompactText043)main.FindName("SelectedSummary");Check(Math.Abs(summaryLabel.FontSize-16.8)<.01&&summaryLabel.FontWeight==FontWeights.Bold&&summaryLabel.Foreground.ToString()=="#FFC1121F","selected quantity and sum retain bold red styling at 70 percent size");
             var issueButton=(Button)main.FindName("IssueButton");Check(issueButton.IsEnabled,"priced selection ready for issuance");
             Exception? invoiceError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
@@ -246,7 +247,7 @@ internal static class Program
             Check(hall.ContextMenu!.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Открыть исходную накладную"))&&!hall.ContextMenu.Items.OfType<MenuItem>().Any(i=>Equals(i.Header,"Печать билетов")),"occupied context exposes original invoice without generic printing");hall.ContextMenu.IsOpen=false;
             hall.SetSelection(new[]{seatIds[3]});((ComboBox)main.FindName("RecipientBox")).Text="UI print preview only";Pump();
             Check(printButton.IsVisible&&printButton.IsEnabled&&Equals(printButton.Content,"Печать билетов"),"primary ticket printing action is visible and available");
-            var freePreviewSelection=hall.Selected.ToArray();var freePreviewSummary=((TextBlock)main.FindName("SelectedSummary")).Text;
+            var freePreviewSelection=hall.Selected.ToArray();var freePreviewSummary=((Tickets.App.CompactText043)main.FindName("SelectedSummary")).Text;
             var ticketPrintType=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.TicketPrintWindow")!;Exception? ticketPreviewError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{Window? previewWindow=null;try{
                 previewWindow=app.Windows.Cast<Window>().Single(w=>w.GetType()==ticketPrintType&&w.IsVisible);
@@ -254,7 +255,7 @@ internal static class Program
                 Check(store.History(eventId).Count==3,"opening print preview creates no issuance");
             }catch(Exception ex){ticketPreviewError=ex;}finally{previewWindow?.Close();}}));Click(main,"Печать билетов");if(ticketPreviewError is not null)throw ticketPreviewError;
             Check(store.History(eventId).Count==3&&!store.Recipients().Contains("UI print preview only"),"closing ticket print preview reserves neither seats nor recipient");
-            Check(hall.Selected.SetEquals(freePreviewSelection)&&((TextBlock)main.FindName("SelectedSummary")).Text==freePreviewSummary,"closing free-seat print preview retains selection and summary");
+            Check(hall.Selected.SetEquals(freePreviewSelection)&&((Tickets.App.CompactText043)main.FindName("SelectedSummary")).Text==freePreviewSummary,"closing free-seat print preview retains selection and summary");
             var originalInvoice=store.Invoice(eventId,store.Issues(eventId).Single().Id);
             CheckTicketBlankPreview(store,eventId,originalInvoice);
             Print014Checks.Run(store);
@@ -456,7 +457,7 @@ internal static class Program
                 var header=Visual(leaf).OfType<ContentPresenter>().First(presenter=>Equals(presenter.Content,leaf.Header));NativeClick(header);Pump();
                 Check(!catalog.IsVisible&&(long)performanceDirectoryType.GetProperty("SelectedEventId")!.GetValue(catalog)! == eventId,"one click on a performance date closes its directory with the selected event");
             }catch(Exception ex){leafSelectionError=ex;catalog?.Close();}}));Click(main,"Спектакли");Pump();if(leafSelectionError is not null)throw leafSelectionError;
-            Check(((TextBlock)main.FindName("EventTitle")).Text=="UI event"&&((Grid)main.FindName("Workspace")).IsVisible,"performance date selection returns to that event in the main window");
+            Check(((Tickets.App.CompactText043)main.FindName("EventTitle")).Text=="UI event"&&((Grid)main.FindName("Workspace")).IsVisible,"performance date selection returns to that event in the main window");
             Check(events.Items.OfType<TreeViewItem>().Any(i=>i.Header?.ToString()?.StartsWith("Прошедшие")==true),"past performances have a single expandable section");
             var recipients=(ComboBox)main.FindName("RecipientBox");recipients.Text="СТС";Pump();
             Check(recipients.Items.Cast<string>().Any(n=>n.Contains("СТС")),"recipient search includes imported organizations");recipients.IsDropDownOpen=false;
@@ -892,7 +893,7 @@ internal static class Program
         Check(whiteActions.Length==3&&whiteBounds.Max(rect=>rect.Top)-whiteBounds.Min(rect=>rect.Top)<2&&whiteActions.All(button=>double.IsNaN(button.Width)&&button.FontSize==14),"three white show actions retain their type size and share one row");
         var printBounds=print.TransformToAncestor(main).TransformBounds(new Rect(print.RenderSize));var issueBounds=issue.TransformToAncestor(main).TransformBounds(new Rect(issue.RenderSize));
         Check(whiteBounds.All(rect=>rect.Right<=printBounds.Left+1)&&Math.Abs(printBounds.Top-issueBounds.Top)<1&&issueBounds.Left>=printBounds.Right,"colored actions sit immediately right of extension with issuance to the right of printing");
-        var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
+        var title=(Tickets.App.CompactText043)main.FindName("EventTitle");var date=(Tickets.App.CompactText043)main.FindName("EventDate");
         var dateBounds=date.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(date.RenderSize));
         var titleBounds=title.TransformToAncestor(title.Parent as Visual ?? main).TransformBounds(new Rect(title.RenderSize));
         Check(title.FontSize==22&&date.FontSize==19&&!string.IsNullOrWhiteSpace(date.Text)&&dateBounds.Left>=titleBounds.Right&&Math.Abs(dateBounds.Top-titleBounds.Top)<10,"event date appears in approved 19-point text to the right of the 22-point title");
@@ -900,7 +901,7 @@ internal static class Program
         Check(double.IsNaN(list.Height)&&list.ActualHeight>=220,"selected places fill available height at 1420 by 880");
         var workspace=(Grid)main.FindName("Workspace");var sidebarBounds=sidebar.TransformToAncestor(workspace).TransformBounds(new Rect(sidebar.RenderSize));
         Check(Grid.GetRow(sidebar)==0&&Grid.GetRowSpan(sidebar)==3&&sidebarBounds.Top<=1&&sidebarBounds.Bottom>=workspace.ActualHeight-1,"selection sidebar spans from the workspace top through the hall area");
-        var selectedSummary=(TextBlock)main.FindName("SelectedSummary");var recipient=(ComboBox)main.FindName("RecipientBox");
+        var selectedSummary=(Tickets.App.CompactText043)main.FindName("SelectedSummary");var recipient=(ComboBox)main.FindName("RecipientBox");
         Check(Logical(sidebar).Contains(selectedSummary)&&Logical(sidebar).Contains(recipient),"selection summary recipient and selected-place list share one sidebar");
         var recipientBounds=recipient.TransformToAncestor(sidebar).TransformBounds(new Rect(recipient.RenderSize));var selectedBounds=selectedSummary.TransformToAncestor(sidebar).TransformBounds(new Rect(selectedSummary.RenderSize));
         var normalListBounds=list.TransformToAncestor(sidebar).TransformBounds(new Rect(list.RenderSize));

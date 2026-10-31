@@ -43,7 +43,7 @@ internal static class Ui019Checks
         Check(((TextBlock)main.FindName("JournalInstructions")).Visibility==Visibility.Collapsed&&merge.Visibility==Visibility.Visible,"merge actions replace instructions in their existing header space");
         Invoke(main,"ClearJournalSelection");Pump();
         ((TabControl)main.FindName("WorkspaceTabs")).SelectedIndex=0;Pump();
-        var title=(TextBlock)main.FindName("EventTitle");var date=(TextBlock)main.FindName("EventDate");
+        var title=(Tickets.App.CompactText043)main.FindName("EventTitle");var date=(Tickets.App.CompactText043)main.FindName("EventDate");
         var header=(StackPanel)title.Parent;var original=title.Text;
         foreach(var text in new[]{"Коротко",new string('Ш',80)})
         {

@@ -203,11 +203,11 @@ public sealed partial class HallView : FrameworkElement
                 var dimmed=(focusPrice.HasValue && s.Amount!=focusPrice.Value)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
                 var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:s.IsTicketlandOccupied?Brushes.Black:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
-                if((occupied||s.IsTicketlandOccupied) && !s.IsBlocked && !dimmed)
+                if(occupied && !s.IsTicketlandOccupied && !s.IsBlocked && !dimmed)
                 {
                     // Clip a dense pattern to the seat, including its rounded corners.
                     dc.PushClip(new RectangleGeometry(rect,2,2));
-                    var hatchPen=new Pen(s.IsTicketlandOccupied?Brushes.Red:printed?Brushes.Black:Brushes.White,.9);
+                    var hatchPen=new Pen(printed?Brushes.Black:Brushes.White,.9);
                     for(var x=-16;x<16;x+=4)
                         dc.DrawLine(hatchPen,new Point(s.X+x,s.Y+16),new Point(s.X+x+16,s.Y));
                     dc.Pop();
@@ -221,6 +221,12 @@ public sealed partial class HallView : FrameworkElement
                 }
                 var textColor=Brushes.Black;
                 if(brush is SolidColorBrush solid && (solid.Color.R*.299+solid.Color.G*.587+solid.Color.B*.114)<145) textColor=Brushes.White;
+                var occupiedBadge=s.IsTicketlandOccupied&&!s.IsBlocked&&!dimmed&&s.Id>0;
+                if(occupiedBadge)
+                {
+                    dc.DrawEllipse(Brushes.White,null,new Point(s.X+8,s.Y+8),6.5,6.5);
+                    textColor=Brushes.Black;
+                }
                 var text=Text(s.Number,10.4,textColor);
                 // Advance width and line height include bearings and font leading. Center
                 // the actual visible glyph outlines instead, in the same world space as seats.
@@ -228,7 +234,10 @@ public sealed partial class HallView : FrameworkElement
                 var inkBounds=ink.Bounds;
                 if(!inkBounds.IsEmpty && inkBounds.Width>0 && inkBounds.Height>0)
                 {
-                    var scale=Math.Min(1,Math.Min(14/inkBounds.Width,14/inkBounds.Height));
+                    // Keep every corner of the number inside the white circle, including
+                    // two/three digit numbers and alphabetic seat labels.
+                    var scale=occupiedBadge?Math.Min(1,11/Math.Sqrt(inkBounds.Width*inkBounds.Width+inkBounds.Height*inkBounds.Height)):
+                        Math.Min(1,Math.Min(14/inkBounds.Width,14/inkBounds.Height));
                     ink.Transform=new MatrixTransform(scale,0,0,scale,
                         s.X+8-(inkBounds.X+inkBounds.Width/2)*scale,
                         s.Y+8-(inkBounds.Y+inkBounds.Height/2)*scale);

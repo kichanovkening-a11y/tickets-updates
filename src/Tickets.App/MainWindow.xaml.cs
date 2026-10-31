@@ -21,7 +21,7 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();InitializeTicketland028();InitializeTicketPro037();
+        InitializeComponent();InitializeLayout043();ReadWindowSettings();InitializeJournalLayout();InitializeTicketland028();InitializeTicketPro037();
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
         PriceColorBox.ItemTemplate=ColorChoices.Template();

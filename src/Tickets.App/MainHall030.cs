@@ -7,15 +7,13 @@ using Tickets.Core;
 namespace Tickets.App;
 public partial class MainWindow
 {
-    private static Brush OccupiedLegendBrush042()
+    private static Brush OccupiedLegendBrush043()
     {
         var drawing=new DrawingGroup();
         using(var dc=drawing.Open())
         {
             dc.DrawRectangle(Brushes.Black,null,new Rect(0,0,12,12));
-            dc.PushClip(new RectangleGeometry(new Rect(0,0,12,12)));
-            for(var x=-12;x<12;x+=4)dc.DrawLine(new Pen(Brushes.Red,1),new Point(x,12),new Point(x+12,0));
-            dc.Pop();
+            dc.DrawEllipse(Brushes.White,null,new Point(6,6),4.5,4.5);
         }
         var brush=new DrawingBrush(drawing);brush.Freeze();return brush;
     }

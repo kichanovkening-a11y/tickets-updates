@@ -30,6 +30,7 @@ public partial class MainWindow
             WorkspaceNavigation.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
             if(layout.ColumnDefinitions[0].Width.Value!=navigation)layout.ColumnDefinitions[0].Width=new GridLength(navigation);
             layout.ColumnDefinitions[1].Width=new GridLength(expanded?0:8);
+            ApplySidebarWidth043();
         }
     }
     private static TreeViewItem? NearestTreeItem(DependencyObject? source)
@@ -65,14 +66,17 @@ public partial class MainWindow
         for(var i=0;i<groups.Count;i++)
         {
             var group=groups[i];var price=group.Key;
-            var text=new TextBlock{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Left,FontSize=11.44,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
+            var text=new CompactText043{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Left,FontSize=11.44,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
             var active=Hall.FocusPrice==price;
-            var button=new Border{Child=text,HorizontalAlignment=HorizontalAlignment.Stretch,Background=HallView.SeatBrush(group.First().Color),Padding=new Thickness(active?2:4),Margin=new Thickness(0,0,0,i==groups.Count-1?0:3),BorderThickness=new Thickness(active?3:1),BorderBrush=active?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
+            var button=new Border{Child=text,HorizontalAlignment=HorizontalAlignment.Stretch,Background=HallView.SeatBrush(group.First().Color),BorderBrush=active?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
+            button.SetResourceReference(Border.PaddingProperty,active?"Px2Inset043":"Px4Inset043");
+            button.SetResourceReference(Border.BorderThicknessProperty,active?"Px3Border043":"Px1Border043");
+            if(i<groups.Count-1)button.SetResourceReference(MarginProperty,"Px3Bottom043");
             button.MouseLeftButtonDown+=(_,e)=>{SetPriceFocus(Hall.FocusPrice==price?null:price);e.Handled=true;};
             LegendPanel.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});Grid.SetRow(button,i);LegendPanel.Children.Add(button);
         }
         AddStatusLegend030("Бронь / накладная",Brushes.Black,HallStatus030.Reserved);AddStatusLegend030("Распечатаны",Brushes.Red,HallStatus030.Printed);AddStatusLegend030("× Заблокировано",Brushes.Gray,HallStatus030.Blocked);AddStatusLegend030("Нет цены",Brushes.Gainsboro,HallStatus030.NoPrice);
         AddStatusLegend030("Продано "+store.TicketSalesSource041(current?.Id),Brushes.Red,HallStatus030.TicketlandSold);
-        if(seats.Any(s=>s.IsTicketlandOccupied))AddStatusLegend030("Занято Ticket PRO",OccupiedLegendBrush042(),HallStatus030.TicketlandOccupied);
+        if(seats.Any(s=>s.IsTicketlandOccupied))AddStatusLegend030("Занято Ticket PRO",OccupiedLegendBrush043(),HallStatus030.TicketlandOccupied);
     }
 }

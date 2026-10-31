@@ -45,6 +45,10 @@ jobs:
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --layout042
+      - name: Verify physical pixel spacing and persistent sidebar width
+        env:
+          TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
+        run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --layout043
       - name: Verify compact header with journal and hall gestures
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections027
       - name: Retain verified interface screenshots

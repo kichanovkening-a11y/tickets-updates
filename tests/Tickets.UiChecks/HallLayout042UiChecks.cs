@@ -20,12 +20,12 @@ internal static class HallLayout042UiChecks
         var root=(FrameworkElement)main.Content;var workspace=(Grid)main.FindName("Workspace");
         var refresh=(Button)main.FindName("RefreshTicketlandButton029");var toggle=(Button)main.FindName("ToggleHallButton038");
         var hall=(HallView)main.FindName("Hall");
-        Check(refresh.TranslatePoint(new Point(0,refresh.ActualHeight),workspace).Y<=toggle.TranslatePoint(new Point(),workspace).Y,"refresh is above expansion");
+        Check(refresh.TranslatePoint(new Point(refresh.ActualWidth,0),workspace).X<toggle.TranslatePoint(new Point(),workspace).X&&Math.Abs(refresh.TranslatePoint(new Point(),workspace).Y-toggle.TranslatePoint(new Point(),workspace).Y)<1,"refresh is left of expansion in the same row");
         Check(toggle.TranslatePoint(new Point(0,toggle.ActualHeight),workspace).Y<=hall.TranslatePoint(new Point(),workspace).Y,"both icons remain outside seating");
         Check(refresh.ActualWidth==toggle.ActualWidth&&refresh.ActualHeight==toggle.ActualHeight,"icons have equal square bounds");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");
         var tab=(TabItem)((TabControl)main.FindName("WorkspaceTabs")).Items[0];
-        Check(Math.Abs(print.TranslatePoint(new Point(),workspace).Y-tab.TranslatePoint(new Point(),workspace).Y)<3&&Math.Abs(issue.ActualHeight-tab.ActualHeight)<3,"tabs and document commands share one compact row");
+        Check(Math.Abs(print.TranslatePoint(new Point(0,print.ActualHeight),workspace).Y-tab.TranslatePoint(new Point(0,tab.ActualHeight),workspace).Y)<1&&Math.Abs(issue.TranslatePoint(new Point(0,issue.ActualHeight),workspace).Y-tab.TranslatePoint(new Point(0,tab.ActualHeight),workspace).Y)<1,"tabs and document commands share one compact row");
         foreach(var button in new[]{print,issue,refresh,toggle})
         {
             button.BringIntoView();Pump();var enabled=button.IsEnabled;button.IsEnabled=true;
@@ -86,7 +86,7 @@ internal static class HallLayout042UiChecks
         IEnumerable<GeometryDrawing> Shapes(Drawing item)
         {if(item is GeometryDrawing shape)yield return shape;if(item is DrawingGroup group)foreach(var child in group.Children)foreach(var nested in Shapes(child))yield return nested;}
         var shapes=Shapes(drawing).ToArray();
-        Check(shapes.Any(s=>s.Geometry is RectangleGeometry&&s.Geometry.Bounds==new Rect(0,0,16,16)&&Equals(s.Brush,Brushes.Black))&&shapes.Count(s=>s.Geometry is LineGeometry&&Equals(s.Pen?.Brush,Brushes.Red))>=4,"externally occupied seat renders black with red hatching");
+        Check(shapes.Any(s=>s.Geometry is RectangleGeometry&&s.Geometry.Bounds==new Rect(0,0,16,16)&&Equals(s.Brush,Brushes.Black))&&shapes.Any(s=>s.Geometry is EllipseGeometry circle&&circle.Center==new Point(8,8)&&Equals(s.Brush,Brushes.White))&&!shapes.Any(s=>s.Geometry is LineGeometry&&Equals(s.Pen?.Brush,Brushes.Red)),"externally occupied seat renders black with a white number circle and no red hatching");
         Check(!seat.Available&&!seat.IsTicketlandSold,"occupied rendering keeps the original seat status");
     }
     private static void CheckContextCommands(Store store,MainWindow main)

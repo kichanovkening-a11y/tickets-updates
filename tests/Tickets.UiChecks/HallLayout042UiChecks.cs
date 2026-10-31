@@ -51,6 +51,10 @@ internal static class HallLayout042UiChecks
             foreach(var scale in new[]{1d,1.25,1.5}.Where(s=>size.Width/s>=main.MinWidth&&size.Height/s>=main.MinHeight))
             {
                 main.Width=size.Width;main.Height=size.Height;root.LayoutTransform=new ScaleTransform(scale,scale);Pump();
+                // Windows can clamp off-screen windows to the runner monitor's maximum track size.
+                // A root transform must not synthesize a client smaller than the app's minimum.
+                if(main.ActualWidth/scale<main.MinWidth||main.ActualHeight/scale<main.MinHeight)
+                {Console.WriteLine($"SKIP unsupported synthetic scale {scale}: actual window {main.ActualWidth}x{main.ActualHeight}");continue;}
                 for(var mode=0;mode<2;mode++)
                 {
                     CheckLayout(main);

@@ -24,6 +24,7 @@ internal static class Main027UiChecks
         var width=main.Width;var height=main.Height;main.Width=1420;main.Height=880;
         try{foreach(var scale in new[]{1d,1.25,1.5}){
             root.LayoutTransform=new ScaleTransform(scale,scale);Pump();main.UpdateLayout();Pump();
+            if(main.ActualWidth/scale<main.MinWidth||main.ActualHeight/scale<main.MinHeight)continue;
             HallLayout042UiChecks.CheckLayout(main);
             if(scale==1)Corrections025UiChecks.Capture(main,"027-main-layout");
         }}finally{root.LayoutTransform=transform;main.Width=width;main.Height=height;Pump();}

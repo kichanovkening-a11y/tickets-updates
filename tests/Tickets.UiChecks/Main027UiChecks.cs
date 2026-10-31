@@ -24,13 +24,7 @@ internal static class Main027UiChecks
         var width=main.Width;var height=main.Height;main.Width=1420;main.Height=880;
         try{foreach(var scale in new[]{1d,1.25,1.5}){
             root.LayoutTransform=new ScaleTransform(scale,scale);Pump();main.UpdateLayout();Pump();
-            var normal=(Button)main.FindName("ExtendInvoiceButton");var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");var tabs=(TabControl)main.FindName("WorkspaceTabs");
-            var top=normal.TranslatePoint(new Point(),main).Y;
-            Check(Math.Abs(print.TranslatePoint(new Point(),main).Y-top)<.5&&Math.Abs(issue.TranslatePoint(new Point(),main).Y-top)<.5,"square commands align to ordinary commands at "+scale);
-            var bottom=normal.TranslatePoint(new Point(0,normal.ActualHeight),main).Y;
-            var tabTop=tabs.TranslatePoint(new Point(),main).Y;
-            Check(tabTop>=bottom-1&&tabTop-bottom<=(7+(((ScrollViewer)main.FindName("OrdinaryActionsScroll")).ComputedHorizontalScrollBarVisibility==Visibility.Visible?SystemParameters.HorizontalScrollBarHeight:0))*scale,"hall and journal tabs sit immediately below ordinary commands at "+scale);
-            foreach(var button in new[]{print,issue}){button.BringIntoView();Pump();var enabled=button.IsEnabled;button.IsEnabled=true;try{var point=button.TranslatePoint(new Point(36,36),root);var hit=root.InputHitTest(point) as DependencyObject;Check(hit is not null&&Visuals(button).Contains(hit),"square command remains hit testable at "+scale);}finally{button.IsEnabled=enabled;}}
+            HallLayout042UiChecks.CheckLayout(main);
             if(scale==1)Corrections025UiChecks.Capture(main,"027-main-layout");
         }}finally{root.LayoutTransform=transform;main.Width=width;main.Height=height;Pump();}
         var ticketIssue=store.Issue(eventId,[ids[0]],"UI027 journal","R027",1);store.Return([store.History(eventId).Single(t=>t.IssueId==ticketIssue).Id]);

@@ -11,29 +11,7 @@ internal static class Ticketland029UiChecks
     private const BindingFlags Private=BindingFlags.Instance|BindingFlags.NonPublic;
     internal static void CheckLayout(MainWindow main)
     {
-        var width=main.Width;var height=main.Height;var state=main.WindowState;
-        var scroll=(ScrollViewer)main.FindName("OrdinaryActionsScroll");
-        try
-        {
-            main.WindowState=WindowState.Normal;
-            foreach(var size in new[]{new Size(1420,880),new Size(900,600)})
-            {
-                main.Width=size.Width;main.Height=size.Height;scroll.ScrollToHorizontalOffset(0);Pump();main.UpdateLayout();Pump();
-                var square=(StackPanel)main.FindName("SquareShowActions");var refresh=(Button)main.FindName("RefreshTicketlandButton029");
-                var ordinary=(Button)main.FindName("ExtendInvoiceButton");
-                Check(square.Children.OfType<Button>().Count()==2,"only the two existing seat actions remain square");
-                var issue=(Button)main.FindName("IssueButton");var print=(Button)main.FindName("PrintTicketsButton");
-                Check(new[]{issue,print}.All(b=>b.Width==72&&b.Height==72),"existing square dimensions are unchanged");
-                Check(Math.Abs(refresh.TranslatePoint(new Point(),main).Y-ordinary.TranslatePoint(new Point(),main).Y)<.5,"refresh aligns with ordinary commands at "+size.Width);
-                Check(refresh.TranslatePoint(new Point(),main).X>=issue.TranslatePoint(new Point(issue.ActualWidth,0),main).X,"refresh is directly after issue at "+size.Width);
-                Check(refresh.FontSize==ordinary.FontSize&&refresh.ActualHeight==ordinary.ActualHeight,"refresh uses ordinary button typography and height");
-                refresh.BringIntoView();Pump();
-                var root=(FrameworkElement)main.Content;var hit=root.InputHitTest(refresh.TranslatePoint(new Point(refresh.ActualWidth/2,refresh.ActualHeight/2),root)) as DependencyObject;
-                Check(hit is not null&&Visuals(refresh).Contains(hit),"refresh is reachable after horizontal scrolling at "+size.Width);
-                if(size.Width==1420)Corrections025UiChecks.Capture(main,"029-whole-hall-refresh");
-            }
-        }
-        finally{main.Width=width;main.Height=height;main.WindowState=state;scroll.ScrollToHorizontalOffset(0);Pump();}
+        HallStatus030UiChecks.CheckLayout(main);
     }
     internal static void CheckRefreshButton(MainWindow main)
     {

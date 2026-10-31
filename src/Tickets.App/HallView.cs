@@ -201,13 +201,13 @@ public sealed partial class HallView : FrameworkElement
                 var occupied=s.TicketId.HasValue || s.IsReserved || s.IsTicketlandSold;
                 var printed=s.IsTicketlandSold || (occupied && s.IsPrinted && !s.IsReserved);
                 var dimmed=(focusPrice.HasValue && s.Amount!=focusPrice.Value)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
-                var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:s.IsTicketlandOccupied?Brushes.DarkOrange:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
+                var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:s.IsTicketlandOccupied?Brushes.Black:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
-                if(occupied && !s.IsBlocked && !dimmed)
+                if((occupied||s.IsTicketlandOccupied) && !s.IsBlocked && !dimmed)
                 {
                     // Clip a dense pattern to the seat, including its rounded corners.
                     dc.PushClip(new RectangleGeometry(rect,2,2));
-                    var hatchPen=new Pen(printed?Brushes.Black:Brushes.White,.9);
+                    var hatchPen=new Pen(s.IsTicketlandOccupied?Brushes.Red:printed?Brushes.Black:Brushes.White,.9);
                     for(var x=-16;x<16;x+=4)
                         dc.DrawLine(hatchPen,new Point(s.X+x,s.Y+16),new Point(s.X+x+16,s.Y));
                     dc.Pop();

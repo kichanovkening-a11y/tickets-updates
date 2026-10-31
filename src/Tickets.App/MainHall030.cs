@@ -7,10 +7,22 @@ using Tickets.Core;
 namespace Tickets.App;
 public partial class MainWindow
 {
+    private static Brush OccupiedLegendBrush042()
+    {
+        var drawing=new DrawingGroup();
+        using(var dc=drawing.Open())
+        {
+            dc.DrawRectangle(Brushes.Black,null,new Rect(0,0,12,12));
+            dc.PushClip(new RectangleGeometry(new Rect(0,0,12,12)));
+            for(var x=-12;x<12;x+=4)dc.DrawLine(new Pen(Brushes.Red,1),new Point(x,12),new Point(x+12,0));
+            dc.Pop();
+        }
+        var brush=new DrawingBrush(drawing);brush.Freeze();return brush;
+    }
     private void AddStatusLegend030(string text,Brush brush,HallStatus030 status)
     {
         var active=Hall.FocusStatus030==status;
-        var panel=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,12,4),Cursor=Cursors.Hand,Background=Brushes.Transparent,Tag=status};
+        var panel=new StackPanel{Orientation=Orientation.Horizontal,Margin=new Thickness(0,0,12,0),Cursor=Cursors.Hand,Background=Brushes.Transparent,Tag=status};
         panel.Children.Add(new Border{Background=brush,Width=12,Height=12,CornerRadius=new CornerRadius(2),Margin=new Thickness(0,0,5,0),BorderBrush=active?Brushes.Black:null,BorderThickness=new Thickness(active?2:0)});
         panel.Children.Add(new TextBlock{Text=text,FontSize=14.3,VerticalAlignment=VerticalAlignment.Center,FontWeight=active?FontWeights.Bold:FontWeights.Normal});
         panel.MouseLeftButtonDown+=(_,e)=>{

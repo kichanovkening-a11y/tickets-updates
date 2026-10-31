@@ -19,13 +19,7 @@ public partial class MainWindow
     }
     private void UpdateCompactLayout()
     {
-        EventSubtitle.Visibility=Workspace.ActualHeight>0&&Workspace.ActualHeight<550?Visibility.Collapsed:Visibility.Visible;
-        EventSummaryHeader.Margin=new Thickness(8,0,0,5);
-        OrdinaryActionsScroll.Margin=new Thickness(8,0,0,0);
-        Canvas.SetLeft(SquareShowActions,8+ChangePriceButton.ActualWidth+ChangePriceButton.Margin.Left+ChangePriceButton.Margin.Right+
-            UndoPriceButton.ActualWidth+UndoPriceButton.Margin.Left+UndoPriceButton.Margin.Right+
-            ExtendInvoiceButton.ActualWidth+ExtendInvoiceButton.Margin.Left+ExtendInvoiceButton.Margin.Right-OrdinaryActionsScroll.HorizontalOffset);
-        Canvas.SetTop(SquareShowActions,0);
+        EventSubtitle.Visibility=hallExpanded038||(Workspace.ActualHeight>0&&Workspace.ActualHeight<550)?Visibility.Collapsed:Visibility.Visible;
         if(Workspace.Parent is Grid layout&&layout.ActualWidth>0)
         {
             var expanded=Workspace.Visibility==Visibility.Visible&&hallExpanded038;
@@ -38,7 +32,6 @@ public partial class MainWindow
             layout.ColumnDefinitions[1].Width=new GridLength(expanded?0:8);
         }
     }
-    private void ActionScrollChanged027(object sender,ScrollChangedEventArgs e)=>UpdateCompactLayout();
     private static TreeViewItem? NearestTreeItem(DependencyObject? source)
     {
         while(source is not null)
@@ -72,14 +65,14 @@ public partial class MainWindow
         for(var i=0;i<groups.Count;i++)
         {
             var group=groups[i];var price=group.Key;
-            var text=new TextBlock{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.NoWrap,FontSize=14.3,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
-            var button=new Border{Child=text,HorizontalAlignment=HorizontalAlignment.Left,Background=HallView.SeatBrush(group.First().Color),Padding=new Thickness(7,4,7,4),Margin=new Thickness(0,0,8,4),BorderThickness=new Thickness(Hall.FocusPrice==price?3:1),BorderBrush=Hall.FocusPrice==price?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
+            var text=new TextBlock{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Left,FontSize=11.44,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
+            var active=Hall.FocusPrice==price;
+            var button=new Border{Child=text,HorizontalAlignment=HorizontalAlignment.Stretch,Background=HallView.SeatBrush(group.First().Color),Padding=new Thickness(active?2:4),Margin=new Thickness(0,0,0,i==groups.Count-1?0:3),BorderThickness=new Thickness(active?3:1),BorderBrush=active?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
             button.MouseLeftButtonDown+=(_,e)=>{SetPriceFocus(Hall.FocusPrice==price?null:price);e.Handled=true;};
-            LegendPanel.Children.Add(button);
+            LegendPanel.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});Grid.SetRow(button,i);LegendPanel.Children.Add(button);
         }
-        PriceSummaryLayout.Arrange(LegendPanel);
         AddStatusLegend030("Бронь / накладная",Brushes.Black,HallStatus030.Reserved);AddStatusLegend030("Распечатаны",Brushes.Red,HallStatus030.Printed);AddStatusLegend030("× Заблокировано",Brushes.Gray,HallStatus030.Blocked);AddStatusLegend030("Нет цены",Brushes.Gainsboro,HallStatus030.NoPrice);
         AddStatusLegend030("Продано "+store.TicketSalesSource041(current?.Id),Brushes.Red,HallStatus030.TicketlandSold);
-        if(seats.Any(s=>s.IsTicketlandOccupied))AddStatusLegend030("Занято Ticket PRO",Brushes.DarkOrange,HallStatus030.TicketlandOccupied);
+        if(seats.Any(s=>s.IsTicketlandOccupied))AddStatusLegend030("Занято Ticket PRO",OccupiedLegendBrush042(),HallStatus030.TicketlandOccupied);
     }
 }

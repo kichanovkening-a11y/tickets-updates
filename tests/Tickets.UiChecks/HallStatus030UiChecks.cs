@@ -62,15 +62,7 @@ internal static class HallStatus030UiChecks
             foreach(var size in new[]{new Size(1420,880),new Size(900,600)})
             {
                 main.Width=size.Width;main.Height=size.Height;Pump();main.UpdateLayout();Pump();
-                var toolbar=(Grid)main.FindName("HallToolbar030");var refresh=(Button)main.FindName("RefreshTicketlandButton029");
-                var toggle=(Button)main.FindName("ToggleHallButton038");
-                var workspace=(Grid)main.FindName("Workspace");
-                Check(toggle.TranslatePoint(new Point(0,toggle.ActualHeight),workspace).Y<=refresh.TranslatePoint(new Point(),workspace).Y,"hall expansion icon sits above refresh outside the scheme at "+size.Width);
-                Check(Math.Abs(refresh.TranslatePoint(new Point(refresh.ActualWidth,0),toolbar).X-toolbar.ActualWidth)<.5,"refresh is against hall toolbar right edge at "+size.Width);
-                Check(refresh.ActualHeight==32&&refresh.FontSize==14,"refresh retains ordinary hall toolbar height and typography");
-                var square=(StackPanel)main.FindName("SquareShowActions");Check(square.Children.OfType<Button>().Count()==2&&square.Children.OfType<Button>().All(b=>b.Width==72&&b.Height==72),"two original square actions retain their dimensions");
-                var root=(FrameworkElement)main.Content;var hit=root.InputHitTest(refresh.TranslatePoint(new Point(refresh.ActualWidth/2,refresh.ActualHeight/2),root)) as DependencyObject;
-                Check(hit is not null&&Visuals(refresh).Contains(hit),"refresh remains reachable at "+size.Width);
+                HallLayout042UiChecks.CheckLayout(main);
             }
         }
         finally{main.Width=width;main.Height=height;main.WindowState=state;Pump();}

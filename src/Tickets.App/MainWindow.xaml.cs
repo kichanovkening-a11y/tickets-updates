@@ -21,16 +21,9 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
-        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();PriceSummaryLayout.Install(LegendPanel);InitializeTicketland028();InitializeTicketPro037();
+        InitializeComponent();ReadWindowSettings();InitializeJournalLayout();InitializeTicketland028();InitializeTicketPro037();
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
-        UpperActions.SizeChanged+=(_,_)=>UpdateCompactLayout();
-        SquareShowActions.RequestBringIntoView+=(_,e)=>{
-            if(e.OriginalSource is FrameworkElement target){
-                var right=UpperActions.ActualWidth-156+target.TranslatePoint(new Point(target.ActualWidth,0),SquareShowActions).X;
-                OrdinaryActionsScroll.ScrollToHorizontalOffset(Math.Max(0,right-OrdinaryActionsScroll.ViewportWidth));e.Handled=true;
-            }
-        };
         PriceColorBox.ItemTemplate=ColorChoices.Template();
         RecipientTypography.Apply(RecipientBox);
         RecipientBox.AddHandler(System.Windows.Controls.Primitives.TextBoxBase.TextChangedEvent,new TextChangedEventHandler(RecipientChanged));
@@ -199,10 +192,10 @@ public partial class MainWindow : Window
             !string.IsNullOrWhiteSpace(RecipientName) && !string.IsNullOrWhiteSpace(SeriesBox.Text) &&
             long.TryParse(NumberBox.Text,out var n) && n>0;
         ReserveButton.IsEnabled=IssueButton.IsEnabled;
-        IssueButton.Content="Выдать накладную";
+        IssueButton.Content="Накладная";
         ExtendInvoiceButton.IsEnabled=!archived&&selected.Count>0&&free==selected.Count;
         PrintTicketsButton.IsEnabled=IssueButton.IsEnabled&&selected.All(SeatSelection.CanSelect);
-        PrintTicketsButton.Content="Печать билетов";
+        PrintTicketsButton.Content="Печать";
         var allBlocked=selected.Count>0&&selected.All(x=>x.IsBlocked);
         SaleStateButton.Content=allBlocked?"Разблокировать":"Заблокировать";
         SaleStateButton.ToolTip=null;

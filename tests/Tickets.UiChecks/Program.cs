@@ -34,6 +34,7 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
+            if(args.Contains("--layout042")){HallLayout042UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--ticketpro-queue041")){TicketPro041QueueChecks.Run();return 0;}
             if(args.Contains("--ticketpro-target041")){TicketPro041TargetChecks.Run();return 0;}
             if(args.Contains("--ticketpro-selection041")){TicketPro041UiChecks.Run(args[0]);return 0;}

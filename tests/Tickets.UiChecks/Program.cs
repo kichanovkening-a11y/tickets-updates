@@ -34,6 +34,7 @@ internal static class Program
         },IntPtr.Zero);dialogGuard.Start();
         try
         {
+            if(args.Contains("--corrections044")){Corrections044UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--layout043")){HallLayout043UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--layout042")){HallLayout042UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--ticketpro-queue041")){TicketPro041QueueChecks.Run();return 0;}
@@ -399,7 +400,7 @@ internal static class Program
             categoryHall.SetSelection(seatIds.Take(2));categoryFields[1].Text="1000";
             categoryFields[1].RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(categoryFields[1]),Environment.TickCount,Key.Enter){RoutedEvent=Keyboard.PreviewKeyDownEvent});Pump();
             Check(categoryHall.Selected.Count==0,"pricing editor clears selection after first price assignment");
-            categoryHall.SetSelection(seatIds.Skip(2));categoryFields[1].Text="2000";Click(categoryEditor,"Назначить выбранным местам");
+            categoryHall.SetSelection(seatIds.Skip(2));categoryFields[1].Text="2000";AssignPrice044(categoryEditor);
             var assigned=(System.Collections.IDictionary)priceEditorType.GetField("prices",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(categoryEditor)!;
             Check(((PriceValue)assigned[seatIds[0]]!).Amount==1000&&((PriceValue)assigned[seatIds[1]]!).Amount==1000&&((PriceValue)assigned[seatIds[2]]!).Amount==2000,"next price assignment preserves earlier differently priced places");
             Check(categoryHall.Selected.Count==0&&!Logical(categoryEditor).OfType<Button>().Any(b=>Equals(b.Content,"Снять выделение")),"pricing uses automatic clearing without extra clear button");
@@ -408,16 +409,16 @@ internal static class Program
             Gesture(categoryHall,new Point(8,8),new Point(8,8),true);
             Check(categoryHall.Selected.SetEquals(new[]{seatIds[1]})&&OpenContextMenu() is null,"repeated right click removes only its selected seat without reopening the menu");
             for(var categoryIndex=0;categoryIndex<seatIds.Length;categoryIndex++)
-            {categoryHall.SetSelection(new[]{seatIds[categoryIndex]});categoryFields[1].Text=((categoryIndex+1)*1000).ToString();Click(categoryEditor,"Назначить выбранным местам");}
+            {categoryHall.SetSelection(new[]{seatIds[categoryIndex]});categoryFields[1].Text=((categoryIndex+1)*1000).ToString();AssignPrice044(categoryEditor);}
             Pump();var priceSummary=(Grid)priceEditorType.GetField("priceSummary",BindingFlags.Instance|BindingFlags.NonPublic)!.GetValue(categoryEditor)!;
             var categoryCells=priceSummary.Children.OfType<Border>().ToArray();
-            Check(priceSummary.RowDefinitions.Count==2&&priceSummary.ColumnDefinitions.Count==2&&categoryCells.Length==4,"pricing categories use two rows when two columns fit");
-            Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(0,1),(1,1)}),"pricing summary orders categories downward then into the next column");
-            Check(categoryCells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount}₽×1={amount}₽")),"colored pricing summary uses descending amounts with quantity and total");
-            Check(categoryCells.All(cell=>cell.Background is SolidColorBrush&&((TextBlock)cell.Child).Foreground is SolidColorBrush&&cell.ActualWidth>50&&cell.ActualHeight>20),"pricing summary renders colored readable cells above the hall");categoryEditor.Close();
+            Check(priceSummary.RowDefinitions.Count==4&&priceSummary.ColumnDefinitions.Count==0&&categoryCells.Length==4,"pricing categories use one sidebar column");
+            Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(2,0),(3,0)}),"pricing summary orders categories downward");
+            Check(categoryCells.Select(cell=>((Tickets.App.CompactText043)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount}₽×1={amount}₽")),"colored pricing summary uses descending amounts with quantity and total");
+            Check(categoryCells.All(cell=>cell.Background is SolidColorBrush&&((Tickets.App.CompactText043)cell.Child).Foreground is SolidColorBrush&&cell.ActualWidth>50&&cell.ActualHeight>10),"pricing summary renders colored readable cells in the sidebar");categoryEditor.Close();
             var copyEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId,(long?)planId})!;copyEditor.Show();Pump();
             Check(Field(copyEditor,"Название новой расценовки").Text=="","loaded pricing copy leaves the new name empty");
-            var copyHall=Logical(copyEditor).OfType<Tickets.App.HallView>().Single();copyHall.SetSelection(seatIds);Field(copyEditor,"Цена, ₽").Text="777";Click(copyEditor,"Назначить выбранным местам");
+            var copyHall=Logical(copyEditor).OfType<Tickets.App.HallView>().Single();copyHall.SetSelection(seatIds);Field(copyEditor,"Цена, ₽").Text="777";AssignPrice044(copyEditor);
             Exception? uniqueNameError=null;
             app.Dispatcher.BeginInvoke(DispatcherPriority.Background,new Action(()=>{
                 Window? prompt=null;
@@ -839,7 +840,13 @@ internal static class Program
     private static TextBox Field(DependencyObject root,string label)
     {
         var caption=Logical(root).OfType<TextBlock>().Single(text=>text.Text==label);
-        var panel=(Panel)caption.Parent;return (TextBox)panel.Children[panel.Children.IndexOf(caption)+1];
+        var labelHost=caption.Parent is Decorator decorator?(FrameworkElement)decorator:caption;
+        var panel=(Panel)labelHost.Parent;return (TextBox)panel.Children[panel.Children.IndexOf(labelHost)+1];
+    }
+    private static void AssignPrice044(DependencyObject root)
+    {
+        var amount=Field(root,"Цена, ₽");
+        amount.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(amount),Environment.TickCount,Key.Enter){RoutedEvent=Keyboard.PreviewKeyDownEvent});Pump();
     }
     private static ContextMenu? OpenContextMenu()
         =>PresentationSource.CurrentSources.Cast<PresentationSource>().Where(source=>source.RootVisual is not null).SelectMany(source=>Visual(source.RootVisual!)).OfType<ContextMenu>().SingleOrDefault(menu=>menu.IsOpen);
@@ -861,7 +868,7 @@ internal static class Program
         var cells=legend.Children.OfType<Border>().ToArray();
         Check(legend.ColumnDefinitions.All(column=>column.Width.IsAuto)&&cells.All(cell=>cell.Child is TextBlock {TextWrapping:TextWrapping.NoWrap,FontSize:14.3,FontWeight:var weight}&&weight==FontWeights.Bold),"main price legend retains unbroken bold expressions in content-sized columns");
         var priceGroups=store.Seats(store.Events().Single(show=>show.Title=="UI event").Id).Where(seat=>seat.Amount.HasValue&&!seat.IsBlocked).GroupBy(seat=>seat.Amount!.Value).OrderByDescending(group=>group.Key);
-        Check(cells.Select(cell=>((TextBlock)cell.Child).Text).SequenceEqual(priceGroups.Select(group=>$"{group.Key:0.##}₽×{group.Count()}={group.Sum(seat=>(decimal)seat.Amount!.Value):0.##}₽")),"main price legend shows exact compact price quantity and sum");
+        Check(cells.Select(cell=>((Tickets.App.CompactText043)cell.Child).Text).SequenceEqual(priceGroups.Select(group=>$"{group.Key:0.##}₽×{group.Count()}={group.Sum(seat=>(decimal)seat.Amount!.Value):0.##}₽")),"main price legend shows exact compact price quantity and sum");
         Check(cells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(Enumerable.Range(0,cells.Length).Select(index=>(index%legend.RowDefinitions.Count,index/legend.RowDefinitions.Count))),"main price legend fills each column downward");
         NativeClick(cells[0]);Pump();Check(hall.FocusPrice.HasValue&&hall.Selected.SetEquals(selection),"clicking price legend focuses its price without changing selection");
         NativeClick(legend.Children.OfType<Border>().First());Pump();Check(hall.FocusPrice is null&&hall.Selected.SetEquals(selection),"clicking focused price again restores all prices without changing selection");

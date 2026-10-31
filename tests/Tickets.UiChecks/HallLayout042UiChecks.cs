@@ -22,7 +22,7 @@ internal static class HallLayout042UiChecks
         var hall=(HallView)main.FindName("Hall");
         Check(refresh.TranslatePoint(new Point(refresh.ActualWidth,0),workspace).X<toggle.TranslatePoint(new Point(),workspace).X&&Math.Abs(refresh.TranslatePoint(new Point(),workspace).Y-toggle.TranslatePoint(new Point(),workspace).Y)<1,"refresh is left of expansion in the same row");
         Check(toggle.TranslatePoint(new Point(0,toggle.ActualHeight),workspace).Y<=hall.TranslatePoint(new Point(),workspace).Y,"both icons remain outside seating");
-        Check(refresh.ActualWidth==toggle.ActualWidth&&refresh.ActualHeight==toggle.ActualHeight,"icons have equal square bounds");
+        Check(Math.Abs(refresh.ActualWidth-toggle.ActualWidth)<.01&&Math.Abs(refresh.ActualHeight-toggle.ActualHeight)<.01,$"icons have equal square bounds: {refresh.ActualWidth:R}x{refresh.ActualHeight:R} / {toggle.ActualWidth:R}x{toggle.ActualHeight:R}");
         var print=(Button)main.FindName("PrintTicketsButton");var issue=(Button)main.FindName("IssueButton");
         var tab=(TabItem)((TabControl)main.FindName("WorkspaceTabs")).Items[0];
         Check(Math.Abs(print.TranslatePoint(new Point(0,print.ActualHeight),workspace).Y-tab.TranslatePoint(new Point(0,tab.ActualHeight),workspace).Y)<1&&Math.Abs(issue.TranslatePoint(new Point(0,issue.ActualHeight),workspace).Y-tab.TranslatePoint(new Point(0,tab.ActualHeight),workspace).Y)<1,"tabs and document commands share one compact row");
@@ -58,7 +58,7 @@ internal static class HallLayout042UiChecks
                 for(var mode=0;mode<2;mode++)
                 {
                     CheckLayout(main);
-                    if(mode==1)Check(((TextBlock)main.FindName("EventSubtitle")).Visibility==Visibility.Collapsed,"expanded hall omits upper totals");
+                    if(mode==1)Check(((FrameworkElement)main.FindName("EventSubtitle")).Visibility==Visibility.Collapsed,"expanded hall omits upper totals");
                     toggle.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
                 }
             }

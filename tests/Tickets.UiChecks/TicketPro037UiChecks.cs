@@ -43,10 +43,10 @@ internal static class TicketPro037UiChecks
         var priceType=typeof(Tickets.App.MainWindow).Assembly.GetType("Tickets.App.PriceEditorWindow")!;
         var price=(Window)Activator.CreateInstance(priceType,store,(long?)null)!;
         price.Show();Pump();
-        var priceToggle=Logical(price).OfType<Button>().SingleOrDefault(b=>Equals(b.Content,"Раскрыть зал"));
+        var priceToggle=Logical(price).OfType<Button>().SingleOrDefault(b=>Equals(b.ToolTip,"Раскрыть зал"));
         Check(priceToggle is not null&&price.WindowState==WindowState.Normal,"038 pricing starts with reversible expansion");
         priceToggle!.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));Pump();
-        Check(price.WindowState==WindowState.Maximized&&Equals(priceToggle.Content,"Свернуть зал"),"038 pricing expands");
+        Check(price.WindowState==WindowState.Maximized&&Equals(priceToggle.ToolTip,"Свернуть зал"),"038 pricing expands");
         priceToggle.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));Pump();
         Check(price.WindowState==WindowState.Normal,"038 pricing restores");price.Close();
         var type=typeof(Tickets.App.MainWindow).Assembly.GetType("Tickets.App.EventEditorWindow")!;

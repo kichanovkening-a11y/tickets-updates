@@ -16,7 +16,8 @@ internal static class Pricing021UiChecks
         var source=store.SavePlan(venue,"Исходная UI021",seats.Select(s=>new PriceValue(s.Id,category.Amount,category.Color)).ToArray(),[]);
         var editor=new PriceEditorWindow(store,venue,source){IsInline=true};editor.NotifyShown();
         var label=Logical(editor.Content as DependencyObject).OfType<TextBlock>().Single(t=>t.Text=="Название новой расценовки");
-        var parent=(Panel)LogicalTreeHelper.GetParent(label);var name=(TextBox)parent.Children[parent.Children.IndexOf(label)+1];name.Text="Другая UI021";
+        var labelHost=label.Parent is Decorator decorator?(FrameworkElement)decorator:label;
+        var parent=(Panel)labelHost.Parent;var name=(TextBox)parent.Children[parent.Children.IndexOf(labelHost)+1];name.Text="Другая UI021";
         editor.HeaderSaveAction!();
         Check(editor.CreatedId!=0&&editor.CreatedId!=source,"identical prices with new name create a separate plan");
         Check(store.Plans(venue).Any(p=>p.Id==editor.CreatedId&&p.Name=="Другая UI021"),"new plan name persists");

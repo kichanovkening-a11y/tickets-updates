@@ -20,6 +20,7 @@ internal sealed class RecipientsWindow:EditorWindow
     private List<RecipientDirectoryInfo> directory=[];
     private readonly HashSet<(long EventId,long IssueId)> packageSelection=[];
     private readonly MenuItem delete;
+    private bool archive044;
 
     public RecipientsWindow(Store store):base(store,"Получатели / организации",1100,780)
     {
@@ -62,6 +63,8 @@ internal sealed class RecipientsWindow:EditorWindow
             if(organizations.SelectedItem is not RecipientDirectoryInfo organization)return;
             new RecipientPackagesWindow(Store,organization.Name).ShowDialog();
         }));
+        var archive=Button(actions,"Архив",()=>{});
+        archive.Click+=(_,_)=>Try(()=>{archive044=!archive044;archive.Content=archive044?"Активные":"Архив";ShowHistory(true);});
         organizations.MouseDoubleClick+=(_,_)=>{if(edit.IsEnabled)edit.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Button.ClickEvent));};
         delete=new MenuItem{Header="Удалить"};
         delete.Click+=(_,_)=>Try(()=>{
@@ -95,23 +98,19 @@ internal sealed class RecipientsWindow:EditorWindow
         if(found.Count==0)ShowHistory();
     }
 
-    private void ShowHistory()
+    private void ShowHistory()=>ShowHistory(false);
+    private void ShowHistory(bool preservePackageSelection)
     {
-        packageSelection.Clear();history.Items.Clear();returnedDetails028.Clear();
+        if(!preservePackageSelection)packageSelection.Clear();
+        history.Items.Clear();returnedDetails028.Clear();
         var organization=organizations.SelectedItem as RecipientDirectoryInfo;delete.IsEnabled=organization is {IsDeleted:false};edit.IsEnabled=organization is {IsDeleted:false};
         if(organization is null){heading.Text="Получатели / организации";summary.Text="Организации не найдены. Измените запрос.";return;}
         heading.Text=organization.Name;
-        var issues=Store.RecipientHistory(organization.Name);
-        summary.Text=issues.Count==0?"Выдач пока нет. Организация сохранена в справочнике.":
+        var dates=Store.DocumentArchive();
+        var issues=Store.RecipientHistory(organization.Name).Where(x=>dates.Contains(x.Issue.EventId,x.EventDate)==archive044).ToList();
+        summary.Text=issues.Count==0?(archive044?"Архив пуст.":"Активных выдач нет. Прошедшие доступны по кнопке «Архив»."):
             $"Выдач: {issues.Count} · билетов: {issues.Sum(x=>x.Issue.Count)} · возвращено: {issues.Sum(x=>x.Issue.ReturnedCount)}. Нажмите выдачу, чтобы открыть накладную.";
-        var now=DateTime.Now;
-        AddPerformances(history,issues.Where(x=>x.StartsAt>=now),false);
-        var past=issues.Where(x=>x.StartsAt<now).ToList();
-        if(past.Count>0)
-        {
-            var archive=new TreeViewItem{Header=$"Прошедшие ({past.Select(x=>x.Issue.EventId).Distinct().Count()})",Foreground=Brushes.Gray};
-            history.Items.Add(archive);AddPerformances(archive,past,true);
-        }
+        AddPerformances(history,issues,archive044);
     }
 
     private void AddPerformances(ItemsControl parent,IEnumerable<RecipientIssueInfo> issues,bool past)
@@ -131,7 +130,7 @@ internal sealed class RecipientsWindow:EditorWindow
                 {
                     var row=new TreeViewItem{Tag=issue,Header=new TextBlock{FontSize=17,Text=$"№ {issue.Issue.Id} · {issue.Issue.Date} · {issue.Issue.Sender}\nБилетов: {issue.Issue.Count} · {InvoiceDocuments.Money(issue.Issue.Total)} · {issue.Issue.Status}",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)}};
                     var text=(TextBlock)row.Header;row.Header=null;
-                    var check=new CheckBox{Width=18,Height=18,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)};
+                    var check=new CheckBox{IsChecked=packageSelection.Contains((issue.Issue.EventId,issue.Issue.Id)),Width=18,Height=18,VerticalAlignment=VerticalAlignment.Center,Margin=new Thickness(0,0,8,0)};
                     check.Checked+=(_,_)=>packageSelection.Add((issue.Issue.EventId,issue.Issue.Id));check.Unchecked+=(_,_)=>packageSelection.Remove((issue.Issue.EventId,issue.Issue.Id));
                     var header=new DockPanel();DockPanel.SetDock(check,Dock.Left);header.Children.Add(check);
                     var body=new StackPanel();header.Children.Add(body);body.Children.Add(text);

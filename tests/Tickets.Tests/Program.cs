@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--corrections044")&&!name.StartsWith("044"))return;
     if(args.Contains("--corrections033")&&!name.StartsWith("033"))return;
     if(args.Contains("--corrections032")&&!name.StartsWith("032"))return;
     if(args.Contains("--corrections031")&&!(name.StartsWith("031")||name.StartsWith("030")&&name.Contains("Ticketland")||name.StartsWith("029")&&(name.Contains("Ticketland")||name.Contains("caption"))||name.StartsWith("028")&&name.Contains("Ticketland")))return;
@@ -49,6 +50,7 @@ void Reject(Action action)
     }
     throw new Exception("seed has no event with 3 priced seats");
 }
+DocumentArchive044Checks.Register(Test);
 TicketPro037Checks.Register(Test);
 BackupRetention036Checks.Register(Test);
 Documents035Checks.Register(Test);

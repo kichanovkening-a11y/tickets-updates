@@ -15,7 +15,7 @@ internal static class Pricing014Checks
         var hall=(Tickets.App.HallView)type.GetField("preview",flags)!.GetValue(editor)!;
         var prices=(IDictionary)type.GetField("prices",flags)!.GetValue(editor)!;
         var seats=(List<SeatInfo>)type.GetField("seats",flags)!.GetValue(editor)!;
-        var amount=Descendants(editor).OfType<TextBox>().Single(box=>box.Parent is Panel p&&p.Children.OfType<TextBlock>().Any(t=>t.Text=="Цена, ₽"));
+        var amount=Descendants(editor).OfType<TextBox>().Single(box=>box.Parent is Panel p&&Descendants(p).OfType<TextBlock>().Any(t=>t.Text=="Цена, ₽"));
         var chosen=seats.Take(2).Select(s=>s.Id).ToArray();
         hall.SetSelection(chosen);amount.Text="10000";amount.Focus();
         var original=(UIElement)editor.Content;
@@ -28,9 +28,9 @@ internal static class Pricing014Checks
         var summary=(Grid)type.GetField("priceSummary",flags)!.GetValue(editor)!;
         foreach(var cell in summary.Children.OfType<Border>())
         {
-            var text=(TextBlock)cell.Child;
-            Require(text.Text=="10000₽×2=20000₽"&&text.TextWrapping==TextWrapping.NoWrap,"Summary uses exact unbroken price expression");
-            Require(cell.HorizontalAlignment==HorizontalAlignment.Left,"Colored summaries fit content");
+            var text=(Tickets.App.CompactText043)cell.Child;
+            Require(text.Text=="10000₽×2=20000₽"&&text.TextWrapping==TextWrapping.Wrap,"Summary retains the exact price expression");
+            Require(cell.HorizontalAlignment==HorizontalAlignment.Stretch,"Colored summaries fill the sidebar column");
         }
         Require(summary.ColumnDefinitions.All(c=>c.Width.IsAuto),"Summary columns measure their content");
         var tip=(ToolTip)typeof(Tickets.App.HallView).GetField("seatTip",flags)!.GetValue(hall)!;

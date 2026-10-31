@@ -37,10 +37,15 @@ internal static class HallLayout043UiChecks
         Check(Math.Abs(Screen(label).Top-Screen(summary).Bottom-3)<.6,"recipient label follows selection text by 3 pixels");
         var list=(ListBox)main.FindName("SelectedPriceSummary");
         ((ComboBox)main.FindName("SelectedViewBox")).SelectedIndex=1;
-        list.ItemsSource=new[]{"1 000 ₽ × 97 = 97 000 ₽","Всего: 97 · 97 000 ₽"};Pump();
+        list.ItemsSource=new[]{new PriceSummaryRow044("1 000×97 = 97 000",true),new PriceSummaryRow044("500×1 = 500"),new PriceSummaryRow044("Всего: 98 · 97 500",false,true)};Pump();
         var text=Visuals(list).OfType<CompactText043>().ToArray();
-        Check(text.Length==2&&Math.Abs(Screen(text[0]).Top-Screen(list).Top-5)<.6,"price summary starts 5 pixels below border");
-        if(text.Length==2)Check(Math.Abs(Screen(text[1]).Top-Screen(text[0]).Bottom-3)<.6,"price summary and total have a 3 pixel gap");
+        Check(text.Length==3&&Math.Abs(Screen(text[0]).Top-Screen(list).Top-5)<.6,"price summary starts 5 pixels below border");
+        if(text.Length==3)
+        {
+            Check(Math.Abs(Screen(text[1]).Top-Screen(text[0]).Bottom-4)<.6,"price summary rows have a 4 pixel gap");
+            Check(Math.Abs(Screen(text[2]).Top-Screen(text[1]).Bottom-10)<.6,"price summary and total have a 10 pixel gap");
+            Check(text.All(row=>Math.Abs(Screen(row).Left-Screen(list).Left-5)<.6&&row.TextAlignment==TextAlignment.Left),"all summary rows share the left edge five pixels from the border");
+        }
         foreach(var plaque in ((Grid)main.FindName("LegendPanel")).Children.OfType<Border>().Take(1))
         {
             var ink=Screen((FrameworkElement)plaque.Child);var bounds=Screen(plaque);
@@ -50,7 +55,7 @@ internal static class HallLayout043UiChecks
         foreach(var button in new[]{(Button)main.FindName("PrintTicketsButton"),(Button)main.FindName("IssueButton")})
         {
             var ink=Visuals(button).OfType<CompactText043>().Single();var a=Screen(button);var b=Screen(ink);
-            Check(Math.Abs(b.Top-a.Top-5)<.6&&Math.Abs(a.Bottom-b.Bottom-5)<.6&&Math.Abs(b.Left-a.Left-5)<.6&&Math.Abs(a.Right-b.Right-5)<.6,"document button keeps 5 pixel ink padding: "+button.Name);
+            Check(Math.Abs(b.Top-a.Top-10)<.6&&Math.Abs(a.Bottom-b.Bottom-10)<.6&&Math.Abs(b.Left-a.Left-5)<.6&&Math.Abs(a.Right-b.Right-5)<.6,"document button adds 10 pixels in height and keeps centered text and 5 pixel side insets: "+button.Name);
             Check(ink.FontSize==14,"document button font unchanged");
         }
         CheckRasterLines(summary);

@@ -182,7 +182,7 @@ public partial class MainWindow : Window
         if(!ready) return;
         var selected=Hall.SelectedSeats;
         SelectedList.ItemsSource=selected.Select(s=>new{ s.Label,Status=s.Status+" · "+InvoiceDocuments.Money(s.Amount??0),AlertBrush=s.TicketId.HasValue||s.IsBlocked||s.IsTicketlandSold||s.IsTicketlandOccupied?Brushes.Red:Brushes.Black}).ToList();
-        SelectedPriceSummary.ItemsSource=selected.GroupBy(s=>s.Amount).OrderByDescending(g=>g.Key).Select(g=>$"{(g.Key.HasValue?InvoiceDocuments.Money(g.Key.Value):"Без цены")} × {g.Count()} = {InvoiceDocuments.Money(g.Sum(s=>s.Amount??0))}").Append($"Всего: {selected.Count} · {InvoiceDocuments.Money(selected.Sum(s=>s.Amount??0))}").ToList();
+        SelectedPriceSummary.ItemsSource=PriceSummaryRow044.For(selected);
         IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Получатель: {g.Key} — мест: {g.Count()}"));
         IssuedRecipients.Visibility=string.IsNullOrEmpty(IssuedRecipients.Text)?Visibility.Collapsed:Visibility.Visible;
         var archived=currentArchived;

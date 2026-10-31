@@ -13,9 +13,11 @@ public sealed class CompactText043 : Control
     public static readonly DependencyProperty TextProperty=DependencyProperty.Register(nameof(Text),typeof(string),typeof(CompactText043),new FrameworkPropertyMetadata("",FrameworkPropertyMetadataOptions.AffectsMeasure));
     public static readonly DependencyProperty TextWrappingProperty=DependencyProperty.Register(nameof(TextWrapping),typeof(TextWrapping),typeof(CompactText043),new FrameworkPropertyMetadata(TextWrapping.NoWrap,FrameworkPropertyMetadataOptions.AffectsMeasure));
     public static readonly DependencyProperty TextAlignmentProperty=DependencyProperty.Register(nameof(TextAlignment),typeof(TextAlignment),typeof(CompactText043),new FrameworkPropertyMetadata(TextAlignment.Center,FrameworkPropertyMetadataOptions.AffectsRender));
+    public static readonly DependencyProperty LineGapProperty=DependencyProperty.Register(nameof(LineGap),typeof(double),typeof(CompactText043),new FrameworkPropertyMetadata(3d,FrameworkPropertyMetadataOptions.AffectsMeasure),value=>value is double gap&&double.IsFinite(gap)&&gap>=0);
     public string Text{get=>(string)GetValue(TextProperty);set=>SetValue(TextProperty,value);}
     public TextWrapping TextWrapping{get=>(TextWrapping)GetValue(TextWrappingProperty);set=>SetValue(TextWrappingProperty,value);}
     public TextAlignment TextAlignment{get=>(TextAlignment)GetValue(TextAlignmentProperty);set=>SetValue(TextAlignmentProperty,value);}
+    public double LineGap{get=>(double)GetValue(LineGapProperty);set=>SetValue(LineGapProperty,value);}
     private readonly List<(FormattedText Text,Rect Ink)> lines=[];
     private double lineGap;
     public CompactText043(){Focusable=false;IsTabStop=false;}
@@ -34,7 +36,7 @@ public sealed class CompactText043 : Control
         new Typeface(FontFamily,FontStyle,FontWeight,FontStretch),FontSize,Foreground,VisualTreeHelper.GetDpi(this).PixelsPerDip);
     protected override Size MeasureOverride(Size availableSize)
     {
-        lines.Clear();lineGap=3/PhysicalScale(this).Y;
+        lines.Clear();lineGap=LineGap/PhysicalScale(this).Y;
         var width=TextWrapping==TextWrapping.NoWrap?double.PositiveInfinity:Math.Max(1,availableSize.Width);
         foreach(var paragraph in (Text??"").Replace("\r","").Split('\n'))
         {

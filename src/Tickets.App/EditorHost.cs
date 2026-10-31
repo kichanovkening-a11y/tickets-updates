@@ -49,13 +49,17 @@ public partial class MainWindow
             documentFrame.Children.Add(DocumentFlag025.Tab(tab));card.Margin=new Thickness(0);Grid.SetColumn(card,1);documentFrame.Children.Add(card);page.Children.Add(documentFrame);
         }
         else page.Children.Add(card);
-        var title=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,editor is PriceEditorWindow||editor.DocumentTab is not null?0:8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
+        var title=new Grid{Background=Brushes.AliceBlue,Margin=new Thickness(0,0,0,editor is PriceEditorWindow or EventEditorWindow||editor.DocumentTab is not null?0:8)};DockPanel.SetDock(title,Dock.Top);panel.Children.Add(title);
         title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         title.ColumnDefinitions.Add(new ColumnDefinition());
         title.ColumnDefinitions.Add(new ColumnDefinition{Width=GridLength.Auto});
         var close=new Button{Content="Закрыть",Margin=new Thickness(editor.DocumentTab is not null?2:8),Width=120};close.Click+=(_,_)=>editor.Close();Grid.SetColumn(close,2);title.Children.Add(close);
         if(editor is PriceEditorWindow priceEditor&&priceEditor.HeaderSaveAction is not null)
         {
+            EditorLayout044.Install(title);
+            title.Children.Remove(close);close.Margin=new Thickness(0);
+            var controls=new StackPanel{Orientation=Orientation.Horizontal};controls.SetResourceReference(MarginProperty,"EditorInset044");Grid.SetColumn(controls,2);title.Children.Add(controls);
+            var expansion=priceEditor.HallExpansionButton038();expansion.SetResourceReference(MarginProperty,"EditorRight044");controls.Children.Add(expansion);controls.Children.Add(close);
             // Match the pricing form's sidebar so the caption is centred over the hall.
             title.ColumnDefinitions[0].Width=new GridLength(306);
             var save=new Button{Content="Сохранить",Margin=new Thickness(8),Width=180};save.Click+=(_,_)=>priceEditor.HeaderSaveAction();title.Children.Add(save);
@@ -65,7 +69,7 @@ public partial class MainWindow
         else
         {
             var caption=new TextBlock{Text=editor.Title,FontSize=21,FontWeight=FontWeights.Bold,Margin=new Thickness(editor.DocumentTab is not null?2:15),HorizontalAlignment=HorizontalAlignment.Center,TextAlignment=TextAlignment.Center,VerticalAlignment=VerticalAlignment.Center,TextWrapping=TextWrapping.Wrap};
-            Grid.SetColumn(caption,1);title.Children.Add(caption);
+            Grid.SetColumn(caption,editor is EventEditorWindow?0:1);if(editor is EventEditorWindow){Grid.SetColumnSpan(caption,3);caption.IsHitTestVisible=false;}title.Children.Add(caption);
         }
         var content=new ContentControl{Content=body,Tag=editor,HorizontalContentAlignment=HorizontalAlignment.Stretch,VerticalContentAlignment=VerticalAlignment.Stretch};panel.Children.Add(content);
         var previous=Keyboard.FocusedElement;if(editorStack.TryPeek(out var prior))prior.IsEnabled=false;

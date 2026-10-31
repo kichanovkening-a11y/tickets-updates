@@ -4,13 +4,13 @@
     <ControlTemplate x:Key="WorkspaceTabsTemplate042" TargetType="TabControl">
       <Grid KeyboardNavigation.TabNavigation="Local">
         <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MinHeight="{DynamicResource HallIconSize043}" Margin="{DynamicResource HallHeaderReserve043}" Focusable="False">
+        <ScrollViewer SizeChanged="HallHeaderSizeChanged044" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" MinHeight="{DynamicResource HallIconSize043}" Margin="{DynamicResource HallHeaderReserve043}" Focusable="False">
           <StackPanel Orientation="Horizontal">
-            <TabPanel IsItemsHost="True" Panel.ZIndex="1" KeyboardNavigation.TabIndex="1"/>
+            <TabPanel VerticalAlignment="Bottom" IsItemsHost="True" Panel.ZIndex="1" KeyboardNavigation.TabIndex="1"/>
             <ContentPresenter Content="{TemplateBinding Tag}"/>
           </StackPanel>
         </ScrollViewer>
-        <Border Grid.Row="1" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+        <Border x:Name="HallContentBorder044" Grid.Row="1" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
           <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"/>
         </Border>
       </Grid>
@@ -18,7 +18,7 @@
     <DataTemplate x:Key="HallLabel043"><local:CompactText043 Text="{Binding}"/></DataTemplate>
     <Style x:Key="HallHeaderAction042" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
       <Setter Property="Width" Value="Auto"/><Setter Property="Height" Value="Auto"/><Setter Property="MinHeight" Value="0"/><Setter Property="FontSize" Value="14"/>
-      <Setter Property="Padding" Value="{DynamicResource Px4Inset043}"/><Setter Property="BorderThickness" Value="{DynamicResource Px1Border043}"/><Setter Property="Margin" Value="{DynamicResource Px5Left043}"/><Setter Property="ContentTemplate" Value="{StaticResource HallLabel043}"/><Setter Property="VerticalAlignment" Value="Bottom"/>
+      <Setter Property="Padding" Value="{DynamicResource HallButtonPadding044}"/><Setter Property="BorderThickness" Value="{DynamicResource Px1Border043}"/><Setter Property="Margin" Value="{DynamicResource Px5Left043}"/><Setter Property="ContentTemplate" Value="{StaticResource HallLabel043}"/><Setter Property="VerticalAlignment" Value="Bottom"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button">
         <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
           <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -30,7 +30,7 @@
       </ControlTemplate></Setter.Value></Setter>
     </Style>
     <Style x:Key="HallTab042" TargetType="TabItem">
-      <Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="Padding" Value="{DynamicResource Px4Inset043}"/><Setter Property="BorderThickness" Value="{DynamicResource Px1Border043}"/><Setter Property="VerticalAlignment" Value="Bottom"/>
+      <Setter Property="FontSize" Value="14"/><Setter Property="FontWeight" Value="Bold"/><Setter Property="Padding" Value="{DynamicResource HallButtonPadding044}"/><Setter Property="BorderThickness" Value="{DynamicResource Px1Border043}"/><Setter Property="VerticalAlignment" Value="Bottom"/>
       <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem">
         <Border x:Name="TabBorder" Background="#EEEEEE" BorderBrush="#CBD5E1" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
           <local:CompactText043 Text="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}" HorizontalAlignment="Center" VerticalAlignment="Center"/>
@@ -80,7 +80,7 @@
       </Border>
       <Grid x:Name="Workspace" ClipToBounds="True" Grid.Column="2" Visibility="Collapsed"><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="6"/><ColumnDefinition Width="250" MinWidth="200" MaxWidth="500"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
         <StackPanel x:Name="EventSummaryHeader" Margin="{DynamicResource EventHeaderMargin043}"><ScrollViewer x:Name="EventHeaderScroll" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled"><StackPanel Orientation="Horizontal"><local:CompactText043 x:Name="EventTitle" Text="Выберите мероприятие" FontSize="22" FontWeight="SemiBold"/><local:CompactText043 x:Name="EventDate" FontSize="19" Margin="10,0,0,0" FontWeight="Bold"/><local:CompactText043 x:Name="EventVenue" FontSize="19" Foreground="#64748B" Margin="10,0,0,0"/></StackPanel></ScrollViewer>
-          <TextBlock x:Name="EventSubtitle" FontSize="19" Foreground="#64748B" Margin="0,5,0,0" TextWrapping="Wrap" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
+          <local:CompactText043 x:Name="EventSubtitle" FontSize="19" Foreground="#64748B" Margin="{DynamicResource Px3Top044}" TextWrapping="Wrap" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/></StackPanel>
         <TabControl x:Name="WorkspaceTabs" SelectionChanged="WorkspaceTabChanged" Grid.Row="1" BorderBrush="#CBD5E1" Background="White" Template="{StaticResource WorkspaceTabsTemplate042}">
           <TabControl.Tag>
             <StackPanel x:Name="SquareShowActions" Orientation="Horizontal" Margin="0" VerticalAlignment="Bottom">
@@ -124,10 +124,10 @@
             </DockPanel>
           </TabItem>
         </TabControl>
-        <StackPanel x:Name="HallIcons043" Grid.Row="1" Orientation="Horizontal" Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{DynamicResource Px5Right043}">
-        <Button x:Name="RefreshTicketlandButton029" Width="{DynamicResource HallIconSize043}" Height="{DynamicResource HallIconSize043}" FontSize="20" ContentTemplate="{x:Null}" Padding="0" Content="↻" Margin="{DynamicResource Px5Right043}" ToolTip="Обновить" AutomationProperties.Name="Обновить" Loaded="InitializeTicketlandUi029" Click="RefreshTicketlandClick029"/>
+        <StackPanel x:Name="HallIcons043" Grid.Row="1" Orientation="Horizontal" Panel.ZIndex="2" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="{DynamicResource HallIconsMargin044}">
+        <Button x:Name="RefreshTicketlandButton029" Width="{DynamicResource HallIconSize043}" Height="{DynamicResource HallIconSize043}" FontSize="24" ContentTemplate="{x:Null}" Padding="0" Content="↻" Margin="{DynamicResource Px5Right043}" ToolTip="Обновить" AutomationProperties.Name="Обновить" Loaded="InitializeTicketlandUi029" Click="RefreshTicketlandClick029"/>
         <Button x:Name="ToggleHallButton038" Width="{DynamicResource HallIconSize043}" Height="{DynamicResource HallIconSize043}" Margin="0" Padding="3" ContentTemplate="{x:Null}" ToolTip="Раскрыть зал" AutomationProperties.Name="Раскрыть зал" Click="ToggleHallClick038">
-          <Viewbox Stretch="Uniform"><Canvas Width="24" Height="24">
+          <Viewbox Width="24" Height="24" Stretch="Uniform"><Canvas Width="24" Height="24">
             <Path Fill="#00B428" Data="M2,2 L10,2 L10,5 L7,5 L12,10 L10,12 L5,7 L5,10 L2,10 Z"/>
             <Path Fill="#00B428" Data="M2,2 L10,2 L10,5 L7,5 L12,10 L10,12 L5,7 L5,10 L2,10 Z"><Path.RenderTransform><RotateTransform Angle="90" CenterX="12" CenterY="12"/></Path.RenderTransform></Path>
             <Path Fill="#00B428" Data="M2,2 L10,2 L10,5 L7,5 L12,10 L10,12 L5,7 L5,10 L2,10 Z"><Path.RenderTransform><RotateTransform Angle="180" CenterX="12" CenterY="12"/></Path.RenderTransform></Path>
@@ -152,14 +152,14 @@
               <Button Style="{StaticResource SeatActionStyle}" x:Name="ApplyPriceButton" Content="Применить цену" Click="ApplyPriceClick"/>
             </StackPanel>
             <Grid><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-              <ComboBox x:Name="SelectedViewBox" SelectedIndex="0" SelectionChanged="SelectedViewChanged" MinHeight="28" Padding="3" Margin="0,0,0,5"><ComboBoxItem Content="По местам"/><ComboBoxItem Content="Сводка по ценам"/></ComboBox>
-              <ListBox x:Name="SelectedList" Grid.Row="1" BorderBrush="#E2E8F0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ComboBox x:Name="SelectedViewBox" SelectedIndex="1" SelectionChanged="SelectedViewChanged" MinHeight="28" Padding="3" Margin="0,0,0,5"><ComboBoxItem Content="По местам"/><ComboBoxItem Content="Сводка по ценам"/></ComboBox>
+              <ListBox x:Name="SelectedList" Grid.Row="1" Visibility="Collapsed" BorderBrush="#E2E8F0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.ItemTemplate><DataTemplate><StackPanel Margin="3,4"><TextBlock Text="{Binding Label}" TextWrapping="Wrap" FontSize="15.6" Foreground="{Binding AlertBrush}" FontWeight="Bold"/><TextBlock Text="{Binding Status}" TextWrapping="Wrap" FontSize="14.3" Foreground="{Binding AlertBrush}"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
               </ListBox>
-              <ListBox x:Name="SelectedPriceSummary" Padding="{DynamicResource Px4Inset043}" BorderThickness="{DynamicResource Px1Border043}" Grid.Row="1" Visibility="Collapsed" BorderBrush="#E2E8F0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+              <ListBox x:Name="SelectedPriceSummary" Padding="{DynamicResource Px4Inset043}" BorderThickness="{DynamicResource Px1Border043}" Grid.Row="1" BorderBrush="#E2E8F0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                 <ListBox.Template><ControlTemplate TargetType="ListBox"><Border BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"><ScrollViewer Focusable="False" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto"><ItemsPresenter/></ScrollViewer></Border></ControlTemplate></ListBox.Template>
-                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="{DynamicResource Px3Bottom043}"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
-                <ListBox.ItemTemplate><DataTemplate><local:CompactText043 Text="{Binding}" FontSize="14.3" FontWeight="Bold" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
+                <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Padding" Value="0"/><Setter Property="Margin" Value="{DynamicResource Px4Top044}"/><Setter Property="HorizontalContentAlignment" Value="Stretch"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><ContentPresenter/></ControlTemplate></Setter.Value></Setter><Style.Triggers><DataTrigger Binding="{Binding IsTotal}" Value="True"><Setter Property="Margin" Value="{DynamicResource Px10Top044}"/></DataTrigger><DataTrigger Binding="{Binding IsFirst}" Value="True"><Setter Property="Margin" Value="0"/></DataTrigger></Style.Triggers></Style></ListBox.ItemContainerStyle>
+                <ListBox.ItemTemplate><DataTemplate><local:CompactText043 Text="{Binding Text}" TextAlignment="Left" LineGap="4" FontSize="14.3" FontWeight="Bold" TextWrapping="Wrap"/></DataTemplate></ListBox.ItemTemplate>
               </ListBox>
             </Grid>
           </DockPanel>

@@ -9,6 +9,12 @@ namespace Tickets.App;
 
 public partial class MainWindow
 {
+    private double hallHeaderHeight044=32;
+    private void HallHeaderSizeChanged044(object sender,SizeChangedEventArgs e)
+    {
+        hallHeaderHeight044=((FrameworkElement)sender).ActualHeight;
+        Resources["HallIconsMargin044"]=new Thickness(0,Math.Max(0,hallHeaderHeight044-32),5/CompactText043.PhysicalScale((Visual)Content).X,0);
+    }
     private Vector spacingScale043;
     private double sidebarPreferredWidth043=250;
     private bool sidebarDragging043;
@@ -51,10 +57,13 @@ public partial class MainWindow
         Resources["BannerPadding043"]=new Thickness(20,5/scale.Y,20,5/scale.Y);
         Resources["WorkspaceMargin043"]=new Thickness(12,5/scale.Y,12,5/scale.Y);
         Resources["EventHeaderMargin043"]=Insets(5,0,0,5);
-        var text=new FormattedText("Журнал выдачи и возвратов",CultureInfo.CurrentUICulture,FlowDirection.LeftToRight,new Typeface(FontFamily,FontStyles.Normal,FontWeights.Bold,FontStretches.Normal),14,Brushes.Black,VisualTreeHelper.GetDpi(this).PixelsPerDip);
-        var iconHeight=Math.Ceiling(text.BuildGeometry(new Point()).Bounds.Height*scale.Y+10)/scale.Y;
-        Resources["HallIconSize043"]=iconHeight;
-        Resources["HallHeaderReserve043"]=new Thickness(0,0,iconHeight*2+15/scale.X,0);
+        Resources["Px3Top044"]=Insets(0,3,0,0);
+        Resources["Px4Top044"]=Insets(0,4,0,0);
+        Resources["Px10Top044"]=Insets(0,10,0,0);
+        Resources["HallButtonPadding044"]=Insets(4,9,4,9);
+        Resources["HallIconSize043"]=32d;
+        Resources["HallIconsMargin044"]=new Thickness(0,Math.Max(0,hallHeaderHeight044-32),5/scale.X,0);
+        Resources["HallHeaderReserve043"]=new Thickness(0,0,64+15/scale.X,5/scale.Y);
         // Text line gaps also depend on DPI; invalidate visible compact text after a monitor change.
         InvalidateMeasure();
     }

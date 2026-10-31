@@ -23,6 +23,7 @@ internal static class Recipients024Checks
             Check(!Walk(recipients).OfType<Button>().Any(b=>Equals(b.Content,"Открыть выдачу")),"recipient history omits redundant open action");
             Check(!Walk(recipients).OfType<TextBlock>().Any(t=>t.Text.Contains("Реквизиты UI024 скрыты")),"requisites stay in their editor");
             Check(Walk(recipients).OfType<Button>().Any(b=>Equals(b.Content,"Реквизиты организации")),"requisites editor action remains");
+            if(store.DocumentArchive().Contains(choice.Event.Id,choice.Event.Date))Walk(recipients).OfType<Button>().Single(b=>Equals(b.Content,"Архив")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var history=Walk(recipients).OfType<TreeView>().Single();
             var performance=Walk(history).OfType<TreeViewItem>().First(x=>x.Header is TextBlock t&&t.Text==choice.Event.Title);
             performance.IsSelected=true;Pump();var title=(TextBlock)performance.Header;
@@ -34,6 +35,7 @@ internal static class Recipients024Checks
         var saved=new RecipientPackagesWindow(store,recipient);saved.Show();Pump();
         try
         {
+            if(store.DocumentArchive().Contains(package))Walk(saved).OfType<Button>().Single(b=>Equals(b.Content,"Архив")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             var buttons=Walk(saved).OfType<Button>().Where(b=>b.Tag is long).ToArray();
             Check(buttons.Length==1&&Equals(buttons[0].Tag,package.Id),"saved packages window lists stored package");
             Check(!Walk(saved).OfType<ContextMenu>().Any(),"saved packages use a window list");

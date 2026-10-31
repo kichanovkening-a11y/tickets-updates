@@ -9,10 +9,11 @@ using Tickets.Core;
 
 internal static class ScheduleReturns027UiChecks
 {
-    internal static void Run(Store store)
+    internal static void Run(Store store)=>Run(store,false);
+    internal static void Run(Store store,bool offscreen)
     {
         var performance=store.Performances().First();
-        var editor=new EventEditorWindow(store,performance.Id);editor.Show();Pump();
+        var editor=new EventEditorWindow(store,performance.Id);Show(editor,offscreen);
         try
         {
             var combos=Walk(editor).OfType<ComboBox>().ToArray();
@@ -30,13 +31,14 @@ internal static class ScheduleReturns027UiChecks
         }
         finally{editor.Close();}
 
-        var show=store.Events().First(e=>store.Seats(e.Id).Any(s=>s.Available));var seat=store.Seats(show.Id).First(s=>s.Available);
+        var show=store.Events().First(e=>DateTime.TryParse(e.SortDate,out var starts)&&starts<DateTime.Now&&store.Seats(e.Id).Any(s=>s.Available));var seat=store.Seats(show.Id).First(s=>s.Available);
         const string recipient="UI Возврат027";store.SaveOrganizationDetails(recipient,false,new(Name:recipient));
         var issue=store.Issue(show.Id,[seat.Id],recipient,"UIRET027",1);store.Return([store.History(show.Id).Single(t=>t.IssueId==issue).Id]);
-        var window=new RecipientsWindow(store);window.Show();Pump();
+        var window=new RecipientsWindow(store);Show(window,offscreen);
         try
         {
             var organizations=Walk(window).OfType<ListBox>().Single();organizations.SelectedItem=organizations.Items.OfType<RecipientDirectoryInfo>().Single(r=>r.Name==recipient);Pump();
+            Walk(window).OfType<Button>().Single(b=>Equals(b.Content,"Архив")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));Pump();
             var toggle=Walk(window).OfType<TextBlock>().Single(t=>t.Text=="Возврат: 1");
             Check(ReturnedTicketDetails027.IsToggleSource(toggle),"return count identifiable before invoice handler");
             var before=Application.Current.Windows.OfType<Window>().Count();
@@ -49,6 +51,11 @@ internal static class ScheduleReturns027UiChecks
             ClickCount();Pump();Check(table.Visibility==Visibility.Visible,"return details reopen inline");
         }
         finally{window.Close();}
+    }
+    private static void Show(Window window,bool offscreen)
+    {
+        if(offscreen){window.WindowStartupLocation=WindowStartupLocation.Manual;window.Left=-10000;window.Top=-10000;window.ShowActivated=false;window.ShowInTaskbar=false;}
+        window.Show();Pump();
     }
     private static void Check(bool value,string message){if(!value)throw new Exception(message);Console.WriteLine("PASS 027 "+message);}
     private static void Pump()=>Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);

@@ -181,6 +181,7 @@ internal static class Corrections044UiChecks
 
                 Corrections025UiChecks.Capture(main,"044-recipient-archive");
             });
+            ScheduleReturns027UiChecks.Run(store,true);
         }
         finally{main.Close();}
     }

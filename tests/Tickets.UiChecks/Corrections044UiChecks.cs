@@ -80,6 +80,7 @@ internal static class Corrections044UiChecks
                 Check(Screen(first).Top-Screen(header).Bottom<6,"new show form begins immediately below blue header");
                 Corrections025UiChecks.Capture(main,"044-new-show");
             });
+            main.Width=1044;Pump(); // A small desktop can already constrain the unexpanded card.
             var pricing=new PriceEditorWindow(store,venue,plan);
             Hosted(main,pricing,content=>{
                 var combos=Walk(content).OfType<ComboBox>().ToArray();var plans=combos[1];
@@ -99,8 +100,15 @@ internal static class Corrections044UiChecks
                 Check(Math.Abs(Screen((FrameworkElement)total.Parent).Top-Screen(header).Bottom-5)<.7,"pricing totals start five physical pixels below blue header");
                 var form=(StackPanel)grid.Parent;var blocks=form.Children.OfType<FrameworkElement>().Where(block=>block.Visibility==Visibility.Visible).ToArray();
                 for(var i=1;i<blocks.Length;i++)Check(Math.Abs(Screen(blocks[i]).Top-Screen(blocks[i-1]).Bottom-5)<.7,"pricing sidebar consecutive block gap is five pixels: "+i);
-                var before=Screen(content).Width;Click(toggle);Check(Screen(content).Width>before&&pricing.HallExpanded038,"embedded pricing expands");
-                Corrections025UiChecks.Capture(main,"044-pricing-expanded");Click(toggle);Check(!pricing.HallExpanded038,"embedded pricing restores");
+                var layer=(FrameworkElement)main.FindName("DialogLayer");
+                var card=Walk(layer).OfType<Border>().Single(border=>Equals(border.BorderBrush,Brushes.SlateGray));
+                var before=Screen(content).Width;Click(toggle);
+                Check(pricing.HallExpanded038&&double.IsPositiveInfinity(card.MaxWidth)&&double.IsPositiveInfinity(card.MaxHeight)&&Screen(content).Width>=before-.7,"embedded expansion removes size limits even when desktop already constrains width");
+                var scale=CompactText043.PhysicalScale(card);
+                Check(Math.Abs(Screen(card).Width-(Screen(layer).Width-(card.Margin.Left+card.Margin.Right)*scale.X))<.7,"expanded pricing fills available desktop width");
+                main.Width=1536;Pump();
+                Check(Math.Abs(Screen(card).Width-(Screen(layer).Width-(card.Margin.Left+card.Margin.Right)*scale.X))<.7,"expanded pricing follows available width after resize");
+                Corrections025UiChecks.Capture(main,"044-pricing-expanded");Click(toggle);Check(!pricing.HallExpanded038&&card.MaxWidth==pricing.Width&&card.MaxHeight==pricing.Height,"embedded pricing restores original size limits");
                 var hall=PrivateValue<HallView>(pricing,"preview");hall.SetSelection([ids[1]]);
                 plaques[0].RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
                 Check(hall.FocusPrice.HasValue&&hall.Selected.SetEquals([ids[1]]),"moved pricing plaque retains focus behavior and selection");

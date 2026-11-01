@@ -35,8 +35,7 @@ internal static class WordRenderWorker
     private static void CheckTtnFields(object document,string directory)
     {
         using var zip=ZipFile.OpenRead(Path.Combine(directory,"document.docx"));
-        var entry=zip.GetEntry("customXml/tickets-ttn-045.xml");if(entry is null)return;
-        using var input=entry.Open();var metadata=XDocument.Load(input);
+        var metadata=ApprovedTtn.ReadLayout(zip);if(metadata is null)return;
         var fields=metadata.Root!.Elements().ToDictionary(e=>(string)e.Attribute("name")!,e=>e,StringComparer.Ordinal);
         object? bookmarks=null;
         try

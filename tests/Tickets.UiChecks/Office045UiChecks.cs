@@ -18,6 +18,7 @@ internal static class Office045UiChecks
     {
         if(Type.GetTypeFromProgID("Word.Application") is null)throw new Exception("Native Office verification requires installed Word");
         BeforeOpenCleanup();
+        TemplateSavedByWord();
         var type=typeof(Tickets.App.App).Assembly.GetType("Tickets.App.WordDocumentPages",true)!;
         var render=type.GetMethod("RenderAsync",BindingFlags.Static|BindingFlags.NonPublic)!;
         var before=Process.GetProcessesByName("WINWORD").Select(p=>p.Id).ToHashSet();
@@ -92,6 +93,27 @@ internal static class Office045UiChecks
         var refused=false;
         try{Wait(WordDocumentPages.RenderAsync(oversized));}catch(TicketException ex){refused=ex.Message.Contains("поле",StringComparison.OrdinalIgnoreCase)&&ex.Message.Contains("ТТН");}
         Check(refused,"approved TTN refuses to silently clip text outside fixed source cells");
+    }
+    private static void TemplateSavedByWord()
+    {
+        var directory=Path.Combine(Path.GetTempPath(),"Tickets-word-template-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(directory);
+        object? document=null;
+        try
+        {
+            var source=Path.Combine(directory,"template.docx");var target=Path.Combine(directory,"saved.docx");File.WriteAllBytes(source,Store.DefaultRecipientForm("ttn")!.Content);
+            using(var session=WordAutomationSession.Start(directory))
+            {
+                try{document=session.OpenDocument(source);((dynamic)document).SaveAs2(FileName:target,FileFormat:16);}
+                finally{if(document is not null){((dynamic)document).Close(SaveChanges:0);System.Runtime.InteropServices.Marshal.FinalReleaseComObject(document);document=null;}}
+            }
+            var saved=File.ReadAllBytes(target);Check(ApprovedTtn.IsApproved(saved),"Word-saved TTN keeps its approved identity after custom XML parts are renamed");
+            var invoice=new InvoiceInfo(1,1,"ТТН после Word","Зал","01.11.2026","Получатель","2026-11-01T12:00:00Z",[]);
+            var filled=CustomDocumentForms.Fill(saved,invoice,"ttn",DateTime.Today);
+            Check(!CustomDocumentForms.Text(filled).Contains('{'),"automatic TTN fields still fill after Word saves the template");
+            var rendered=WordDocumentPages.RenderAsync(filled);Wait(rendered);
+            using var zip=ZipFile.OpenRead(rendered.Result);Check(zip.Entries.Count(e=>e.FullName.EndsWith(".fpage",StringComparison.OrdinalIgnoreCase))==2,"Word-saved TTN still renders its two approved sides");
+        }
+        finally{Directory.Delete(directory,true);}
     }
     private static void BeforeOpenCleanup()
     {

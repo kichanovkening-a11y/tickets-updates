@@ -66,6 +66,23 @@ internal static class Documents045Checks
                 Require(CustomDocumentForms.Fill(filled,invoice,"ttn",DateTime.Today).AsSpan().SequenceEqual(filled),"reopening a finished TTN regenerated or duplicated its pages");
             }
         });
+        test("045 approved TTN survives Word renaming its custom XML part",store=>
+        {
+            using var output=new MemoryStream();output.Write(Store.DefaultRecipientForm("ttn")!.Content);output.Position=0;
+            using(var zip=new ZipArchive(output,ZipArchiveMode.Update,true))
+            {
+                var old=zip.GetEntry("customXml/tickets-ttn-045.xml")!;byte[] bytes;
+                using(var input=old.Open())using(var copy=new MemoryStream()){input.CopyTo(copy);bytes=copy.ToArray();}
+                old.Delete();using(var target=zip.CreateEntry("customXml/item2.xml").Open())target.Write(bytes);
+                var relation=zip.GetEntry("word/_rels/document.xml.rels")!;XDocument relationships;
+                using(var input=relation.Open())relationships=XDocument.Load(input);
+                foreach(var target in relationships.Descendants().Attributes("Target").Where(a=>a.Value=="../customXml/tickets-ttn-045.xml"))target.Value="../customXml/item2.xml";
+                relation.Delete();using var outputPart=zip.CreateEntry("word/_rels/document.xml.rels").Open();relationships.Save(outputPart);
+            }
+            var template=output.ToArray();Require(ApprovedTtn.IsApproved(template),"Word-saved approved form is not recognized");
+            var filled=CustomDocumentForms.Fill(template,Issue(store,"Сохранение Word 045"),"ttn",DateTime.Today);
+            Require(!CustomDocumentForms.Text(filled).Contains('{'),"Word-saved TTN automatic fields remain unfilled");
+        });
         test("045 recipient document edits keep other recipients and historic issued packages independent",store=>
         {
             const string bank="Сбер проверка 045",other="Другая организация 045";

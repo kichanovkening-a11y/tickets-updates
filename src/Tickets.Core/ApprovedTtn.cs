@@ -13,7 +13,18 @@ public static class ApprovedTtn
     public static bool IsApproved(byte[] content)
     {
         using var zip=new ZipArchive(new MemoryStream(content),ZipArchiveMode.Read);
-        return zip.GetEntry("customXml/tickets-ttn-045.xml") is not null;
+        return ReadLayout(zip) is not null;
+    }
+    public static XDocument? ReadLayout(ZipArchive zip)
+    {
+        // Word preserves custom XML data but renames its package part to
+        // itemN.xml when saving. Identify the schema, never the physical name.
+        foreach(var entry in zip.Entries.Where(e=>e.FullName.StartsWith("customXml/",StringComparison.Ordinal)&&e.FullName.EndsWith(".xml",StringComparison.OrdinalIgnoreCase)))
+        {
+            using var input=entry.Open();var xml=XDocument.Load(input);
+            if(xml.Root?.Name==XName.Get("layout","urn:tickets:approved-ttn")&&(string?)xml.Root.Attribute("version")=="045")return xml;
+        }
+        return null;
     }
     private sealed record Line(InvoiceInfo Show,int Count,long Price)
     {internal decimal Total=>(decimal)Count*Price;}

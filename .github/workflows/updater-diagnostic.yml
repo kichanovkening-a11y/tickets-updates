@@ -25,7 +25,21 @@ jobs:
           $source=$source.Replace('MessageBox.Show("Не удалось открыть программу.', 'File.WriteAllText(Path.Combine(Path.GetTempPath(),"startup-error.txt"),ex.ToString()); MessageBox.Show("Не удалось открыть программу.')
           Set-Content $path $source -Encoding utf8
           $check='scripts/check_updater_windows.ps1'
-          (Get-Content $check -Raw).Replace('if($confirmed){break}', 'if($confirmed){break}; if($journals -and (Get-Content $journals[0].FullName -Raw | ConvertFrom-Json).Phase -eq "restored"){throw "Installation rolled back"}') | Set-Content $check -Encoding utf8
+          $observe=@'
+          if($confirmed){break}
+          if(-not $script:captured){
+            $child=Get-Process | Where-Object {$_.ProcessName -eq '! Tickets'} | Select-Object -First 1
+            if($child -and $child.MainWindowHandle -ne 0){
+              Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
+              $window=[System.Windows.Automation.AutomationElement]::FromHandle($child.MainWindowHandle)
+              $nodes=$window.FindAll([System.Windows.Automation.TreeScope]::Subtree,[System.Windows.Automation.Condition]::TrueCondition)
+              foreach($node in $nodes){Write-Host ('WINDOW: '+$node.Current.Name)}
+              $script:captured=$true
+            }
+          }
+          if($journals -and (Get-Content $journals[0].FullName -Raw | ConvertFrom-Json).Phase -eq "restored"){throw "Installation rolled back"}
+          '@
+          (Get-Content $check -Raw).Replace('if($confirmed){break}', $observe) | Set-Content $check -Encoding utf8
       - name: Publish isolated diagnostic payload
         shell: pwsh
         run: |

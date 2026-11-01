@@ -12,6 +12,13 @@ public sealed record InstallPlan(string Target,string Stage,List<UpdateFile> Fil
 
 public static class UpdateFiles
 {
+    public static bool CanUpdate(string folder)=>File.Exists(System.IO.Path.Combine(folder,"Tickets.dll"))||UpdateTransaction.HasPending(folder);
+    public static void EnsureLauncher(string folder)
+    {
+        var leading=SafePath(folder,"! Tickets.exe");var standard=SafePath(folder,"Tickets.exe");
+        if(!File.Exists(leading)&&File.Exists(standard))File.Copy(standard,leading);
+    }
+
     public static UpdateManifest Parse(string json,string repository)
     {
         if(json.Length>2000000)throw new InvalidDataException("Описание обновления слишком велико.");
@@ -41,7 +48,7 @@ public static class UpdateFiles
     {
         if(string.IsNullOrEmpty(path)||path.Contains('\\')||path.StartsWith('/')||path.Contains(':'))throw new InvalidDataException("Недопустимый путь обновления.");
         var parts=path.Split('/');
-        if(parts.Any(p=>!Regex.IsMatch(p,"^[A-Za-z0-9_.-]+$")||p is "." or ".."||p.EndsWith('.')||Regex.IsMatch(p,"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\.|$)",RegexOptions.IgnoreCase)))throw new InvalidDataException("Недопустимое имя файла.");
+        if(path!="! Tickets.exe"&&parts.Any(p=>!Regex.IsMatch(p,"^[A-Za-z0-9_.-]+$")||p is "." or ".."||p.EndsWith('.')||Regex.IsMatch(p,"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\\.|$)",RegexOptions.IgnoreCase)))throw new InvalidDataException("Недопустимое имя файла.");
         var managed=parts.Length==1&&(path.EndsWith(".dll",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".deps.json",StringComparison.OrdinalIgnoreCase)||path.EndsWith(".runtimeconfig.json",StringComparison.OrdinalIgnoreCase));
         var resource=parts.Length==2&&Regex.IsMatch(parts[0],"^[a-z]{2,3}(-[A-Za-z]{2,8})?$")&&parts[1].EndsWith(".resources.dll",StringComparison.OrdinalIgnoreCase);
         if(!managed&&!resource)throw new InvalidDataException("Обновление не может изменять базу, настройки или пользовательские файлы.");
@@ -81,6 +88,17 @@ public static class UpdateFiles
         {
             SafePath(plan.Target,f.Path);
             if(!Digest(f.Sha256)||!Hash(SafePath(plan.Stage,f.Path)).Equals(f.Sha256,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Повреждён подготовленный файл: "+f.Path);
+        }
+        // Probe every target before any replacement: rollback cannot repair a locked DLL.
+        foreach(var f in plan.Files)
+        {
+            var target=SafePath(plan.Target,f.Path);
+            if(Directory.Exists(target))throw new IOException("Вместо файла обнаружена папка: "+f.Path);
+            if(File.Exists(target))
+            {
+                using var probe=new FileStream(target,FileMode.Open,FileAccess.ReadWrite,FileShare.None);
+                if((File.GetAttributes(target)&FileAttributes.ReadOnly)!=0)throw new IOException("Файл доступен только для чтения: "+f.Path);
+            }
         }
         var data=System.IO.Path.Combine(plan.Target,"Data");Directory.CreateDirectory(data);
         using var guard=new FileStream(System.IO.Path.Combine(data,"session.lock"),FileMode.OpenOrCreate,FileAccess.ReadWrite,FileShare.None);

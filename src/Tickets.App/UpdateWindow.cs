@@ -26,7 +26,7 @@ internal sealed class UpdateWindow : EditorWindow
         var status=new TextBlock{Text="Нажмите «Проверить обновления».",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,18,0,10)};form.Children.Add(status);
         var check=new Button{Content="Проверить обновления"};form.Children.Add(check);
         var install=new Button{Content="Скачать и установить",IsEnabled=false,Margin=new Thickness(0,12,0,0)};form.Children.Add(install);
-        form.Children.Add(new TextBlock{Text="Скачиваются только изменившиеся компоненты. Перед установкой сохраняется копия базы; затем программа перезапускается.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,20,0,0)});
+        form.Children.Add(new TextBlock{Text="Обновлятор проверяет полный комплект файлов и копию базы. Перед установкой сохраняется резерв программы и данных; затем программа перезапускается.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,20,0,0)});
         check.Click+=async(_,_)=>{
             if(busy)return;busy=true;check.IsEnabled=false;install.IsEnabled=false;repository.IsEnabled=false;
             try
@@ -41,34 +41,18 @@ internal sealed class UpdateWindow : EditorWindow
             finally{busy=false;check.IsEnabled=true;repository.IsEnabled=true;}
         };
         repository.TextChanged+=(_,_)=>{manifest=null;install.IsEnabled=false;};
-        install.Click+=async(_,_)=>{
-            if(busy||manifest is null)return;busy=true;check.IsEnabled=false;install.IsEnabled=false;repository.IsEnabled=false;
+        install.Click+=(_,_)=>{
+            if(busy||manifest is null)return;
             try
             {
-                var work=Path.Combine(Path.GetTempPath(),"TicketsUpdates",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(work);
-                var plan=await client.DownloadAsync(manifest,AppContext.BaseDirectory,work,new Progress<string>(text=>status.Text=text),cancel.Token);
-                if(plan.Files.Count==0){status.Text="Все файлы уже обновлены.";return;}
-                cancel.Token.ThrowIfCancellationRequested();status.Text="Подготовка к установке…";
-                store.Backup(Path.Combine(AppContext.BaseDirectory,"Backups",$"tickets-before-update-{DateTime.Now:yyyyMMdd-HHmmss}.db"));
-                LocalBackupRetention036.Prune(store,Path.Combine(AppContext.BaseDirectory,"Backups"));
-                var runner=Path.Combine(work,"runner");Directory.CreateDirectory(runner);
-                await Task.Run(()=>{
-                    foreach(var file in Directory.EnumerateFiles(AppContext.BaseDirectory))
-                    {
-                        var name=Path.GetFileName(file);
-                        if(name.EndsWith(".dll",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".deps.json",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".runtimeconfig.json",StringComparison.OrdinalIgnoreCase))File.Copy(file,Path.Combine(runner,name));
-                    }
-                },cancel.Token);
-                cancel.Token.ThrowIfCancellationRequested();
-                var planPath=Path.Combine(work,"install-plan.json");File.WriteAllText(planPath,JsonSerializer.Serialize(plan));
-                var start=new ProcessStartInfo(Path.Combine(runner,"Tickets.exe")){UseShellExecute=false,WorkingDirectory=runner};
-                start.ArgumentList.Add("--apply-update");start.ArgumentList.Add(planPath);start.ArgumentList.Add(Environment.ProcessId.ToString());
-                if(Process.Start(start) is null)throw new IOException("Не удалось запустить установку обновления.");
+                var exe=Path.Combine(AppContext.BaseDirectory,"Tickets.Updater.exe");
+                if(!File.Exists(exe))throw new IOException("Не найден Tickets.Updater.exe. Перенесите полную папку программы.");
+                var start=new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=AppContext.BaseDirectory};
+                foreach(var arg in new[]{"--target",AppContext.BaseDirectory,"--parent",Environment.ProcessId.ToString(),"--repository",manifest.Repository})start.ArgumentList.Add(arg);
+                if(Process.Start(start) is null)throw new IOException("Не удалось запустить обновлятор.");
                 Application.Current.Shutdown();
             }
-            catch(OperationCanceledException){}
             catch(Exception ex){status.Text="Установка не началась. "+ex.Message;}
-            finally{busy=false;check.IsEnabled=true;repository.IsEnabled=true;}
         };
         Closing+=(_,_)=>cancel.Cancel();
     }

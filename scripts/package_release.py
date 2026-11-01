@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 import sys
+import shutil
 import zipfile
 
 root, out = map(Path, sys.argv[1:3])
@@ -11,11 +12,14 @@ repository, version = sys.argv[3:5]
 assert re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9_.-]+', repository)
 assert re.fullmatch(r'\d+\.\d+\.\d+', version)
 out.mkdir(parents=True, exist_ok=True)
+shutil.copyfile(root/'Tickets.exe',root/'! Tickets.exe')
 groups = {'application': [], 'database-engine': [], 'runtime': []}
 for path in root.rglob('*'):
     if not path.is_file():
         continue
     relative = path.relative_to(root).as_posix()
+    if relative == '! Tickets.exe':
+        continue  # Historical manifest readers reject spaces; modern updater creates this alias.
     parts = relative.split('/')
     managed = len(parts) == 1 and relative.endswith(('.dll', '.exe', '.deps.json', '.runtimeconfig.json'))
     resource = len(parts) == 2 and re.fullmatch(r'[a-z]{2,3}(-[A-Za-z]{2,8})?', parts[0]) and relative.endswith('.resources.dll')

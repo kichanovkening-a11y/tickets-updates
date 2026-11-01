@@ -132,12 +132,24 @@ jobs:
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --documents045
       - name: Verify matching regression
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections032
+      - name: Verify recoverable updater
+        run: dotnet run --project tests/Tickets.UpdateChecks/Tickets.UpdateChecks.csproj
+      - name: Verify updater packaging compatibility
+        run: python scripts/test_updater_packaging.py
       - name: Publish portable Windows app
         shell: pwsh
         run: |
           $v = (Get-Content version.json | ConvertFrom-Json).version
           dotnet publish src/Tickets.App/Tickets.App.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 "-p:Version=$v" -o release/Tickets
           if ($LASTEXITCODE -ne 0) { throw 'Publish failed' }
+          dotnet publish src/Tickets.Updater/Tickets.Updater.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 "-p:Version=$v" -o release/Tickets
+          if ($LASTEXITCODE -ne 0) { throw 'Updater publish failed' }
+      - name: Verify independent update and healthy startup
+        shell: pwsh
+        run: |
+          ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path
+          ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path -Interrupt
+          ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path -RejectStartup
       - name: Start application on Windows
         shell: pwsh
         run: |

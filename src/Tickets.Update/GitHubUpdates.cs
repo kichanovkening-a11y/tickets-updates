@@ -22,9 +22,9 @@ public sealed class GitHubUpdates
         await CopyLimited(stream,buffer,2_000_000,cancellation);
         return UpdateFiles.Parse(System.Text.Encoding.UTF8.GetString(buffer.ToArray()),repository);
     }
-    public async Task<InstallPlan> DownloadAsync(UpdateManifest manifest,string target,string work,IProgress<string>? progress=null,CancellationToken cancellation=default)
+    public async Task<InstallPlan> DownloadAsync(UpdateManifest manifest,string target,string work,IProgress<string>? progress=null,CancellationToken cancellation=default,bool full=false)
     {
-        var packages=await Task.Run(()=>UpdateFiles.Needed(target,manifest),cancellation);
+        var packages=await Task.Run(()=>full?manifest.Packages:UpdateFiles.Needed(target,manifest),cancellation);
         var stage=System.IO.Path.Combine(work,"payload");Directory.CreateDirectory(stage);
         var files=new List<UpdateFile>();
         foreach(var package in packages)

@@ -1,0 +1,34 @@
+name: Diagnose updater startup
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/updater-diagnostic.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  diagnose:
+    runs-on: windows-2022
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.408
+      - run: python scripts/restore_seed.py
+      - name: Publish isolated diagnostic payload
+        shell: pwsh
+        run: |
+          dotnet publish src/Tickets.App/Tickets.App.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -o release/Tickets
+          if ($LASTEXITCODE -ne 0) { throw 'App publish failed' }
+          dotnet publish src/Tickets.Updater/Tickets.Updater.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -o release/Tickets
+          if ($LASTEXITCODE -ne 0) { throw 'Updater publish failed' }
+      - name: Reproduce and report updater failure
+        shell: pwsh
+        run: |
+          try {
+            ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path
+          } finally {
+            Get-ChildItem "$env:TEMP/TicketsUpdates/*/update-error.log" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
+            Get-ChildItem "$env:TEMP/Tickets046-integration-*/app/.updates/transaction-*/journal.json" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Write-Host (Get-Content $_.FullName -Raw | ConvertFrom-Json).Phase }
+          }

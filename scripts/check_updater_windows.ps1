@@ -6,6 +6,7 @@ New-Item -ItemType Directory -Force $target,$stage | Out-Null
 # PowerShell expands an 8.3 TEMP alias in FileInfo.FullName. Use the same
 # canonical directory spelling before taking relative file names.
 $stage=(Get-Item -LiteralPath $stage).FullName
+$target=(Get-Item -LiteralPath $target).FullName
 if($Legacy){Copy-Item "$Legacy\*" $target -Recurse -Force}else{Set-Content "$target\Tickets.dll" "old binary fixture"}
 New-Item -ItemType Directory -Force "$target\Data" | Out-Null
 Copy-Item $Seed "$target\Data\tickets.db"

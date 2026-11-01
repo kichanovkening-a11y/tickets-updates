@@ -16,32 +16,6 @@ jobs:
         with:
           dotnet-version: 8.0.408
       - run: python scripts/restore_seed.py
-      - name: Instrument isolated startup failure
-        shell: pwsh
-        run: |
-          $path='src/Tickets.App/App.xaml.cs'
-          $source=Get-Content $path -Raw
-          $source=$source.Replace('if(Path.GetFullPath(e.Args[2])!=Path.GetFullPath(updateReceipt)', 'File.WriteAllText(Path.Combine(Path.GetTempPath(),"startup-paths.txt"),e.Args[2]+"\n"+updateReceipt); if(Path.GetFullPath(e.Args[2])!=Path.GetFullPath(updateReceipt)')
-          $source=$source.Replace('MessageBox.Show("Не удалось открыть программу.', 'File.WriteAllText(Path.Combine(Path.GetTempPath(),"startup-error.txt"),ex.ToString()); MessageBox.Show("Не удалось открыть программу.')
-          Set-Content $path $source -Encoding utf8
-          $helper='src/Tickets.Updater/Program.cs'
-          (Get-Content $helper -Raw).Replace('using var child=Process.Start(startApp)', 'startApp.Environment["COREHOST_TRACE"]="1"; startApp.Environment["COREHOST_TRACEFILE"]=Path.Combine(Path.GetTempPath(),"startup-host.txt"); using var child=Process.Start(startApp)') | Set-Content $helper -Encoding utf8
-          $check='scripts/check_updater_windows.ps1'
-          $observe=@'
-          if($confirmed){break}
-          if(-not $script:captured){
-            $child=Get-Process | Where-Object {$_.ProcessName -eq '! Tickets'} | Select-Object -First 1
-            if($child -and $child.MainWindowHandle -ne 0){
-              Add-Type -AssemblyName UIAutomationClient,UIAutomationTypes
-              $window=[System.Windows.Automation.AutomationElement]::FromHandle($child.MainWindowHandle)
-              $nodes=$window.FindAll([System.Windows.Automation.TreeScope]::Subtree,[System.Windows.Automation.Condition]::TrueCondition)
-              foreach($node in $nodes){Write-Host ('WINDOW: '+$node.Current.Name)}
-              $script:captured=$true
-            }
-          }
-          if($journals -and (Get-Content $journals[0].FullName -Raw | ConvertFrom-Json).Phase -eq "restored"){throw "Installation rolled back"}
-          '@
-          (Get-Content $check -Raw).Replace('if($confirmed){break}', $observe) | Set-Content $check -Encoding utf8
       - name: Publish isolated diagnostic payload
         shell: pwsh
         run: |
@@ -54,8 +28,9 @@ jobs:
         run: |
           try {
             ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path
+            ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path -Interrupt
+            ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets).Path -Seed (Resolve-Path data/seed.db).Path -RejectStartup
           } finally {
-            Get-ChildItem "$env:TEMP/startup-*.txt" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
             Get-ChildItem "$env:TEMP/TicketsUpdates/*/update-error.log" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Get-Content $_.FullName }
             Get-ChildItem "$env:TEMP/Tickets046-integration-*/app/.updates/transaction-*/journal.json" -ErrorAction SilentlyContinue | ForEach-Object { Write-Host $_.FullName; Write-Host (Get-Content $_.FullName -Raw | ConvertFrom-Json).Phase }
           }

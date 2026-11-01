@@ -61,10 +61,55 @@ jobs:
           }
           'reuse=true' >> $env:GITHUB_OUTPUT
           Write-Host 'Verified identical source and 13 successful checks from run 41184952291; continue with unfinished checks.'
+      # Reuse only successful checks of the identical application source from
+      # the first 0.46 run. Its integration harness failed on an 8.3 TEMP path.
+      - name: Verify completed checks for unchanged 0.46 source
+        id: verified046
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          if ((Get-Content version.json | ConvertFrom-Json).version -ne '0.46.0') { exit 0 }
+          $verified = '1ca9072efb234458deed4f5e6cb63ae0d60bfbfe'
+          git fetch --no-tags --depth=1 origin $verified
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect verified source revision' }
+          git diff --quiet $verified $env:GITHUB_SHA -- . ':(exclude).github/workflows/release.yml' ':(exclude).github/workflows/updater-diagnostic.yml' ':(exclude)scripts/check_updater_windows.ps1'
+          if ($LASTEXITCODE -eq 1) { Write-Host 'Source changed; run all checks'; exit 0 }
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot compare source revisions' }
+          $run = gh api "repos/$env:GITHUB_REPOSITORY/actions/runs/41339690288" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $run.head_sha -ne $verified -or $run.status -ne 'completed' -or $run.path -ne '.github/workflows/release.yml') { throw 'Prior run does not match verified revision/workflow' }
+          $job = gh api "repos/$env:GITHUB_REPOSITORY/actions/jobs/124946868444" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $job.run_id -ne 41339690288 -or $job.status -ne 'completed') { throw 'Cannot verify prior checks' }
+          $required = @(
+            'Verify Windows editor controls'
+            'Verify Ticket PRO corrections on Windows'
+            'Verify Ticket PRO catalog redirects and saved session'
+            'Verify Ticket PRO readonly scheme initialization'
+            'Verify Ticket PRO selected-only refresh queue'
+            'Verify Ticket PRO selected-source completeness'
+            'Verify Ticket PRO selected-only screen and source labels'
+            'Verify compact hall layout and commands'
+            'Verify physical pixel spacing and persistent sidebar width'
+            'Verify agreed interface and document archive corrections'
+            'Verify document editing and automatic print preview'
+            'Verify all document menus and recipient forms'
+            'Verify compact header with journal and hall gestures'
+            'Test accounting and updater'
+            'Verify local backup retention'
+            'Verify document corrections'
+            'Verify approved TTN and independent document snapshots'
+            'Verify matching regression'
+          )
+          foreach ($name in $required) {
+            $matched = @($job.steps | Where-Object { $_.name -eq $name })
+            if ($matched.Count -ne 1 -or $matched[0].conclusion -ne 'success') { throw "Missing successful check: $name" }
+          }
+          'reuse=true' >> $env:GITHUB_OUTPUT
+          Write-Host 'Verified identical application source and completed UI/core checks; rerun updater and release validation.'
       - name: Restore test data
         run: python scripts/restore_seed.py
       - name: Verify Windows editor controls
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         timeout-minutes: 8
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
@@ -72,45 +117,48 @@ jobs:
           dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections033
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify Ticket PRO corrections on Windows
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro037
       - name: Verify Ticket PRO catalog redirects and saved session
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-catalog039
       - name: Verify Ticket PRO readonly scheme initialization
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-scheme040
       - name: Verify Ticket PRO selected-only refresh queue
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-queue041
       - name: Verify Ticket PRO selected-source completeness
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --ticketpro-target041
       - name: Verify Ticket PRO selected-only screen and source labels
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro-selection041
       - name: Verify compact hall layout and commands
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --layout042
       - name: Verify physical pixel spacing and persistent sidebar width
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --layout043
       - name: Verify agreed interface and document archive corrections
+        if: steps.verified046.outputs.reuse != 'true'
         env:
           TICKETS_UI_CAPTURE_DIR: ${{ github.workspace }}/ui-captures
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections044
       - name: Verify document editing and automatic print preview
+        if: steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- --documents045
       - name: Verify all document menus and recipient forms
+        if: steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --documentmenus045
       - name: Verify compact header with journal and hall gestures
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections027
       - name: Retain verified interface screenshots
         if: always()
@@ -121,16 +169,19 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
       - name: Test accounting and updater
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db
       - name: Verify local backup retention
-        if: steps.verified043.outputs.reuse != 'true'
+        if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --backups036
       - name: Verify document corrections
+        if: steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --documents035
       - name: Verify approved TTN and independent document snapshots
+        if: steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --documents045
       - name: Verify matching regression
+        if: steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.Tests/Tickets.Tests.csproj -- data/seed.db --corrections032
       - name: Verify recoverable updater
         run: dotnet run --project tests/Tickets.UpdateChecks/Tickets.UpdateChecks.csproj

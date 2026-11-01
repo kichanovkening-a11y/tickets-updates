@@ -3,6 +3,9 @@ $ErrorActionPreference='Stop'
 $root=Join-Path $env:TEMP ('Tickets046-integration-'+[guid]::NewGuid().ToString('N'))
 $target=Join-Path $root 'app';$stage=Join-Path $root 'payload'
 New-Item -ItemType Directory -Force $target,$stage | Out-Null
+# PowerShell expands an 8.3 TEMP alias in FileInfo.FullName. Use the same
+# canonical directory spelling before taking relative file names.
+$stage=(Get-Item -LiteralPath $stage).FullName
 if($Legacy){Copy-Item "$Legacy\*" $target -Recurse -Force}else{Set-Content "$target\Tickets.dll" "old binary fixture"}
 New-Item -ItemType Directory -Force "$target\Data" | Out-Null
 Copy-Item $Seed "$target\Data\tickets.db"
@@ -15,6 +18,10 @@ $files=@(Get-ChildItem $stage -File -Recurse | ForEach-Object {
   @{Path=$relative;Sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash}
  }
 })
+foreach($required in @('Tickets.exe','Tickets.dll','Tickets.runtimeconfig.json','Tickets.deps.json','hostfxr.dll','hostpolicy.dll')){
+ if($required -notin $files.Path){throw "Incomplete test payload: missing $required ($($files.Count) files)"}
+}
+Write-Host "Verified complete integration payload: $($files.Count) files"
 $plan=Join-Path $root 'plan.json'
 @{Target=$target;Stage=$stage;Files=$files}|ConvertTo-Json -Depth 8|Set-Content $plan -Encoding UTF8
 $oldBinaryHash=(Get-FileHash "$target\Tickets.dll").Hash

@@ -24,6 +24,8 @@ jobs:
           $source=$source.Replace('if(Path.GetFullPath(e.Args[2])!=Path.GetFullPath(updateReceipt)', 'File.WriteAllText(Path.Combine(Path.GetTempPath(),"startup-paths.txt"),e.Args[2]+"\n"+updateReceipt); if(Path.GetFullPath(e.Args[2])!=Path.GetFullPath(updateReceipt)')
           $source=$source.Replace('MessageBox.Show("Не удалось открыть программу.', 'File.WriteAllText(Path.Combine(Path.GetTempPath(),"startup-error.txt"),ex.ToString()); MessageBox.Show("Не удалось открыть программу.')
           Set-Content $path $source -Encoding utf8
+          $helper='src/Tickets.Updater/Program.cs'
+          (Get-Content $helper -Raw).Replace('using var child=Process.Start(startApp)', 'startApp.Environment["COREHOST_TRACE"]="1"; startApp.Environment["COREHOST_TRACEFILE"]=Path.Combine(Path.GetTempPath(),"startup-host.txt"); using var child=Process.Start(startApp)') | Set-Content $helper -Encoding utf8
           $check='scripts/check_updater_windows.ps1'
           $observe=@'
           if($confirmed){break}

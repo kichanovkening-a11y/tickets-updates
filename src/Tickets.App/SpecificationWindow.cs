@@ -72,21 +72,22 @@ internal sealed class SpecificationWindow : EditorWindow
         fixedRecipient=true;sender=new TextBox();title=new TextBox();body=new TextBox();
         var root=new Grid{Margin=new Thickness(10)};root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());Content=root;DocumentPrintPreview.Route(root,()=>Try(Print));
         var header=new StackPanel();root.Children.Add(header);
-        var reader=new FlowDocumentScrollViewer{IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetRow(reader,1);root.Children.Add(reader);
+        var reader=new DocumentPagePreview();Grid.SetRow(reader,1);root.Children.Add(reader);
         FlowDocument Preview(double width=794)
         {
             var invoice=Store.Invoice(eventId,issueId);var document=InvoiceWindow.Document(invoice,width);
             if(document.Blocks.FirstBlock is Paragraph heading){heading.Inlines.Clear();heading.Inlines.Add(new Run($"СПЕЦИФИКАЦИЯ № {issueId}"));}
             return document;
         }
-        reader.Document=Preview();reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};
+        byte[] Source()=>ExportBytes(path=>InvoiceDocuments.SaveIssueSpecificationWord(Store.Invoice(eventId,issueId),path));
+        reader.SetDocument(Source(),width=>Preview(width));
         header.Children.Add(DocumentActions.Toolbar(
             ()=>Try(()=>IssueDocumentNavigation.OpenWord(Store.IssueSpecificationDocumentPath(issueId),()=>Store.SaveIssueSpecificationDocument(eventId,issueId))),
             ()=>Try(()=>{
             var path=DocumentSaveDialog.Save(Store,DialogOwner,$"Спецификация-выдача-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueSpecificationWord(Store.Invoice(eventId,issueId),destination));
             if(path is not null)status.Text="Сохранено: "+path;
         }),()=>Try(()=>{
-            DocumentPrintPreview.Show(DialogOwner,Title,width=>Preview(width));
+            DocumentPrintPreview.Show(DialogOwner,Title,Source(),width=>Preview(width));
         })));
         header.Children.Add(status);
     }
@@ -144,7 +145,13 @@ internal sealed class SpecificationWindow : EditorWindow
     private void Print()
     {
         var info=ForOutput();if(info is null)return;
-        DocumentPrintPreview.Show(DialogOwner,info.Title+" — "+info.Recipient,_=>Document(info));
+        DocumentPrintPreview.Show(DialogOwner,info.Title+" — "+info.Recipient,ExportBytes(path=>InvoiceDocuments.SaveSpecificationWord(info,path)),_=>Document(info));
+    }
+    private static byte[] ExportBytes(Action<string> save)
+    {
+        var path=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"Tickets-specification-view-"+Guid.NewGuid().ToString("N")+".docx");
+        try{save(path);return System.IO.File.ReadAllBytes(path);}
+        finally{if(System.IO.File.Exists(path))System.IO.File.Delete(path);}
     }
 
     internal static FlowDocument Document(SpecificationInfo info)

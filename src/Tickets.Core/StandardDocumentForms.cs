@@ -5,7 +5,7 @@ namespace Tickets.Core;
 
 internal static class StandardDocumentForms
 {
-    public static byte[]? Resolve(string kind,byte[]? custom)
+    public static byte[]? Resolve(string kind,byte[]? custom,bool upgradePreviousTtn=false)
     {
         if(custom is not null)
         {
@@ -14,7 +14,9 @@ internal static class StandardDocumentForms
             using var ms=new MemoryStream();original?.CopyTo(ms);
             using var previous=typeof(Store).Assembly.GetManifestResourceStream($"Tickets.Core.Resources.UniversalForms.{kind}-v021.docx");
             using var old=new MemoryStream();previous?.CopyTo(old);
-            if(!custom.AsSpan().SequenceEqual(ms.ToArray())&&!custom.AsSpan().SequenceEqual(old.ToArray()))return custom;
+            using var priorTtn=kind=="ttn"?typeof(Store).Assembly.GetManifestResourceStream("Tickets.Core.Resources.UniversalForms.ttn-v044.docx"):null;
+            using var oldTtn=new MemoryStream();priorTtn?.CopyTo(oldTtn);
+            if(!custom.AsSpan().SequenceEqual(ms.ToArray())&&!custom.AsSpan().SequenceEqual(old.ToArray())&&(!upgradePreviousTtn||!custom.AsSpan().SequenceEqual(oldTtn.ToArray())))return custom;
         }
         using var source=typeof(Store).Assembly.GetManifestResourceStream($"Tickets.Core.Resources.UniversalForms.{kind}.docx");
         if(source is null)return custom;
@@ -34,6 +36,11 @@ internal static class StandardDocumentForms
     public static bool IsStandard(byte[] bytes,string kind)
     {
         var standard=Resolve(kind,null);if(standard is null)return false;
+        if(kind=="ttn"&&!ApprovedTtn.IsApproved(bytes))
+        {
+            using var previous=typeof(Store).Assembly.GetManifestResourceStream("Tickets.Core.Resources.UniversalForms.ttn-v044.docx");
+            if(previous is not null){using var old=new MemoryStream();previous.CopyTo(old);standard=old.ToArray();}
+        }
         if(bytes.AsSpan().SequenceEqual(standard))return true;
         using var input=new ZipArchive(new MemoryStream(bytes),ZipArchiveMode.Read);using var reference=new ZipArchive(new MemoryStream(standard),ZipArchiveMode.Read);
         if(!input.Entries.Select(e=>e.FullName).Order().SequenceEqual(reference.Entries.Select(e=>e.FullName).Order()))return false;

@@ -11,7 +11,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
 {
     private readonly long eventId,issueId;
     private readonly string kind;
-    private readonly FlowDocumentScrollViewer preview=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+    private readonly DocumentPagePreview preview=new();
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)};
     private readonly DocumentTextEditor textEditor=new();
     private IssueDocumentInfo Info=>Store.CustomIssueDocument(eventId,issueId,kind)??Store.GetIssueDocument(eventId,issueId,kind);
@@ -20,7 +20,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
         var root=new Grid{Margin=new Thickness(2)};Content=root;
-        DocumentPrintPreview.Route(root,()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>IssueDocumentWindow.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);}));
+        DocumentPrintPreview.Route(root,()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,Info);}));
         root.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});root.RowDefinitions.Add(new RowDefinition());
         var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(DocumentActions.Toolbar(
@@ -30,7 +30,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
                 var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueDocumentWord(info,destination));
                 if(path is not null)status.Text="Сохранено: "+path;
             }),
-            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,width=>IssueDocumentWindow.Document(Info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);})));
+            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,Info);})));
 
         header.Children.Add(ContractFields.Row(Store,eventId,issueId,()=>{Refresh();status.Text="Поля договора сохранены для всего комплекта.";}));
         header.Children.Add(status);
@@ -43,7 +43,6 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,kind)!,kind);
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveForNavigation);};
         Closing+=(_,e)=>{try{if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>{SaveForNavigation();InvoiceDocuments.SaveIssueDocumentWord(Info,destination);});}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
-        preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)Refresh();};
         Refresh();status.Text="Форма получателя подготовлена для текущей выдачи.";
         DocumentFlag025.Apply(this,root,Info.Invoice.Recipient,issueId,Tickets.Core.Store.RecipientDocumentName(kind));
     }
@@ -51,7 +50,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     {
         var button=Button(parent,caption,action);button.Width=double.NaN;button.ContentTemplate=null;button.FontSize=16.9;button.Padding=new Thickness(10,2,10,2);button.Margin=new Thickness(0,4,6,0);button.MinHeight=34;
     }
-    private void Refresh()=>preview.Document=IssueDocumentWindow.Document(Info,preview.ActualWidth>100?preview.ActualWidth-20:null);
+    private void Refresh(){var info=Info;preview.SetDocument(info,width=>IssueDocumentWindow.Document(info,width));}
     private string WorkingPath()
     {
         var database=Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(Store.Path)))[..12];

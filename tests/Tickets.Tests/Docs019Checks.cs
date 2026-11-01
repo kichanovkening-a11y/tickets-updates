@@ -58,11 +58,12 @@ static class Docs019Checks
                 s.SaveCustomIssueForm(invoice.EventId,invoice.Id,kind,output.ToArray());
                 var info=s.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!;Require(info.Body.Contains("правка"),"ordinary edit disappeared");
                 var result=InvoiceDocuments.IssueDocumentXml(info);AssertStructure(result);
-                Require(result.Descendants(W+"tr").Any(row=>row.Elements(W+"tc").Count()==2&&row.Elements(W+"tc").All(cell=>System.Text.RegularExpressions.Regex.IsMatch(string.Concat(cell.Descendants(W+"t").Select(t=>t.Value)).Trim(),@"^_{8,}$"))),"editing restored unaligned signatures "+kind);
+                if(kind!="ttn")Require(result.Descendants(W+"tr").Any(row=>row.Elements(W+"tc").Count()==2&&row.Elements(W+"tc").All(cell=>System.Text.RegularExpressions.Regex.IsMatch(string.Concat(cell.Descendants(W+"t").Select(t=>t.Value)).Trim(),@"^_{8,}$"))),"editing restored unaligned signatures "+kind);
                 if(kind=="ttn"){
                     var details=result.Descendants(W+"p").First(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value)).Contains("7700000019"));
                     Require(!details.Descendants(W+"br").Any()&&string.Concat(details.Descendants(W+"t").Select(t=>t.Value)).Contains("4070000019"),"editing expanded or lost inline requisites");
-                    Require(info.Body.Contains(DocumentTotals.Total(invoice.Tickets.Count,invoice.Total)),"TTN canonical total missing");
+                    Require(result.Root!.Element(W+"body")!.Elements(W+"tbl").Count()==2&&result.Descendants(W+"trHeight").Count()==71,"editing changed approved two-sided TTN grid");
+                    Require(info.Body.Contains(invoice.Total.ToString("F2",System.Globalization.CultureInfo.GetCultureInfo("ru-RU"))),"TTN amount missing from approved total field");
                 }
             }
         });
@@ -75,13 +76,14 @@ static class Docs019Checks
             Require(bankRow.Descendants(W+"tcBorders").Elements().Any(e=>(string?)e.Attribute(W+"val")=="single"),"bank borders missing");
             var spec=InvoiceDocuments.IssueDocumentXml(s.CustomIssueDocument(invoice.EventId,invoice.Id,"specification")!);
             Require(s.CustomIssueDocument(invoice.EventId,invoice.Id,"specification")!.Body.Contains(DocumentTotals.Total(invoice.Tickets.Count,invoice.Total)),"specification total differs from package standard");
-            foreach(var kind in new[]{"contract","act","specification","ttn","invoice"})
+            foreach(var kind in new[]{"contract","act","specification","invoice"})
             {
                 var generated=InvoiceDocuments.IssueDocumentXml(s.CustomIssueDocument(invoice.EventId,invoice.Id,kind)!);
                 Require(generated.Descendants(W+"tr").Any(row=>row.Elements(W+"tc").Count()==2&&row.Elements(W+"tc").All(cell=>System.Text.RegularExpressions.Regex.IsMatch(string.Concat(cell.Descendants(W+"t").Select(t=>t.Value)).Trim(),@"^_{8,}$"))),"signature baselines do not share one row: "+kind);
             }
             var ttn=InvoiceDocuments.IssueDocumentXml(s.CustomIssueDocument(invoice.EventId,invoice.Id,"ttn")!);
-            Require(ttn.Descendants(W+"p").Any(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value)).StartsWith("Мероприятие:")),"TTN lost event context when compacting item descriptions");
+            Require(ttn.Descendants(W+"tc").Any(c=>string.Concat(c.Descendants(W+"t").Select(t=>t.Value)).Contains(invoice.Title)),"TTN lost event description inside approved goods field");
+            Require(!ttn.Root!.Element(W+"body")!.Elements(W+"p").Any(p=>p.Descendants(W+"t").Any(t=>t.Value.Contains(invoice.Title))),"extra event heading appeared outside approved TTN form");
 
             foreach(var p in spec.Descendants(W+"p").Where(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value)).StartsWith("Приложение № 1")))Require((string?)p.Element(W+"pPr")?.Element(W+"jc")?.Attribute(W+"val")=="right","appendix not right aligned");
         });

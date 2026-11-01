@@ -124,6 +124,13 @@ internal static class RecipientPackage023Checks
                     Check(data.Length==InvoiceDocuments.Lines(p.Invoice).Count,"show lines merged "+kind);
                     Check(data.All(row=>sectors.Contains(string.Concat(row.Elements(w+"tc").First().Descendants(w+"t").Select(t=>t.Value)))),"show title repeated in narrow sector column "+kind);
                 }
+                if(kind=="ttn")
+                {
+                    Check(xml.Root!.Element(w+"body")!.Elements(w+"tbl").Count()==2,"approved TTN has an extra signature table");
+                    var signature=xml.Descendants(w+"p").Single(p=>p.Elements(w+"bookmarkStart").Any(b=>(string?)b.Attribute(w+"name")=="TtnCell_CF67"));
+                    Check(string.Concat(signature.Descendants(w+"t").Select(t=>t.Value)).Contains("Buyer"),"recipient signature not filled in the approved TTN field");
+                    continue;
+                }
                 var table=xml.Root!.Element(w+"body")!.Elements(w+"tbl").Last();
                 var line=table.Elements(w+"tr").First(r=>r.Elements(w+"tc").All(c=>string.Concat(c.Descendants(w+"t").Select(t=>t.Value)).StartsWith("___")));
                 Check(line.PreviousNode is XElement gap&&!gap.Descendants(w+"t").Any(t=>!string.IsNullOrWhiteSpace(t.Value)),"missing blank below names "+kind);

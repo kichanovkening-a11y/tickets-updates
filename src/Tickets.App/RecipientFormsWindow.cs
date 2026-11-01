@@ -33,7 +33,7 @@ internal sealed class RecipientFormsWindow:EditorWindow
         header.Children.Add(new TextBlock{Text="Формы получателя: "+recipient,FontSize=20,FontWeight=FontWeights.SemiBold,TextWrapping=TextWrapping.Wrap});
         header.Children.Add(new TextBlock{Text="Загрузите форму для каждого документа. Получатель в справочнике — короткое имя: юридические названия сторон и текст загруженной формы сохраняются. Подстановки меняют только отмеченные вами поля.",TextWrapping=TextWrapping.Wrap,FontSize=13,Margin=new Thickness(0,5,0,8)});
         var toolbar=new WrapPanel{VerticalAlignment=VerticalAlignment.Center};header.Children.Add(toolbar);toolbar.Children.Add(kinds);
-        kinds.ItemsSource=new[]{"contract","act","specification","bill","ttn"}.Select(k=>new Choice(k,Tickets.Core.Store.RecipientDocumentName(k))).ToArray();
+        kinds.ItemsSource=new[]{"contract","act","specification","bill","ttn","invoice"}.Select(k=>new Choice(k,Tickets.Core.Store.RecipientDocumentName(k))).ToArray();
         CompactButton(toolbar,"Загрузить форму",()=>Try(Upload));
         openWord=CompactButton(toolbar,"Сохранить текст / поля",()=>Try(SaveText));
         refreshWord=CompactButton(toolbar,"Обновить просмотр",()=>Try(()=>{SaveText();Reload();}));

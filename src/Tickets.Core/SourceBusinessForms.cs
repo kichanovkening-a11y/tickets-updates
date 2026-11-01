@@ -163,6 +163,7 @@ internal static class SourceBusinessForms
                     }
                 }
                 NormalizeSignatures(xml,document);
+                if(document.Kind==IssueDocumentKinds.Contract)ContractPagination.KeepTail(xml);
                 WordDocumentStructure.Normalize(xml);WordDocumentStructure.Validate(xml);
                 var entry=zip.GetEntry("word/document.xml")!;entry.Delete();using(var s=zip.CreateEntry("word/document.xml").Open())xml.Save(s);
                 Stamp(zip);

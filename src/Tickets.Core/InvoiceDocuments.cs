@@ -52,6 +52,7 @@ public static class InvoiceDocuments
     {
         if(document.SourceDocument is {} custom)
         {
+            if(document.Kind==IssueDocumentKinds.Contract)custom=ContractPagination.Prepare(custom);
             SourceBusinessForms.CheckExternalEdits(destination);
             var temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";
             try{File.WriteAllBytes(temporary,custom);using(var z=ZipFile.Open(temporary,ZipArchiveMode.Update))if(z.GetEntry("[Content_Types].xml") is not null)SourceBusinessForms.Stamp(z);File.Move(temporary,destination,true);}
@@ -205,6 +206,7 @@ public static class InvoiceDocuments
         body.Add(new XElement(W+"sectPr",pageNumbers?new XElement(W+"footerReference",new XAttribute(W+"type","default"),new XAttribute(XNamespace.Get("http://schemas.openxmlformats.org/officeDocument/2006/relationships")+"id","footer1")):null,new XElement(W+"pgSz",new XAttribute(W+"w",landscape?16838:11906),new XAttribute(W+"h",landscape?11906:16838),landscape?new XAttribute(W+"orient","landscape"):null),
             new XElement(W+"pgMar",new XAttribute(W+"top",1134),new XAttribute(W+"bottom",1134),new XAttribute(W+"left",1134),new XAttribute(W+"right",1134))));
         var document=new XDocument(new XElement(W+"document",new XAttribute(XNamespace.Xmlns+"w",W),body));
+        if(pageNumbers)ContractPagination.KeepTail(document);
         WordDocumentStructure.Normalize(document);WordDocumentStructure.Validate(document);
         SourceBusinessForms.CheckExternalEdits(destination);
         var temporary=destination+"."+Guid.NewGuid().ToString("N")+".tmp";

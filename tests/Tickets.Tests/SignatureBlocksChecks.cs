@@ -47,6 +47,16 @@ internal static class SignatureBlocksChecks
     private static XDocument Xml(byte[] bytes){using var zip=new ZipArchive(new MemoryStream(bytes));using var stream=zip.GetEntry("word/document.xml")!.Open();return XDocument.Load(stream);}
     private static void Check(XDocument xml,string kind)
     {
+        if(xml.Descendants(W+"bookmarkStart").Any(b=>(string?)b.Attribute(W+"name")=="TtnCell_AG63"))
+        {
+            foreach(var pair in new[]{("TtnCell_AG63","Баринов\u00a0А.С."),("TtnCell_CF67","Уманец\u00a0О.В.")})
+            {
+                var p=xml.Descendants(W+"p").Single(p=>p.Elements(W+"bookmarkStart").Any(b=>(string?)b.Attribute(W+"name")==pair.Item1));
+                if(Text(p)!=pair.Item2||p.Descendants(W+"br").Any())throw new Exception("approved TTN signatory changed: "+kind);
+            }
+            if(xml.Root!.Element(W+"body")!.Elements(W+"tbl").Count()!=2)throw new Exception("approved TTN has an added signature table");
+            return;
+        }
         var table=xml.Root!.Element(W+"body")!.Elements(W+"tbl").Last();
         var line=table.Elements(W+"tr").First(r=>r.Elements(W+"tc").All(c=>string.IsNullOrWhiteSpace(Text(c))||Text(c).StartsWith("________"))&&r.Descendants(W+"t").Any(t=>t.Value.StartsWith("________")));
         if(line.Elements(W+"tc").Count()!=2)throw new Exception("two baseline columns "+kind);

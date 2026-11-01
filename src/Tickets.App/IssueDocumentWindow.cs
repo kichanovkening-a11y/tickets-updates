@@ -11,7 +11,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
     private readonly long eventId,issueId;
     private readonly string kind;
     private readonly TextBox template=new(){AcceptsReturn=true,TextWrapping=TextWrapping.Wrap,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,MinHeight=200};
-    private readonly FlowDocumentScrollViewer preview=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+    private readonly DocumentPagePreview preview=new();
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,3,0,3)};
     private string original="";
     public IssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,IssueDocumentKinds.Name(kind)+$" · выдача № {issueId}",1030,850)
@@ -32,11 +32,10 @@ internal sealed class IssueDocumentWindow:EditorWindow
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
         var editing=new DockPanel{Margin=new Thickness(8)};var tools=new StackPanel();DockPanel.SetDock(tools,Dock.Bottom);editing.Children.Add(tools);
         tools.Children.Add(new TextBlock{Text="Подстановки: {recipient} — получатель, {sender} — отправитель, {event} — спектакль, {eventDate} — дата показа, {date} — дата выдачи, {count} — билетов, {amount} — сумма, {total} — итог, {items} — таблица билетов, {senderDetails} и {recipientDetails} — реквизиты, {senderPosition}, {senderSignatory}, {recipientPosition}, {recipientSignatory} — должности и подписанты.",TextWrapping=TextWrapping.Wrap,FontSize=13});
-        Button(tools,"Сохранить шаблон",()=>Try(()=>{Save();Store.SaveDocumentTemplate(kind,template.Text);status.Text="Шаблон сохранён для следующих выдач. Получатель подставляется автоматически.";}));
+        Button(tools,"Сохранить как форму получателя",()=>Try(()=>{Save();var recipient=Store.Invoice(eventId,issueId).Recipient;var bytes=Store.CustomIssueTemplate(eventId,issueId,kind)??throw new TicketException("Шаблон документа не найден.");Store.SaveRecipientForm(recipient,kind,bytes,IssueDocumentKinds.Name(kind)+".docx");status.Text="Форма сохранена для следующих выдач получателя «"+recipient+"».";}));
         editing.Children.Add(template);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0&&template.Text!=original)Try(Save);};
-        preview.SizeChanged+=(_,_)=>{if(preview.ActualWidth>100)preview.Document=Document(Store.GetIssueDocument(eventId,issueId,kind),preview.ActualWidth-20);};
-        preview.Document=Document(info);status.Text="Документ подготовлен для текущей выдачи.";
+        preview.SetDocument(info,width=>Document(info,width));status.Text="Документ подготовлен для текущей выдачи.";
         DocumentFlag025.Apply(this,root,info.Invoice.Recipient,issueId,IssueDocumentKinds.Name(kind));
         Closing+=(_,e)=>{
             if(template.Text==original)return;
@@ -47,14 +46,14 @@ internal sealed class IssueDocumentWindow:EditorWindow
     internal void SaveForNavigation(){if(template.Text!=original)Save();}
     private void Save()
     {
-        var info=template.Text==original?Store.GetIssueDocument(eventId,issueId,kind):Store.SaveIssueDocument(eventId,issueId,kind,template.Text);original=info.Template;preview.Document=Document(info);
+        var info=template.Text==original?Store.GetIssueDocument(eventId,issueId,kind):Store.SaveIssueDocument(eventId,issueId,kind,template.Text);original=info.Template;preview.SetDocument(info,width=>Document(info,width));
         try{status.Text="Сохранено: "+Store.SaveIssueDocumentWord(eventId,issueId,kind);}
         catch(Exception ex){status.Text="Документ сохранён в базе. Не удалось сохранить Word: "+ex.Message;}
     }
     private void Print()
     {
         SaveForNavigation();var info=Store.GetIssueDocument(eventId,issueId,kind);
-        DocumentPrintPreview.Show(DialogOwner,Title,width=>Document(info,width),kind==IssueDocumentKinds.Waybill,kind==IssueDocumentKinds.Contract);
+        DocumentPrintPreview.Show(DialogOwner,Title,info);
     }
     internal static FlowDocument Document(IssueDocumentInfo info,double? pageWidth=null)
     {

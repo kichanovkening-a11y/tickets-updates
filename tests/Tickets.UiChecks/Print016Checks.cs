@@ -67,10 +67,10 @@ internal static class Print016Checks
         {
             Func<PrintDialog,bool,FixedDocument> build=(dialog,_)=>
             {
-                Check(dialog.PrintTicket.PageMediaSize?.PageMediaSizeName==PageMediaSizeName.ISOA4&&dialog.PrintTicket.PageOrientation==PageOrientation.Portrait,"preview starts on A4 portrait even when legacy landscape is requested");
+                Check(dialog.PrintTicket.PageMediaSize?.PageMediaSizeName==PageMediaSizeName.ISOA4&&dialog.PrintTicket.PageOrientation==PageOrientation.Landscape,"document preview respects requested A4 landscape");
                 built=true;return new FixedDocument();
             };
-            previewType.GetMethod("Show",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,new object?[]{main,"UI016",build,(Action<PrintDialog,FixedDocument>)((_,_)=>throw new Exception("cancel submitted print")),true,null,new Size(100,200)});
+            previewType.GetMethod("Show",BindingFlags.Static|BindingFlags.NonPublic)!.Invoke(null,new object?[]{main,"UI016",build,(Action<PrintDialog,FixedDocument>)((_,_)=>throw new Exception("cancel submitted print")),true,null,null,null,null});
             if(previewError is not null)throw previewError;
             Check(inspected&&built,"embedded print preview exercised and cancelled");
         }

@@ -10,6 +10,7 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        if(e.Args.Length==2&&e.Args[0]=="--render-document") {Shutdown(WordRenderWorker.Run(e.Args[1]));return;}
         if(e.Args.Length==3&&e.Args[0]=="--apply-update") {UpdateRunner.Apply(e.Args[1],e.Args[2]);Shutdown();return;}
         try
         {

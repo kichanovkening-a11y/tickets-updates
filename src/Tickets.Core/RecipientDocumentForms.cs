@@ -35,7 +35,7 @@ public sealed partial class Store
     {
         RecipientDocumentName(kind);using var c=Open();EnsureRecipientForms(c);
         using var cmd=Command(c,"SELECT f.file_name,f.content FROM recipient_document_form f JOIN recipient r ON r.id=f.recipient_id WHERE r.name_key=$n AND f.kind=$k","$n",CatalogText.Key(recipient),"$k",kind);
-        using var r=cmd.ExecuteReader();return r.Read()?new(kind,r.GetString(0),(byte[])r[1]):null;
+        using var r=cmd.ExecuteReader();return r.Read()?new(kind,r.GetString(0),StandardDocumentForms.Resolve(kind,(byte[])r[1],upgradePreviousTtn:true)!):null;
     }
     public void DeleteRecipientForm(string recipient,string kind)
     {using var c=Open();EnsureRecipientForms(c);using var cmd=Command(c,"DELETE FROM recipient_document_form WHERE recipient_id=(SELECT id FROM recipient WHERE name_key=$n) AND kind=$k","$n",CatalogText.Key(recipient),"$k",kind);cmd.ExecuteNonQuery();}
@@ -72,6 +72,15 @@ public sealed partial class Store
     private static void CaptureRecipientForms(SqliteConnection c,SqliteTransaction tx,long issueId,string recipient)
     {
         using var cmd=Command(c,"INSERT OR IGNORE INTO issue_custom_form(issue_id,kind,file_name,content) SELECT $i,f.kind,f.file_name,f.content FROM recipient_document_form f JOIN recipient r ON r.id=f.recipient_id WHERE r.name_key=$n","$i",issueId,"$n",CatalogText.Key(recipient));cmd.Transaction=tx;cmd.ExecuteNonQuery();
+        // Upgrade the old TTN starter only while creating this new snapshot.
+        // Reopening an existing issue must keep its captured form version.
+        using var read=Command(c,"SELECT content FROM issue_custom_form WHERE issue_id=$i AND kind='ttn'","$i",issueId);read.Transaction=tx;
+        if(read.ExecuteScalar() is byte[] prior)
+        {
+            var next=StandardDocumentForms.Resolve("ttn",prior,upgradePreviousTtn:true)!;
+            if(!prior.AsSpan().SequenceEqual(next))
+            {using var update=Command(c,"UPDATE issue_custom_form SET content=$b WHERE issue_id=$i AND kind='ttn'","$b",next,"$i",issueId);update.Transaction=tx;update.ExecuteNonQuery();}
+        }
     }
     private static void CopyCustomIssueForms(SqliteConnection c,SqliteTransaction tx,long source,long target)
     {
@@ -122,7 +131,7 @@ public static class CustomDocumentForms
     }
     public static string Text(byte[] content){using var ms=new MemoryStream(content);using var z=new ZipArchive(ms,ZipArchiveMode.Read);using var s=z.GetEntry("word/document.xml")!.Open();return string.Join("\n",XDocument.Load(s).Descendants(W+"p").Select(p=>string.Concat(p.Descendants(W+"t").Select(t=>t.Value))));}
     // Replace from the end across runs, retaining original surrounding run formatting.
-    private static void Replace(XElement paragraph,IReadOnlyDictionary<string,string> values)
+    internal static void Replace(XElement paragraph,IReadOnlyDictionary<string,string> values)
     {
         var nodes=paragraph.Descendants(W+"t").ToArray();var text=string.Concat(nodes.Select(n=>n.Value));
         var matches=Regex.Matches(text,@"\{\{?(\w+)\}\}?").Cast<Match>().Where(m=>values.ContainsKey(m.Groups[1].Value)).Reverse();
@@ -153,6 +162,7 @@ public static class CustomDocumentForms
     public static byte[] Fill(byte[] content,InvoiceInfo invoice,string kind,DateTime contractDate)
     {
         content=StandardDocumentForms.Resolve(kind,content)??content;
+        if(kind=="ttn"&&ApprovedTtn.IsApproved(content))return ApprovedTtn.Fill(content,invoice,contractDate);
         var standard=StandardDocumentForms.IsStandard(content,kind);
         var values=SourceBusinessForms.Values(invoice,kind);
         values["items"]=BusinessDocumentTemplates.Items(invoice,kind);values["title"]=invoice.Title;
@@ -165,6 +175,7 @@ public static class CustomDocumentForms
         values["date"]=kind=="act"?calendar:kind=="contract"?values["contractDate"]:DateTimeOffset.Parse(invoice.IssuedAt).ToString("dd.MM.yyyy");
         values["lineCountWords"]=RussianWords.Number(kind=="bill"?1:priceGroups.Length);
         return Rewrite(content,xml=>{
+            if(kind=="contract")ContractPagination.KeepTail(xml);
             DocumentFormCorrections.UpgradeVenueFields(xml,kind);
             if(kind is "invoice" or "specification")DocumentFormCorrections.RestoreInvoiceBorders(xml);
             foreach(var row in xml.Descendants(W+"tr").Where(r=>Regex.IsMatch(string.Concat(r.Descendants(W+"t").Select(t=>t.Value)),@"\{item(Section|DescriptionShort|Description|Row|Count)\}")).ToArray())

@@ -15,7 +15,7 @@ internal sealed class InvoiceWindow : EditorWindow
     private bool confirmingSender;
     private readonly DocumentTextEditor textEditor=new();
     private ScrollViewer? documentNavigation;
-    private readonly FlowDocumentScrollViewer reader=new(){IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
+    private readonly DocumentPagePreview reader=new();
     public InvoiceWindow(Store store,long eventId,long issueId,bool print=false):base(store,$"Накладная № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;
@@ -55,10 +55,15 @@ internal sealed class InvoiceWindow : EditorWindow
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);tabs.Items.Add(new TabItem{Header="Документ",Content=reader});
         var editing=new DockPanel();var saveRow=new WrapPanel{Margin=new Thickness(0,5,0,5)};DockPanel.SetDock(saveRow,Dock.Bottom);editing.Children.Add(saveRow);
         var saveText=Button(saveRow,"Сохранить текст накладной",()=>Try(SaveText));saveText.ContentTemplate=null;saveText.Width=double.NaN;saveText.Padding=new Thickness(10,3,10,3);
+        var reuse=Button(saveRow,"Сохранить как форму получателя",()=>Try(()=>{
+            SaveText();var invoice=Store.Invoice(eventId,issueId);
+            Store.SaveRecipientForm(invoice.Recipient,"invoice",Store.CustomIssueTemplate(eventId,issueId,"invoice")!,"Накладная.docx");
+            savedStatus.Text="Форма сохранена для следующих выдач получателя «"+invoice.Recipient+"».";
+        }));reuse.ContentTemplate=null;reuse.Width=double.NaN;reuse.Padding=new Thickness(10,3,10,3);
         editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,"invoice")??throw new TicketException("Шаблон накладной не найден."),"invoice");
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveText);};
-        reader.SizeChanged+=(_,_)=>{if(reader.ActualWidth>100)reader.Document=Preview(reader.ActualWidth-20);};Refresh();
+        Refresh();
         Closing+=(_,e)=>{
             try{PersistSender();if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{SaveText();var info=Store.CustomIssueDocument(eventId,issueId,"invoice");if(info is not null)InvoiceDocuments.SaveIssueDocumentWord(info,destination);else InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});}
             catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Отправитель",MessageBoxButton.OK,MessageBoxImage.Warning);}
@@ -71,7 +76,15 @@ internal sealed class InvoiceWindow : EditorWindow
     }
     private void Refresh()
     {
-        var invoice=Store.Invoice(eventId,issueId);if(documentNavigation is not null)IssueDocumentNavigation.SetBusinessEnabled(documentNavigation,Store.CanUseBusinessDocuments(eventId,issueId));reader.Document=Preview(reader.ActualWidth>100?reader.ActualWidth-20:794);
+        if(documentNavigation is not null)IssueDocumentNavigation.SetBusinessEnabled(documentNavigation,Store.CanUseBusinessDocuments(eventId,issueId));
+        var info=Store.CustomIssueDocument(eventId,issueId,"invoice");
+        if(info is not null)reader.SetDocument(info,Preview);else reader.SetDocument(InvoiceBytes(),Preview);
+    }
+    private byte[] InvoiceBytes()
+    {
+        var path=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"Tickets-invoice-view-"+Guid.NewGuid().ToString("N")+".docx");
+        try{InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),path);return System.IO.File.ReadAllBytes(path);}
+        finally{if(System.IO.File.Exists(path))System.IO.File.Delete(path);}
     }
     private FlowDocument Preview(double width)
     {
@@ -136,7 +149,9 @@ internal sealed class InvoiceWindow : EditorWindow
     private void Print()
     {
         PersistSender();SaveText();
-        DocumentPrintPreview.Show(DialogOwner,$"Накладная № {issueId}",Preview);
+        var info=Store.CustomIssueDocument(eventId,issueId,"invoice");
+        if(info is not null)DocumentPrintPreview.Show(DialogOwner,$"Накладная № {issueId}",info);
+        else DocumentPrintPreview.Show(DialogOwner,$"Накладная № {issueId}",InvoiceBytes(),Preview);
     }
     internal static FlowDocument Document(InvoiceInfo invoice,double pageWidth=794)
     {

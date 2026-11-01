@@ -46,7 +46,8 @@ internal sealed class DocumentTextEditor:UserControl
         root.Children.Add(editor);
         editor.PreviewTextInput+=(_,e)=>{if(!CanEditSelection())e.Handled=true;};
         editor.PreviewKeyDown+=(_,e)=>{
-            if(e.Key is Key.Enter or Key.Tab){e.Handled=true;return;}
+            if(e.Key==Key.Tab){e.Handled=true;return;}
+            if(e.Key==Key.Enter&&!CanEditSelection()){e.Handled=true;return;}
             if(e.Key is Key.Back or Key.Delete)
             {
                 if(!CanEditSelection()){e.Handled=true;return;}
@@ -61,10 +62,11 @@ internal sealed class DocumentTextEditor:UserControl
         DataObject.AddPastingHandler(editor,(_,e)=>{
             e.CancelCommand();if(!CanEditSelection())return;
             var text=e.DataObject.GetData(DataFormats.UnicodeText) as string;
-            if(text is not null)editor.Selection.Text=text.Replace("\r\n"," ").Replace('\n',' ').Replace('\r',' ');
+            if(text is not null)editor.Selection.Text=text.Replace("\r\n","\n").Replace('\r','\n');
         });
         CommandManager.AddPreviewExecutedHandler(editor,(_,e)=>{
             if(e.Command==ApplicationCommands.Cut&&!CanEditSelection())e.Handled=true;
+            if((e.Command==EditingCommands.EnterParagraphBreak||e.Command==EditingCommands.EnterLineBreak)&&!CanEditSelection())e.Handled=true;
         });
         editor.TextChanged+=(_,_)=>{
             if(loading)return;
@@ -84,7 +86,7 @@ internal sealed class DocumentTextEditor:UserControl
         if(start.CompareTo(end)>0)(start,end)=(end,start);
         return tokens.Any(t=>t.View.Parent is not null&&start.CompareTo(t.View.ContentEnd)<0&&end.CompareTo(t.View.ContentStart)>0);
     }
-    private bool CanEditSelection()=>editor.Selection.Start.Paragraph==editor.Selection.End.Paragraph&&!TouchesToken(editor.Selection.Start,editor.Selection.End);
+    private bool CanEditSelection()=>editor.Selection.Start.Paragraph is not null&&editor.Selection.Start.Paragraph==editor.Selection.End.Paragraph&&!TouchesToken(editor.Selection.Start,editor.Selection.End);
     internal void Load(byte[] content,string kind)
     {
         loading=true;
@@ -98,26 +100,41 @@ internal sealed class DocumentTextEditor:UserControl
                 // its exact source identity, including nested/merged Word cells.
                 var match=p;
                 var view=SourceFormPreview.Paragraph(p,kind==IssueDocumentKinds.Contract?"Times New Roman":"Arial");
-                var text=string.Concat(p.Descendants(W+"t").Select(t=>t.Value));
+                var text=SourceText(p);
                 if(Regex.IsMatch(text,@"\{\{?\w+\}\}?"))
                 {
-                    var styles=view.Inlines.OfType<Run>().Where(r=>!Equals(r.Tag,"DocxTab")).ToArray();
+                    var pieces=view.Inlines.Select(inline=>(Inline:inline,Text:inline is LineBreak?"\n":inline is Run r?(Equals(r.Tag,"DocxTab")?"\t":r.Text):"")).ToArray();
                     Run Styled(string value,int position)
                     {
                         var run=new Run(value);var start=0;
-                        foreach(var style in styles)
+                        foreach(var piece in pieces)
                         {
-                            if(position<start+style.Text.Length||ReferenceEquals(style,styles.Last())){run.FontFamily=style.FontFamily;run.FontSize=style.FontSize;run.FontWeight=style.FontWeight;run.FontStyle=style.FontStyle;break;}start+=style.Text.Length;
+                            if(position<start+piece.Text.Length&&piece.Inline is Run style){run.FontFamily=style.FontFamily;run.FontSize=style.FontSize;run.FontWeight=style.FontWeight;run.FontStyle=style.FontStyle;break;}start+=piece.Text.Length;
                         }
                         return run;
+                    }
+                    void AddRange(int from,int to)
+                    {
+                        var start=0;
+                        foreach(var piece in pieces)
+                        {
+                            var end=start+piece.Text.Length;var left=Math.Max(start,from);var right=Math.Min(end,to);
+                            if(left<right)
+                            {
+                                if(piece.Inline is LineBreak)view.Inlines.Add(new LineBreak());
+                                else if(piece.Text=="\t")view.Inlines.Add(new Run("    "){Tag="DocxTab"});
+                                else view.Inlines.Add(Styled(text[left..right],left));
+                            }
+                            start=end;
+                        }
                     }
                     view.Inlines.Clear();var offset=0;
                     foreach(Match token in Regex.Matches(text,@"\{\{?(\w+)\}\}?"))
                     {
-                        view.Inlines.Add(Styled(text[offset..token.Index],offset));
+                        AddRange(offset,token.Index);
                         var run=Styled("avto",token.Index);run.Foreground=Brushes.Red;run.ToolTip=Fields.FirstOrDefault(f=>f.Key==token.Groups[1].Value)?.Caption??"Автоматическое поле";view.Inlines.Add(run);tokens.Add((run,token.Value));offset=token.Index+token.Length;
                     }
-                    view.Inlines.Add(Styled(text[offset..],offset));
+                    AddRange(offset,text.Length);
                 }
                 paragraphs.Add((view,match));return view;
             },xml);
@@ -128,26 +145,36 @@ internal sealed class DocumentTextEditor:UserControl
     internal byte[] SaveBytes()
     {
         if(tokens.Any(t=>!Attached(t.View)||t.View.Text!="avto")||paragraphs.Any(p=>!Attached(p.View)))throw new TicketException("Автоматические поля защищены. Отмените удаление или изменение поля перед сохранением.");
+        // Keep the loaded XML immutable: saving must not change the base used
+        // by undo/redo or a later save. Added paragraphs inherit their source
+        // paragraph's OOXML properties, including styles and run formatting.
+        var saved=new XDocument(xml);
+        var sourceCopies=xml.Descendants(W+"p").Zip(saved.Descendants(W+"p")).ToDictionary(pair=>pair.First,pair=>pair.Second);
+        var originalViews=paragraphs.Select(p=>p.View).ToHashSet();
         foreach(var (view,source) in paragraphs)
         {
-            var text=Read(view.Inlines);
-            Patch(source,text);
+            var texts=new List<string>{Read(view.Inlines)};
+            for(var next=view.NextBlock as Paragraph;next is not null&&!originalViews.Contains(next);next=next.NextBlock as Paragraph)texts.Add(Read(next.Inlines));
+            var copy=sourceCopies[source];Patch(copy,string.Join('\u2029',texts));
+            if(copy.Descendants(ParagraphBreak).Any())copy.ReplaceWith(SplitParagraph(copy));
         }
         using var output=new MemoryStream();output.Write(original);output.Position=0;
         using(var zip=new ZipArchive(output,ZipArchiveMode.Update))
         {
-            zip.GetEntry("word/document.xml")!.Delete();using var stream=zip.CreateEntry("word/document.xml").Open();xml.Save(stream);
+            zip.GetEntry("word/document.xml")!.Delete();using var stream=zip.CreateEntry("word/document.xml").Open();saved.Save(stream);
         }
         return output.ToArray();
     }
     private string Read(InlineCollection inlines)=>string.Concat(inlines.Select(inline=>{
         if(inline is Span span)return Read(span.Inlines);
-        if(inline is not Run run||Equals(run.Tag,"DocxTab"))return "";
+        if(inline is LineBreak)return "\n";
+        if(inline is not Run run)return "";
+        if(Equals(run.Tag,"DocxTab"))return "\t";
         var token=tokens.FirstOrDefault(t=>ReferenceEquals(t.View,run));return token.View is not null?token.Token:run.Text;
     }));
     private static void Patch(XElement paragraph,string updated)
     {
-        var nodes=paragraph.Descendants(W+"t").ToArray();var before=string.Concat(nodes.Select(n=>n.Value));
+        var nodes=TextNodes(paragraph).ToArray();var before=SourceText(paragraph);
         if(before==updated)return;
         // Apply independent text changes backwards so unchanged text keeps its
         // original run (and therefore its own font/bold/italic properties).
@@ -157,16 +184,64 @@ internal sealed class DocumentTextEditor:UserControl
             var offset=0;var inserted=false;var end=edit.Start+edit.Length;
             foreach(var node in nodes)
             {
-                var next=offset+node.Value.Length;
-                if(next>=edit.Start&&offset<=end)
+                var value=NodeText(node);var next=offset+value.Length;
+                // An adjacent page/column break or tab is not part of a text
+                // replacement. Insertion at its boundary must preserve it too.
+                var overlaps=edit.Length>0&&offset<end&&next>edit.Start;
+                var insertHere=!inserted&&node.Name==W+"t"&&offset<=edit.Start&&next>=edit.Start;
+                if(overlaps||insertHere)
                 {
-                    var from=Math.Clamp(edit.Start-offset,0,node.Value.Length);var to=Math.Clamp(end-offset,0,node.Value.Length);
-                    node.Value=node.Value[..from]+(!inserted?edit.Value:"")+node.Value[to..];node.SetAttributeValue(XNamespace.Xml+"space","preserve");inserted=true;
+                    var from=Math.Clamp(edit.Start-offset,0,value.Length);var to=Math.Clamp(end-offset,0,value.Length);
+                    node.Name=W+"t";node.RemoveAttributes();node.Value=value[..from]+(!inserted?edit.Value:"")+value[to..];node.SetAttributeValue(XNamespace.Xml+"space","preserve");inserted=true;
                 }
+                else if(!inserted&&edit.Length==0&&offset==edit.Start)
+                {node.AddBeforeSelf(InlineNodes(edit.Value));inserted=true;}
                 offset=next;
             }
             if(!inserted)paragraph.Add(new XElement(W+"r",new XElement(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),edit.Value)));
         }
+        foreach(var text in paragraph.Descendants(W+"t").Where(t=>t.Value.IndexOfAny(['\n','\t','\u2029'])>=0).ToArray())text.ReplaceWith(InlineNodes(text.Value));
+    }
+    private static readonly XName ParagraphBreak=XName.Get("paragraphBreak","urn:tickets:editor");
+    private static IEnumerable<XElement> TextNodes(XElement p)=>p.Descendants().Where(n=>n.Name==W+"t"||n.Name==W+"br"||n.Name==W+"tab");
+    private static string NodeText(XElement node)=>node.Name==W+"br"?"\n":node.Name==W+"tab"?"\t":node.Value;
+    private static string SourceText(XElement p)=>string.Concat(TextNodes(p).Select(NodeText));
+    private static IEnumerable<XElement> InlineNodes(string value)
+    {
+        var start=0;
+        for(var i=0;i<value.Length;i++)
+        {
+            if(value[i] is not ('\n' or '\t' or '\u2029'))continue;
+            if(i>start)yield return new XElement(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),value[start..i]);
+            yield return new XElement(value[i]=='\n'?W+"br":value[i]=='\t'?W+"tab":ParagraphBreak);start=i+1;
+        }
+        if(start<value.Length)yield return new XElement(W+"t",new XAttribute(XNamespace.Xml+"space","preserve"),value[start..]);
+    }
+    private static IEnumerable<XElement> SplitParagraph(XElement element)
+    {
+        var properties=element.Elements().Where(e=>e.Name==W+"pPr"||e.Name==W+"rPr").ToArray();
+        var section=element.Element(W+"pPr")?.Element(W+"sectPr");
+        XElement Empty()
+        {
+            var copy=new XElement(element.Name,element.Attributes(),properties.Select(p=>new XElement(p)));
+            copy.Element(W+"pPr")?.Element(W+"sectPr")?.Remove();return copy;
+        }
+        var current=Empty();
+        foreach(var child in element.Nodes())
+        {
+            if(child is not XElement node){current.Add(child is XText t?new XText(t.Value):null);continue;}
+            if(properties.Contains(node))continue;
+            if(node.Name==ParagraphBreak){yield return current;current=Empty();continue;}
+            if(!node.Descendants(ParagraphBreak).Any()){current.Add(new XElement(node));continue;}
+            var parts=SplitParagraph(node).ToArray();
+            for(var i=0;i<parts.Length;i++)
+            {
+                if(i>0){yield return current;current=Empty();}
+                current.Add(parts[i]);
+            }
+        }
+        if(section is not null)current.Element(W+"pPr")!.Add(new XElement(section));
+        yield return current;
     }
     private sealed record TextEdit(int Start,int Length,string Value);
     private static List<TextEdit> Changes(string before,string updated)

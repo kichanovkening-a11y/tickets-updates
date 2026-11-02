@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--corrections047")&&!name.StartsWith("047")&&!name.StartsWith("business forms use actual"))return;
     if(args.Contains("--documents045")&&!name.StartsWith("045"))return;
     if(args.Contains("--corrections044")&&!name.StartsWith("044"))return;
     if(args.Contains("--corrections033")&&!name.StartsWith("033"))return;
@@ -32,7 +33,7 @@ void Test(string name, Action<Store> body)
     Directory.CreateDirectory(caseDirectory);
     var path = System.IO.Path.Combine(caseDirectory,"tickets.db");
     File.Copy(seed, path);
-    try { body(new Store(path)); Console.WriteLine("PASS " + name); }
+    try { FixtureDates047.PrepareSeedCopy(path); body(new Store(path)); Console.WriteLine("PASS " + name); }
     catch (Exception ex) { failed++; Console.WriteLine("FAIL " + name + ": " + ex.Message); }
     finally { SqliteConnection.ClearAllPools(); Directory.Delete(caseDirectory,true); }
 }
@@ -223,7 +224,7 @@ Test("plan and event cannot use seats of another hall",s=>{
 Test("new price plan version does not alter issued tickets or previous event",s=>{
     var v=s.CreateHall("Версии","",new[]{new DraftSeat()}); var seat=s.VenueSeats(v).Single();
     var perf=s.SavePerformance("Спектакль"); var p1=s.SavePlan(v,"Первая",new[]{new PriceValue(seat.Id,100,"#FF0000")});
-    var e=s.CreateEvent(perf,v,p1,DateTime.Now); s.Issue(e,new[]{seat.Id},"A","A",1);
+    var e=s.CreateEvent(perf,v,p1,DateTime.Now.AddDays(1)); s.Issue(e,new[]{seat.Id},"A","A",1);
     s.SavePlan(v,"Вторая",new[]{new PriceValue(seat.Id,200,"#00FF00")});
     Check(s.Seats(e).Single().Amount==100 && s.History(e).Single().Amount==100);
     Check(s.Plans(v).Count==2);
@@ -404,6 +405,9 @@ PackageDocumentsChecks.Register(Test);
 CatalogDeletionChecks.Register(Test);
 PricingChecks.Register(Test);
 RecipientHistoryChecks.Register(Test);
+EventReadOnly047Checks.Register(Test);
+DocumentRender047Checks.Run(Test);
+ExcelTtn047Checks.Register(Test);
 SqliteConnection.ClearAllPools();
 Directory.Delete(root,true);
 Console.WriteLine($"{total-failed}/{total} passed");

@@ -162,7 +162,7 @@ public partial class MainWindow : Window
     private void LoadEvent(bool fit)
     {
         if(current is null) return;
-        currentArchived=store.IsEventArchived(current.Id);
+        currentArchived=store.IsEventReadOnly(current.Id);
         var seats=store.Seats(current.Id);
         EventTitle.Text=current.Title;EventDate.Text=current.Date;
         EventVenue.Text=current.Venue;
@@ -185,7 +185,7 @@ public partial class MainWindow : Window
         SelectedPriceSummary.ItemsSource=PriceSummaryRow044.For(selected);
         IssuedRecipients.Text=string.Join("\n",selected.Where(s=>s.TicketId.HasValue).GroupBy(s=>s.Recipient).Select(g=>$"Получатель: {g.Key} — мест: {g.Count()}"));
         IssuedRecipients.Visibility=string.IsNullOrEmpty(IssuedRecipients.Text)?Visibility.Collapsed:Visibility.Visible;
-        var archived=currentArchived;
+        var archived=currentArchived=current is not null&&store.IsEventReadOnly(current.Id);
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
         SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
         IssueButton.IsEnabled=!archived && current is not null && selected.Count>0 && free==selected.Count &&
@@ -202,8 +202,8 @@ public partial class MainWindow : Window
         SaleStateButton.IsEnabled=!archived&&selected.Count>0&&issued==0&&selected.All(s=>!s.IsTicketlandSold)&&(allBlocked||selected.All(x=>!x.IsBlocked));
         ApplyPriceButton.IsEnabled=!archived&&selected.Count>0&&selected.All(s=>!s.TicketId.HasValue&&!s.IsTicketlandSold);
         UndoPriceButton.IsEnabled=!archived&&priceUndo.TryPeek(out var change)&&current?.Id==change.EventId;
-        ReturnButton.IsEnabled=selected.Count>0 && issued==selected.Count;
-        SelectionHint.Text=archived?"Показ удалён из рабочих списков. Накладные доступны в журнале.":selected.Count==0?"Клик и рамка выбирают места. Для занятых мест доступны исходная накладная и возврат.":
+        ReturnButton.IsEnabled=!archived&&selected.Count>0 && issued==selected.Count;
+        SelectionHint.Text=archived?"Архивный показ. Доступны просмотр зала, журнал и печать сохранённых документов.":selected.Count==0?"Клик и рамка выбирают места. Для занятых мест доступны исходная накладная и возврат.":
             free==selected.Count?(string.IsNullOrWhiteSpace(RecipientName)?"Выберите или создайте получателя для каждой новой выдачи и печати.":"Все выбранные места доступны для выдачи и печати."):
             "Назначьте цену выбранным местам для выдачи и печати.";
     }
@@ -215,7 +215,7 @@ public partial class MainWindow : Window
         NumberBox.Text=store.NextNumber(SeriesBox.Text).ToString(CultureInfo.InvariantCulture); UpdateSelection();
     }
     private void TogglePriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(current is null||currentArchived)return;
+        if(current is null||store.IsEventReadOnly(current.Id))return;
         var selected=Hall.SelectedSeats;if(selected.Count==0)throw new TicketException("Выберите места на схеме.");
         if(selected.Any(s=>s.TicketId.HasValue))throw new TicketException("Для изменения цены выберите свободные места.");
         var initial=selected.First().Amount??0;
@@ -236,7 +236,7 @@ public partial class MainWindow : Window
         PriceColorBox.ItemsSource=choices;PriceColorBox.SelectedItem=mapped??choices[0];PriceColorBox.IsEnabled=mapped is null;
     }
     private void ApplyPriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(current is null)return;
+        if(current is null||store.IsEventReadOnly(current.Id))return;
         if(!long.TryParse(PriceBox.Text,out var price)||price<0)throw new TicketException("Введите целую неотрицательную цену.");
         var ids=Hall.SelectedSeats.Select(s=>s.Id).ToArray();
         var change=store.SetEventPrices(current.Id,ids,price,PriceColorBox.SelectedItem as string);priceUndo.Push(change);
@@ -244,6 +244,7 @@ public partial class MainWindow : Window
         StatusText.Text=$"Цена {InvoiceDocuments.Money(price)} сохранена для {ids.Length} мест. Выделение снято.";
     });
     private void UndoPriceClick(object sender,RoutedEventArgs e)=>Run(()=>{
+        if(current is null||store.IsEventReadOnly(current.Id))return;
         if(!priceUndo.TryPeek(out var change)||current?.Id!=change.EventId)throw new TicketException("В этом показе нет изменений цены для отмены.");
         store.UndoPriceChange(change);priceUndo.Pop();LoadEvent(false);StatusText.Text="Последнее изменение цены отменено.";
     });
@@ -255,7 +256,7 @@ public partial class MainWindow : Window
         if(editor.ShowDialog()==true){RefreshRecipients();RecipientBox.SelectedItem=null;RecipientBox.Text=editor.CreatedName;UpdateSelection();}
     });
     private void SaleStateClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(current is null)return;var selected=Hall.SelectedSeats;if(selected.Count==0)return;
+        if(current is null||store.IsEventReadOnly(current.Id))return;var selected=Hall.SelectedSeats;if(selected.Count==0)return;
         var blocked=!selected.All(x=>x.IsBlocked);
         var action=blocked?"Заблокировать":"Разблокировать";
         if(MessageBox.Show(this,$"{action} выбранные места ({selected.Count})?",action,MessageBoxButton.YesNo,MessageBoxImage.Question,MessageBoxResult.No)!=MessageBoxResult.Yes)return;
@@ -268,7 +269,7 @@ public partial class MainWindow : Window
         StatusText.Text=blocked?$"Заблокировано: {selected.Count} мест.":$"Разблокировано: {selected.Count} мест.";
     });
     private void PrintTicketsClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(current is null)return;var selected=Hall.SelectedSeats;if(selected.Count==0)throw new TicketException("Выберите места для печати.");
+        if(current is null||store.IsEventReadOnly(current.Id))return;var selected=Hall.SelectedSeats;if(selected.Count==0)throw new TicketException("Выберите места для печати.");
         var ids=selected.Select(x=>x.Id).ToArray();
         if(selected.Any(x=>!x.Available))throw new TicketException("Для печати выберите только свободные места с ценой. Ранее выданные билеты печатайте из исходной накладной.");
         if(string.IsNullOrWhiteSpace(RecipientName))throw new TicketException("Выберите получателя для новой выдачи.");
@@ -290,7 +291,7 @@ public partial class MainWindow : Window
     private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
     private void IssueSelected(bool print)
     {
-        if(current is null)return;
+        if(current is null||store.IsEventReadOnly(current.Id))return;
         var eventId=current.Id;var selected=Hall.SelectedSeats;
         if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите только свободные места с ценой. Занятые места доступны в исходной накладной.");
         if(string.IsNullOrWhiteSpace(RecipientName))throw new TicketException("Выберите получателя для новой выдачи.");
@@ -320,6 +321,7 @@ public partial class MainWindow : Window
     }
     private void ReturnTickets(long[] ids)
     {
+        if(current is null||store.IsEventReadOnly(current.Id))return;
         if(ids.Length==0) throw new TicketException("Выберите билеты для возврата.");
         if(MessageBox.Show(this,$"Вернуть билеты: {ids.Length}? Места снова станут свободными.","Возврат",MessageBoxButton.YesNo,MessageBoxImage.Question)!=MessageBoxResult.Yes) return;
         var eventId=current!.Id;var issueIds=store.History(eventId).Where(t=>ids.Contains(t.Id)).SelectMany(t=>new[]{t.IssueId,store.ResolveInvoiceId(t.IssueId)}).Distinct().ToArray();

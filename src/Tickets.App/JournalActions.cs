@@ -108,7 +108,7 @@ public partial class MainWindow
         MergeInvoicesButton.Visibility=JournalMergeActions.Visibility;
         JournalInstructions.Visibility=journalSelection.Count>=2?Visibility.Collapsed:Visibility.Visible;
         var selected=SelectedJournalInvoices(out var error);
-        MergeInvoicesButton.IsEnabled=journalSelection.Count>=2&&error.Length==0;
+        MergeInvoicesButton.IsEnabled=current is not null&&!store.IsEventReadOnly(current.Id)&&journalSelection.Count>=2&&error.Length==0;
         MergeInvoicesButton.Content="Объединить накладные";
         JournalSelectionStatus.Text=journalSelection.Count<2?"":error.Length>0?error:$"Выбрано: {selected.Length}. Будет создана новая накладная со следующим общим номером.";
     }
@@ -127,7 +127,7 @@ public partial class MainWindow
     }
     private void MergeInvoicesClick(object sender,RoutedEventArgs e)
     {
-        if(current is null||journalSelection.Count<2)return;
+        if(current is null||store.IsEventReadOnly(current.Id)||journalSelection.Count<2)return;
         try
         {
             var selected=SelectedJournalInvoices(out var error);

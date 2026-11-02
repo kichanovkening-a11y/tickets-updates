@@ -24,7 +24,7 @@ internal static class DocumentActions
         }
         return null;
     }
-    internal static ScrollViewer Toolbar(Action openWord,Action save,Action print,Action? printTickets=null)
+    internal static ScrollViewer Toolbar(Action openWord,Action save,Action print,Action? printTickets=null,string openCaption="Открыть в Word")
     {
         var row=new StackPanel{Orientation=Orientation.Horizontal};
         void Add(string caption,Action action,Brush color)
@@ -34,7 +34,7 @@ internal static class DocumentActions
                 Background=color,Foreground=Brushes.White,FontWeight=FontWeights.Bold};
             button.Click+=(_,_)=>action();row.Children.Add(button);
         }
-        Add("Открыть в Word",openWord,Brushes.SlateGray);
+        Add(openCaption,openWord,Brushes.SlateGray);
         Add("Сохранить",save,Brushes.SteelBlue);
         Add("Печать",print,Brushes.SeaGreen);
         var layout=new DockPanel{LastChildFill=false};DockPanel.SetDock(row,Dock.Left);layout.Children.Add(row);

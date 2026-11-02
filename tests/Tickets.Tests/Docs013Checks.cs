@@ -55,8 +55,7 @@ static class Docs013Checks
             Require(paths.Count==6,"not all six documents regenerated");
             foreach(var path in paths)
             {
-                using var archive=System.IO.Compression.ZipFile.OpenRead(path);using var xml=archive.GetEntry("word/document.xml")!.Open();
-                var content=string.Concat(XDocument.Load(xml).Descendants(W+"t").Select(t=>t.Value));
+                var content=ExportedDocumentText047.Read(path);
                 Require(content.Contains("ПодписантОтправителя014")&&content.Contains("ПодписантПолучателя014"),"stale signatures in "+Path.GetFileName(path));
             }
             var refreshed=s.Invoice(invoice.EventId,invoice.Id);

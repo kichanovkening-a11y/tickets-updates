@@ -50,7 +50,7 @@ internal sealed class PerformanceWindow : EditorWindow
                             {e.Handled=true;SelectedEventId=showing.Id;Finish(true);}
                         };
                         var leafMenu=new ContextMenu();leaf.ContextMenu=leafMenu;
-                        var removeShow=new MenuItem{Header="Удалить показ окончательно"};leafMenu.Items.Add(removeShow);
+                        var removeShow=new MenuItem{Header="Удалить показ окончательно",IsEnabled=!store.IsEventReadOnly(showing.Id)};leafMenu.Items.Add(removeShow);
                         removeShow.Click+=(_,_)=>Try(()=>{
                             if(!CatalogCleanup023.Confirm(DialogOwner,1))return;
                             try{store.DeleteEventsPermanently(new[]{showing.Id});}

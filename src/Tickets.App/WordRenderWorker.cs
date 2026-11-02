@@ -12,10 +12,57 @@ internal static class WordRenderWorker
 {
     internal static int Run(string directory)
     {
-        WordAutomationSession? session=null;object? document=null;
+        WordAutomationSession? session=null;
+        try{return Render(directory,directory,ref session);}
+        finally{session?.Dispose();ExcelTtnRenderer.DisposeSession();}
+    }
+    internal static int RunPersistent(string owningRoot,int parentId,long parentStarted)
+    {
+        Directory.CreateDirectory(owningRoot);
+        using var finished=new CancellationTokenSource();
+        // The watcher runs independently of STA COM calls, including blocked Office dialogs.
+        var watcher=new Thread(()=>
+        {
+            try
+            {
+                using var parent=Process.GetProcessById(parentId);
+                if(parent.StartTime.ToUniversalTime().Ticks!=parentStarted)throw new InvalidOperationException();
+                while(!finished.IsCancellationRequested)
+                {
+                    if(parent.WaitForExit(250))break;
+                }
+                if(finished.IsCancellationRequested)return;
+            }
+            catch(ArgumentException){}catch(InvalidOperationException){}catch(System.ComponentModel.Win32Exception){}
+            var ownershipDeadline=DateTime.UtcNow.AddSeconds(60);
+            while(!finished.IsCancellationRequested&&!File.Exists(Path.Combine(owningRoot,"owned-word.txt"))&&!File.Exists(Path.Combine(owningRoot,"owned-excel.txt"))&&DateTime.UtcNow<ownershipDeadline)
+                Thread.Sleep(100);
+            if(finished.IsCancellationRequested)return;
+            StopOwnedWord(owningRoot);ExcelTtnRenderer.StopOwnedExcel(owningRoot);
+            Environment.Exit(1);
+        }){IsBackground=true};watcher.Start();
+        WordAutomationSession? session=null;
         try
         {
-            session=WordAutomationSession.Start(directory);
+            string? request;
+            while((request=Console.ReadLine()) is not null)
+            {
+                var job=System.Text.Json.JsonSerializer.Deserialize<string>(request)!;
+                var result=Render(job,owningRoot,ref session);
+                Console.WriteLine(result.ToString(CultureInfo.InvariantCulture));Console.Out.Flush();
+            }
+            return 0;
+        }
+        finally{session?.Dispose();ExcelTtnRenderer.DisposeSession();finished.Cancel();watcher.Join(1000);}
+    }
+    private static int Render(string directory,string owningRoot,ref WordAutomationSession? session)
+    {
+        object? document=null;
+        try
+        {
+            using(var package=ZipFile.OpenRead(Path.Combine(directory,"document.docx")))
+                if(package.GetEntry("customXml/tickets-ttn047.json") is not null)return ExcelTtnRenderer.Render(directory,owningRoot);
+            session??=WordAutomationSession.Start(owningRoot);
             document=session.OpenDocument(Path.Combine(directory,"document.docx"));
             ((dynamic)document).Repaginate();CheckContractTail(document);CheckTtnFields(document,directory);
             ((dynamic)document).ExportAsFixedFormat(OutputFileName:Path.Combine(directory,"pages.xps"),ExportFormat:18,OpenAfterExport:false,OptimizeFor:0,Range:0,Item:0,IncludeDocProps:false,KeepIRM:true,CreateBookmarks:0,DocStructureTags:true,BitmapMissingFonts:true);
@@ -24,12 +71,13 @@ internal static class WordRenderWorker
         catch(Exception ex)
         {
             try{File.WriteAllText(Path.Combine(directory,"error.txt"),"Не удалось подготовить документ в Word. "+ex.Message);}catch(IOException){}catch(UnauthorizedAccessException){}
+            if(ex is COMException){session?.Dispose();session=null;}
             return 1;
         }
         finally
         {
             try{if(document is not null)((dynamic)document).Close(SaveChanges:0);}catch(COMException){}
-            Release(document);session?.Dispose();
+            Release(document);
         }
     }
     private static void CheckTtnFields(object document,string directory)

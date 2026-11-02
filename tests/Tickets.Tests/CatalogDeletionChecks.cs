@@ -27,8 +27,8 @@ internal static class CatalogDeletionChecks
             Require(reopened.History(e.Id).Count==2&&reopened.Invoice(e.Id,issue).Tickets.Count==1,"issued audit lost");
             Require(reopened.RecipientHistory(recipient).Count==2,"recipient audit lost");
             Reject(()=>reopened.Issue(e.Id,new[]{seats[2]},recipient,"ARCHIVE",3));
-            var ticket=reopened.History(e.Id).First().Id;reopened.Return(new[]{ticket});
-            Require(reopened.History(e.Id).Single(x=>x.Id==ticket).ReturnedAt!=null,"archived event return failed");
+            var ticket=reopened.History(e.Id).First().Id;Reject(()=>reopened.Return(new[]{ticket}));
+            Require(reopened.History(e.Id).Single(x=>x.Id==ticket).ReturnedAt==null,"archived event return changed history");
         });
         test("deleting performance removes shows issues documents and preserves global invoice numbers",s=>{
             var venue=s.CreateHall("Зал удаления", "Адрес",new[]{new DraftSeat(),new DraftSeat{Number="2",X=20}});

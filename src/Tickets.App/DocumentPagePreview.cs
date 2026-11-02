@@ -19,7 +19,7 @@ internal sealed class DocumentPagePreview:UserControl
     {
         var root=new DockPanel();Content=root;DockPanel.SetDock(status,Dock.Top);root.Children.Add(status);root.Children.Add(viewer);
         Loaded+=(_,_)=>RefreshPages();Unloaded+=(_,_)=>Release();
-        SizeChanged+=(_,_)=>{if(!WordDocumentPages.Available&&source is not null)ShowFallback();};
+        SizeChanged+=(_,_)=>{if(source is not null&&!WordDocumentPages.IsAvailable(source))ShowFallback();};
     }
     internal void SetDocument(IssueDocumentInfo info,Func<double,FlowDocument> portable)=>SetDocument(Bytes(info),portable);
     internal void SetDocument(byte[] bytes,Func<double,FlowDocument> portable)
@@ -27,10 +27,11 @@ internal sealed class DocumentPagePreview:UserControl
         fallback=portable;
         if(source is not null&&source.AsSpan().SequenceEqual(bytes))return;
         source=bytes.ToArray();Release();
-        if(!WordDocumentPages.Available)ShowFallback();else{status.Text="Подготовка страниц Word…";if(IsLoaded)RefreshPages();}
+        if(!WordDocumentPages.IsAvailable(source))ShowFallback();else{status.Text="Подготовка страниц…";if(IsLoaded)RefreshPages();}
     }
     internal static byte[] Bytes(IssueDocumentInfo info)
     {
+        if(ExcelTtnData.CanRender(info))return ExcelTtnData.CreateRequest(info);
         if(info.SourceDocument is {} bytes)return info.Kind==IssueDocumentKinds.Contract?ContractPagination.Prepare(bytes):bytes;
         var path=Path.Combine(Path.GetTempPath(),"Tickets-view-"+Guid.NewGuid().ToString("N")+".docx");
         try{InvoiceDocuments.SaveIssueDocumentWord(info,path);return File.ReadAllBytes(path);}
@@ -38,6 +39,8 @@ internal sealed class DocumentPagePreview:UserControl
     }
     private void ShowFallback()
     {
+        if(source is not null&&ExcelTtnData.IsRequest(source))
+        {viewer.Content=null;status.Text="Для просмотра и печати ТТН по исходной форме установите Microsoft Excel.";return;}
         if(fallback is null)return;
         status.Text="Просмотр без Word: переносы страниц могут отличаться.";
         viewer.Content=new FlowDocumentScrollViewer{Document=fallback(ActualWidth>100?ActualWidth-20:794),IsToolBarVisible=false,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
@@ -45,9 +48,9 @@ internal sealed class DocumentPagePreview:UserControl
     private async void RefreshPages()
     {
         if(source is null)return;
-        Release();if(!WordDocumentPages.Available){ShowFallback();return;}
+        Release();if(!WordDocumentPages.IsAvailable(source)){ShowFallback();return;}
         var request=pending=new CancellationTokenSource();var bytes=source;
-        status.Text="Подготовка страниц Word…";
+        status.Text="Подготовка страниц…";
         try
         {
             // Briefly coalesce navigation/metadata changes before starting Office.
@@ -58,7 +61,7 @@ internal sealed class DocumentPagePreview:UserControl
             var pages=new StackPanel{HorizontalAlignment=HorizontalAlignment.Center};
             for(var i=0;i<lease.Pages.Pages.Count;i++)pages.Children.Add(new DocumentPageView{DocumentPaginator=lease.Pages.DocumentPaginator,PageNumber=i,Margin=new Thickness(0,0,0,10)});
             viewer.Content=new ScrollViewer{Content=pages,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};
-            status.Text="Макет Word · Страниц: "+lease.Pages.Pages.Count;
+            status.Text=(ExcelTtnData.IsRequest(bytes)?"Макет Excel":"Макет Word")+" · Страниц: "+lease.Pages.Pages.Count;
         }
         catch(OperationCanceledException){}
         catch(Exception ex){if(!request.IsCancellationRequested)status.Text=ex.Message+" Повторите открытие вкладки «Документ».";}

@@ -14,6 +14,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     private readonly DocumentPagePreview preview=new();
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,4,0,4)};
     private readonly DocumentTextEditor textEditor=new();
+    private bool UseExcel=>ExcelTtnData.CanRender(Info);
     private IssueDocumentInfo Info=>Store.CustomIssueDocument(eventId,issueId,kind)??Store.GetIssueDocument(eventId,issueId,kind);
 
     internal CustomIssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,Tickets.Core.Store.RecipientDocumentName(kind)+$" · выдача № {issueId}",1030,850)
@@ -27,10 +28,11 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
             ()=>Try(OpenWord),
             ()=>Try(()=>{
                 SaveForNavigation();var info=Info;
+                if(UseExcel){ExcelTtnExport.Save(Store,DialogOwner,info);return;}
                 var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>InvoiceDocuments.SaveIssueDocumentWord(info,destination));
                 if(path is not null)status.Text="Сохранено: "+path;
             }),
-            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,Info);})));
+            ()=>Try(()=>{SaveForNavigation();DocumentPrintPreview.Show(DialogOwner,Title,Info);}),openCaption:UseExcel?"Открыть в Excel":"Открыть в Word"));
 
         header.Children.Add(ContractFields.Row(Store,eventId,issueId,()=>{Refresh();status.Text="Поля договора сохранены для всего комплекта.";}));
         header.Children.Add(status);
@@ -42,7 +44,8 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
         editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,kind)!,kind);
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveForNavigation);};
-        Closing+=(_,e)=>{try{if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}.docx",destination=>{SaveForNavigation();InvoiceDocuments.SaveIssueDocumentWord(Info,destination);});}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
+        Closing+=(_,e)=>{try{if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{Tickets.Core.Store.RecipientDocumentName(kind)}-{issueId}."+(UseExcel?"xlsx":"docx"),destination=>{SaveForNavigation();InvoiceDocuments.SaveIssueDocumentWord(Info,destination);});}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}};
+        DocumentReadOnly047.Apply(root,Store.IsEventReadOnly(eventId));
         Refresh();status.Text="Форма получателя подготовлена для текущей выдачи.";
         DocumentFlag025.Apply(this,root,Info.Invoice.Recipient,issueId,Tickets.Core.Store.RecipientDocumentName(kind));
     }
@@ -60,6 +63,7 @@ internal sealed class CustomIssueDocumentWindow:EditorWindow
     private void OpenWord()
     {
         SaveForNavigation();var info=Info;var bytes=info.SourceDocument;
+        if(UseExcel){ExcelTtnExport.Open(DialogOwner,info);return;}
         if(bytes is null){IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));return;}
         var path=WorkingPath();
         // Each open exports the current filled form, including native text edits.

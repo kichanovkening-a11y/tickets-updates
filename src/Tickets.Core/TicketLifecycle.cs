@@ -20,6 +20,7 @@ public sealed partial class Store
     public void ConfirmReservation(long eventId,long issueId)
     {
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        RequireWritableEvent(c,tx,eventId);
         using(var check=Command(c,"""
             SELECT count(*) FROM ticket t JOIN issue_batch b ON b.id=t.issue_id
             WHERE b.id=$i AND b.event_id=$e AND t.event_id=$e AND t.returned_at IS NULL
@@ -49,6 +50,8 @@ public sealed partial class Store
         if(ticketIds.Count==0||ticketIds.Distinct().Count()!=ticketIds.Count)
             throw new TicketException("Выберите билеты для печати без повторов.");
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        // Reprinting archived tickets must not confirm a reservation or change its history.
+        if(IsEventReadOnly(c,tx,eventId))return;
         var timestamp=DateTimeOffset.Now.ToString("O");
         foreach(var id in ticketIds)
         {
@@ -72,7 +75,7 @@ public sealed partial class Store
         try
         {
             using var c=Open();EnsureInvoiceMergeTable(c);using var tx=c.BeginTransaction(deferred:false);
-            RequireActiveEvent(c,tx,eventId);
+            RequireWritableEvent(c,tx,eventId);
             issueId=ResolveInvoiceId(issueId,InvoiceMergeLinks(c,tx));
             string recipient,series,timestamp;
             using(var batch=Command(c,"""

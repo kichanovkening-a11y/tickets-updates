@@ -61,7 +61,7 @@ public partial class MainWindow
         if(editor.ShowDialog()==true){RefreshRecipients();RecipientBox.Text=editor.CreatedName;UpdateSelection();}
     });
     private void ReserveClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(current is null)return;
+        if(current is null||store.IsEventReadOnly(current.Id))return;
         if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
         var selected=Hall.SelectedSeats;
         if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Для брони выберите только свободные места с ценой.");
@@ -71,7 +71,7 @@ public partial class MainWindow
         LoadEvent(false);Hall.Clear();ClearIssuanceRecipient();StatusText.Text=$"Забронировано мест: {selected.Count}. Бронь № {id}. Для оформления откройте исходную накладную из журнала.";
     });
     private void ExtendInvoiceClick(object sender,RoutedEventArgs e)=>Run(()=>{
-        if(current is null)return;var selected=Hall.SelectedSeats;
+        if(current is null||store.IsEventReadOnly(current.Id))return;var selected=Hall.SelectedSeats;
         if(selected.Count==0||selected.Any(s=>!s.Available))throw new TicketException("Выберите дополнительные свободные места с ценой.");
         var choice=new InvoiceChoiceWindow(store,current.Id);
         if(choice.ShowDialog()!=true)return;

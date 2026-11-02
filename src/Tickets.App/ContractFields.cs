@@ -21,6 +21,7 @@ internal static class ContractFields
             catch(Exception ex){MessageBox.Show(Window.GetWindow(panel),ex.Message,"Поля договора",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
         number.LostKeyboardFocus+=(_,_)=>{if(string.IsNullOrWhiteSpace(number.Text))number.Text=store.ContractNumber(eventId,issueId);};
+        panel.IsEnabled=!store.IsEventReadOnly(eventId);
         return panel;
     }
 }

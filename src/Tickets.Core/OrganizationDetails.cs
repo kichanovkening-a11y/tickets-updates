@@ -98,6 +98,7 @@ public sealed partial class Store
     public void RefreshInvoiceRecipient(long eventId,long issueId)
     {
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        RequireWritableEvent(c,tx,eventId);
         using var read=Command(c,"SELECT recipient FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId);read.Transaction=tx;
         var recipient=read.ExecuteScalar() as string??throw new TicketException("Накладная не найдена в этом показе.");
         CaptureIssueOrganization(c,tx,issueId,recipient,false);tx.Commit();
@@ -105,6 +106,7 @@ public sealed partial class Store
     public void RefreshInvoiceOrganizations(long eventId,long issueId)
     {
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        RequireWritableEvent(c,tx,eventId);
         string sender,recipient;
         using(var read=Command(c,"SELECT sender,recipient FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId))
         {read.Transaction=tx;using var r=read.ExecuteReader();if(!r.Read())throw new TicketException("Накладная не найдена в этом показе.");sender=r.GetString(0);recipient=r.GetString(1);}

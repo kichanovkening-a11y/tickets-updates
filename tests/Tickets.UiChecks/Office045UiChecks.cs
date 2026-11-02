@@ -42,7 +42,7 @@ internal static class Office045UiChecks
                 Check(Math.Abs(page.Size.Width-1122.53)<2&&Math.Abs(page.Size.Height-793.73)<2,"Word preserves A4 landscape dimensions on page "+(i+1));
             }
         }
-        Check(!Process.GetProcessesByName("WINWORD").Any(p=>!before.Contains(p.Id)),"the renderer closes only its own invisible Word instance");
+        Check(Process.GetProcessesByName("WINWORD").Count(p=>!before.Contains(p.Id))==1,"the renderer keeps one owned invisible Word instance for later documents");
         using(var firstView=new WordPageLease(first.Result))
         using(var secondView=new WordPageLease(first.Result))
         {

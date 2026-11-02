@@ -18,7 +18,7 @@ public sealed partial class Store
     public void SetSeatsBlocked(long eventId,IReadOnlyCollection<long> ids,bool blocked)
     {
         if(ids.Count==0||ids.Distinct().Count()!=ids.Count)throw new TicketException("Выберите места без повторов.");
-        using var c=Open();using var tx=c.BeginTransaction(deferred:false);RequireActiveEvent(c,tx,eventId);
+        using var c=Open();using var tx=c.BeginTransaction(deferred:false);RequireWritableEvent(c,tx,eventId);
         foreach(var id in ids)
         {
             using var check=Command(c,"""

@@ -24,8 +24,8 @@ internal sealed class InvoiceWindow : EditorWindow
         var header=new StackPanel();root.Children.Add(header);
         header.Children.Add(documentNavigation=IssueDocumentNavigation.Toolbar(IssueDocumentNavigation.Invoice,kind=>Try(()=>{
             PersistSender();SaveText();
-            IssueDocumentNavigation.Open(Store,eventId,issueId,kind);
-            Refresh();
+            if(IssueDocumentNavigation.Open(Store,eventId,issueId,kind))Refresh();
+            else Close();
         })));
         DocumentActions.Append(documentNavigation!,DocumentActions.Toolbar(
             ()=>Try(OpenWord),
@@ -63,6 +63,7 @@ internal sealed class InvoiceWindow : EditorWindow
         editing.Children.Add(textEditor);tabs.Items.Add(new TabItem{Header="Изменить текст",Content=editing});
         textEditor.Load(Store.CustomIssueTemplate(eventId,issueId,"invoice")??throw new TicketException("Шаблон накладной не найден."),"invoice");
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0)Try(SaveText);};
+        DocumentReadOnly047.Apply(root,Store.IsEventReadOnly(eventId));
         Refresh();
         Closing+=(_,e)=>{
             try{PersistSender();if(textEditor.IsDirty)e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"Накладная-{issueId}.docx",destination=>{SaveText();var info=Store.CustomIssueDocument(eventId,issueId,"invoice");if(info is not null)InvoiceDocuments.SaveIssueDocumentWord(info,destination);else InvoiceDocuments.SaveWord(Store.Invoice(eventId,issueId),destination);});}

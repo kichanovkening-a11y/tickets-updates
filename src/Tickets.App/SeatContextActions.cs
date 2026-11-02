@@ -15,6 +15,7 @@ public partial class MainWindow
     private void OpenSeatContext(long seatId,Point position)
     {
         if(current is null)return;
+        currentArchived=store.IsEventReadOnly(current.Id);
         var seat=store.Seats(current.Id).FirstOrDefault(s=>s.Id==seatId);
         if(seat is null)return;
         var menu=new ContextMenu{PlacementTarget=Hall,Placement=PlacementMode.RelativePoint,HorizontalOffset=position.X,VerticalOffset=position.Y};
@@ -31,7 +32,7 @@ public partial class MainWindow
             }));
             var occupiedGroup=Hall.Selected.Contains(seatId)&&Hall.SelectedSeats.Count>1&&Hall.SelectedSeats.All(s=>s.TicketId.HasValue);
             var returnIds=occupiedGroup?Hall.SelectedSeats.Select(s=>s.TicketId!.Value).ToArray():seat.TicketId.HasValue?[seat.TicketId.Value]:Array.Empty<long>();
-            Action(occupiedGroup?"Вернуть выбранные":"Вернуть место",seat.TicketId.HasValue,()=>Run(()=>ReturnTickets(returnIds)));
+            Action(occupiedGroup?"Вернуть выбранные":"Вернуть место",seat.TicketId.HasValue&&!currentArchived,()=>Run(()=>ReturnTickets(returnIds)));
             if(occupiedGroup)
                 foreach(var issueId in Hall.SelectedSeats.Where(s=>s.IssueId.HasValue).Select(s=>s.IssueId!.Value).Distinct().Where(id=>id!=seat.IssueId))
                     Action($"Открыть исходную накладную № {issueId}",true,()=>Run(()=>OpenInvoice(issueId)));
@@ -39,7 +40,7 @@ public partial class MainWindow
             {
                 if(!Hall.Selected.Contains(seat.Id))Hall.SetSelection([seat.Id]);
                 var releasable=Hall.SelectedSeats.Where(s=>s.IsTicketlandOccupied&&!s.TicketId.HasValue).Select(s=>s.Id).ToArray();
-                Action("Освободить в программе",releasable.Length>0,()=>Run(()=>{store.ReleaseTicketPro037(current.Id,releasable);LoadEvent(false);Hall.SetSelection(releasable);}));
+                Action("Освободить в программе",releasable.Length>0,()=>Run(()=>{if(store.IsEventReadOnly(current.Id))return;store.ReleaseTicketPro037(current.Id,releasable);LoadEvent(false);Hall.SetSelection(releasable);}));
             }
             if(seat.IsBlocked&&!currentArchived)
             {

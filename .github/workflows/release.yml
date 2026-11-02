@@ -157,6 +157,12 @@ jobs:
       - name: Verify all document menus and recipient forms
         if: steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --documentmenus045
+      - name: Verify document closing and editable recipient directory
+        run: |
+          dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --forms047
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --recipient047
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify compact header with journal and hall gestures
         if: steps.verified043.outputs.reuse != 'true' && steps.verified046.outputs.reuse != 'true'
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --corrections027

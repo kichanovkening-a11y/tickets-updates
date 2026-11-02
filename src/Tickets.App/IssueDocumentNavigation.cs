@@ -49,12 +49,13 @@ internal static class IssueDocumentNavigation
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path){UseShellExecute=true});
     }
 
-    internal static void Open(Store store,long eventId,long issueId,string selected)
+    // True means an explicit click on the invoice tab; false means Close.
+    internal static bool Open(Store store,long eventId,long issueId,string selected)
     {
         if(selected!=Invoice&&!store.CanUseBusinessDocuments(eventId,issueId))throw new TicketException("Заполните реквизиты получателя. Пока доступны накладная и печать билетов.");
         while(selected!=Invoice)
         {
-            string next=Invoice;
+            string? next=null;
             EditorWindow editor=store.CustomIssueTemplate(eventId,issueId,selected) is not null
                 ?new CustomIssueDocumentWindow(store,eventId,issueId,selected)
                 :selected==Specification
@@ -82,7 +83,9 @@ internal static class IssueDocumentNavigation
             if(body is FrameworkElement content)content.Margin=new Thickness(2,0,2,2);
             DockPanel.SetDock(navigation,Dock.Top);frame.Children.Add(navigation);frame.Children.Add(body);editor.Content=frame;
             editor.ShowDialog();
+            if(next is null)return false;
             selected=next;
         }
+        return true;
     }
 }

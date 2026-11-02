@@ -25,6 +25,12 @@ internal static class BusinessDocumentChecks
                 Require(doc.Body.Contains(invoice.Title)&&doc.Body.Contains(invoice.EventDate)&&doc.Body.Contains(DocumentTotals.Amount(invoice.Total)),"event or exact totals missing");
                 Require(!doc.Body.Contains("{senderDetails}")&&(doc.Kind==IssueDocumentKinds.Contract?!doc.Template.Contains("{itemDescription}"):doc.Template.Contains("{itemDescription}")),"ticket table unresolved");
                 var file=s.SaveIssueDocumentWord(evt.Id,id,doc.Kind);
+                if(Path.GetExtension(file)==".xlsx")
+                {
+                    using var workbook=ZipFile.OpenRead(file);using var sheet=workbook.GetEntry("xl/worksheets/sheet1.xml")!.Open();
+                    XNamespace xl="http://schemas.openxmlformats.org/spreadsheetml/2006/main";
+                    Require(XDocument.Load(sheet).Descendants(xl+"mergeCell").Any(),"original Excel cell grid missing");continue;
+                }
                 using var zip=ZipFile.OpenRead(file);using var stream=zip.GetEntry("word/document.xml")!.Open();var xml=XDocument.Load(stream);XNamespace w="http://schemas.openxmlformats.org/wordprocessingml/2006/main";
                 Require(xml.Descendants(w+"tbl").Any(),"native Word ticket table missing");
             }

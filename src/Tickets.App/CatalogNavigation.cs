@@ -1,5 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
 
 namespace Tickets.App;
 
@@ -73,6 +76,27 @@ public partial class MainWindow
         // An explicit arrow / keyboard open always browses the entire directory.
         recipientEditVersion++;
         RefreshRecipients();
+    }
+    private void RecipientFieldPressed(object sender,MouseButtonEventArgs e)
+    {
+        if(!ready||recipientUpdating)return;
+        // Only the field opens the directory here. The arrow and popup choices
+        // retain their native toggle / commit behavior.
+        var source=e.OriginalSource as DependencyObject;
+        while(source is not null&&source!=RecipientBox)
+        {
+            if(source is ToggleButton or ComboBoxItem)return;
+            source=source is Visual?VisualTreeHelper.GetParent(source):LogicalTreeHelper.GetParent(source);
+        }
+        if(source!=RecipientBox)return;
+        if(RecipientBox.Template?.FindName("PART_EditableTextBox",RecipientBox) is TextBox box)box.Focus();
+        if(RecipientBox.IsDropDownOpen)
+        {
+            recipientEditVersion++;
+            RefreshRecipients();
+        }
+        else RecipientBox.IsDropDownOpen=true;
+        // Do not handle the event: the textbox must still position its caret.
     }
     private void RefreshRecipients(bool filter=false)
     {

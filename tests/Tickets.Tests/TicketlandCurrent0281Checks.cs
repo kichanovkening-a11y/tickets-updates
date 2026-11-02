@@ -54,7 +54,7 @@ internal static class TicketlandCurrent0281Checks
         });
         run("0281 current Ticketland picks only active current local dates",store=>{
             var method=typeof(Store).GetMethod("TicketlandPeriod0281");Check(method is not null,"current showing period selection missing");
-            var today=new DateTime(2099,1,1);Check(method!.Invoke(store,[today]) is null,"past seed causes historic fetch");
+            var today=store.Events().Max(e=>DateTime.Parse(e.SortDate,System.Globalization.CultureInfo.InvariantCulture)).Date.AddDays(1);Check(method!.Invoke(store,[today]) is null,"past seed causes historic fetch");
             var venue=store.CreateHall("0281 period","",[new(){Sector="Партер",Row="1",Number="1",X=0,Y=0}]);var plan=store.SavePlan(venue,"price",[new(store.VenueSeats(venue).Single().Id,500,"#FF0000")]);
             var title=store.SavePerformance("0281 period");store.CreateEvent(title,venue,plan,today.AddDays(20));
             var result=method.Invoke(store,[today]);Check(result is ValueTuple<DateTime,DateTime> dates&&dates.Item1==today&&dates.Item2==today.AddDays(20),"incorrect current range");store.DeleteVenue(venue);Check(method.Invoke(store,[today]) is null,"deleted hall creates report range");

@@ -27,8 +27,7 @@ static class Docs016Checks
             Require(paths.Count==6,"not all six issue documents regenerated");
             foreach(var path in paths)
             {
-                using var archive=System.IO.Compression.ZipFile.OpenRead(path);using var stream=archive.GetEntry("word/document.xml")!.Open();
-                var text=string.Concat(System.Xml.Linq.XDocument.Load(stream).Descendants(System.Xml.Linq.XName.Get("t","http://schemas.openxmlformats.org/wordprocessingml/2006/main")).Select(t=>t.Value));
+                var text=ExportedDocumentText047.Read(path);
                 Require(text.Replace('\u00a0',' ').Contains(updated.Signatory)&&text.Replace('\u00a0',' ').Contains(oldSender.Signatory),"regenerated document has stale recipient or changed sender: "+path);
             }
         });

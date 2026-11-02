@@ -116,13 +116,14 @@ public sealed partial class Store
     }
     public IssueDocumentInfo SaveIssueDocument(long eventId,long issueId,string kind,string template)
     {
+        RequireWritableEvent(eventId);
         template=CheckedTemplate(kind,template);var invoice=Invoice(eventId,issueId);PrepareIssueDocuments(eventId,issueId);
         using var c=Open();using var cmd=Command(c,"UPDATE issue_document SET template=$t WHERE event_id=$e AND issue_id=$i AND kind=$k","$t",template,"$e",eventId,"$i",issueId,"$k",kind);if(cmd.ExecuteNonQuery()!=1)throw new TicketException("Документ не найден.");return RenderIssueDocument(kind,invoice,template);
     }
     public string SaveIssueDocumentWord(long eventId,long issueId,string kind)
     {
         var info=GetIssueDocument(eventId,issueId,kind);var directory=System.IO.Path.Combine(DocumentsDirectory,IssueDocumentKinds.Name(kind));Directory.CreateDirectory(directory);
-        var file=System.IO.Path.Combine(directory,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx");InvoiceDocuments.SaveIssueDocumentWord(info,file);return file;
+        var file=System.IO.Path.Combine(directory,$"{IssueDocumentKinds.Name(kind)}-{issueId}."+(ExcelTtnData.CanRender(info)?"xlsx":"docx"));InvoiceDocuments.SaveIssueDocumentWord(info,file);return file;
     }
     public string SaveIssueSpecificationDocument(long eventId,long issueId)
     {

@@ -60,6 +60,7 @@ public sealed partial class Store
     }
     public void SetContractDate(long eventId,long issueId,DateTime date)
     {
+        RequireWritableEvent(eventId);
         Invoice(eventId,issueId);using var c=Open();EnsureRecipientForms(c);
         using var cmd=Command(c,"INSERT INTO issue_contract_date(issue_id,value) VALUES($i,$d) ON CONFLICT(issue_id) DO UPDATE SET value=excluded.value","$i",issueId,"$d",date.ToString("yyyy-MM-dd"));cmd.ExecuteNonQuery();
     }
@@ -113,6 +114,7 @@ public sealed partial class Store
     }
     public void SaveCustomIssueForm(long eventId,long issueId,string kind,byte[] content)
     {
+        RequireWritableEvent(eventId);
         CustomDocumentForms.Validate(content);Invoice(eventId,issueId);using var c=Open();EnsureRecipientForms(c);
         using var cmd=Command(c,"INSERT INTO issue_custom_form(issue_id,kind,file_name,content) VALUES($i,$k,$f,$b) ON CONFLICT(issue_id,kind) DO UPDATE SET content=excluded.content","$i",issueId,"$k",kind,"$f",RecipientDocumentName(kind)+".docx","$b",content);cmd.ExecuteNonQuery();
         if(kind=="contract")SynchronizeContractRepresentative(eventId,issueId,CustomDocumentForms.Text(content));

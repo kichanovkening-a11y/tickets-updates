@@ -146,7 +146,7 @@ public sealed partial class Store
     public PriceChange SetEventPrices(long eventId,IReadOnlyCollection<long> seatIds,long amount,string? color=null)
     {
         if(amount<0)throw new TicketException("Цена не может быть отрицательной.");
-        using var c=Open();using var tx=c.BeginTransaction(deferred:false);CheckPriceSeats(c,tx,eventId,seatIds,true);
+        using var c=Open();using var tx=c.BeginTransaction(deferred:false);RequireWritableEvent(c,tx,eventId);CheckPriceSeats(c,tx,eventId,seatIds,true);
         var before=ReadEventPrices(c,tx,eventId,seatIds);var previousColor=ExistingPriceColor(c,tx,amount);
         var appliedColor=EnsurePriceColor(c,tx,amount,color);
         foreach(var id in seatIds)
@@ -159,6 +159,7 @@ public sealed partial class Store
     public void UndoPriceChange(PriceChange change)
     {
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        RequireWritableEvent(c,tx,change.EventId);
         var ids=change.After.Select(p=>p.SeatId).ToArray();CheckPriceSeats(c,tx,change.EventId,ids,true);
         if(!ReadEventPrices(c,tx,change.EventId,ids).SequenceEqual(change.After)||
             ExistingPriceColor(c,tx,change.Amount)!=change.AppliedGlobalColor||

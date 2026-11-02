@@ -17,6 +17,19 @@ internal static class DocumentPrintPreview
     internal static void Show(Window owner,string title,IssueDocumentInfo info)=>Show(owner,title,DocumentPagePreview.Bytes(info),width=>IssueDocumentWindow.Document(info,width),info.Kind==IssueDocumentKinds.Waybill,info.Kind==IssueDocumentKinds.Contract);
     internal static void Show(Window owner,string title,byte[] source,Func<double,FlowDocument> fallback,bool landscape=false,bool numbered=false)
     {
+        if(ExcelTtnData.IsRequest(source))
+        {
+            if(!WordDocumentPages.IsAvailable(source))throw new TicketException("Для печати ТТН по исходной форме установите Microsoft Excel.");
+            UnifiedPrintPreview.Show(owner,title,(_,_)=>new FixedDocument(),(settings,pages)=>settings.PrintDocument(pages.DocumentPaginator,title),true,
+                preferredMedia:new Size(210*96/25.4,297*96/25.4),asyncBuild:async settings=>
+                {
+                    if(settings.PrintTicket.PageOrientation!=PageOrientation.Landscape)throw new TicketException("Исходная форма ТТН печатается в альбомной ориентации.");
+                    var paper=UnifiedPrintPreview.PageSize(settings);
+                    if(Math.Abs(paper.Width-297*96/25.4)>2||Math.Abs(paper.Height-210*96/25.4)>2)throw new TicketException("Для исходной формы ТТН выберите бумагу A4 (297 × 210 мм).");
+                    var path=await WordDocumentPages.RenderAsync(source);return new WordPageLease(path).Pages;
+                });
+            return;
+        }
         if(!WordDocumentPages.Available){Show(owner,title+" · просмотр без Word",fallback,landscape,numbered);return;}
         var layout=DocxPageLayout.Read(source);
         var options=new WrapPanel();options.Children.Add(new TextBlock{Text="Поля, мм:",VerticalAlignment=VerticalAlignment.Center});

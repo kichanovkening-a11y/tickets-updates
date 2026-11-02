@@ -25,6 +25,7 @@ public partial class App : Application
             catch(Exception ex){try{File.WriteAllText(Path.Combine(e.Args[1],"validation-error.txt"),ex.ToString());}catch{}Shutdown(1);}
             return;
         }
+        if(e.Args.Length==4&&e.Args[0]=="--render-documents"&&int.TryParse(e.Args[2],out var parentId)&&long.TryParse(e.Args[3],out var parentStarted)) {Shutdown(WordRenderWorker.RunPersistent(e.Args[1],parentId,parentStarted));return;}
         if(e.Args.Length==2&&e.Args[0]=="--render-document") {Shutdown(WordRenderWorker.Run(e.Args[1]));return;}
         if(e.Args.Length==3&&e.Args[0]=="--apply-update") {UpdateRunner.Apply(e.Args[1],e.Args[2]);Shutdown();return;}
         try

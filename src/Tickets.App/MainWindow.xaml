@@ -141,7 +141,7 @@
             <StackPanel DockPanel.Dock="Top" Margin="{DynamicResource Px5Bottom043}">
               <local:CompactText043 x:Name="SelectedSummary" Text="Ничего не выбрано" FontSize="16.8" FontWeight="Bold" Foreground="#C1121F" Margin="{DynamicResource Px3Bottom043}" TextWrapping="Wrap"/>
               <local:CompactText043 x:Name="RecipientLabel043" Text="Получатель / организация" Margin="{DynamicResource Px3Bottom043}"/>
-              <ComboBox x:Name="RecipientBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" MinHeight="34" Padding="4" DropDownOpened="RecipientOpened" SelectionChanged="RecipientSelected"/>
+              <ComboBox x:Name="RecipientBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" MinHeight="34" Padding="4" DropDownOpened="RecipientOpened" SelectionChanged="RecipientSelected" PreviewMouseLeftButtonDown="RecipientFieldPressed"/>
               <TextBlock x:Name="IssuedRecipients" Visibility="Collapsed" Foreground="#9A3412" FontWeight="Bold" TextWrapping="Wrap" MaxHeight="44" Margin="0,4,0,3"/>
             </StackPanel>
             <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="150" Margin="{DynamicResource Px5Top043}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid x:Name="LegendPanel"/></ScrollViewer>

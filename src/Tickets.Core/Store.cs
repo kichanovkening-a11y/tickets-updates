@@ -119,7 +119,7 @@ public sealed partial class Store
         try
         {
             using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
-            RequireActiveEvent(c,tx,eventId);
+            RequireWritableEvent(c,tx,eventId);
             var n=firstNumber; var timestamp=DateTimeOffset.Now.ToString("O");
             using var batch=Command(c,"""
                 INSERT INTO issue_batch(id,event_id,recipient,issued_at,series,title,venue,event_date,sender)
@@ -176,6 +176,9 @@ public sealed partial class Store
         var time=DateTimeOffset.Now.ToString("O");
         foreach(var id in tickets)
         {
+            using var eventQuery=Command(c,"SELECT event_id FROM ticket WHERE id=$id","$id",id);eventQuery.Transaction=tx;
+            if(eventQuery.ExecuteScalar() is not long eventId)throw new TicketException("Билет не найден. Возврат отменён целиком.");
+            RequireWritableEvent(c,tx,eventId);
             using var cmd=Command(c,"UPDATE ticket SET returned_at=$time WHERE id=$id AND returned_at IS NULL",
                 "$time",time,"$id",id);
             cmd.Transaction=tx;

@@ -53,6 +53,7 @@ public sealed partial class Store
     public void UpdateInvoiceSender(long eventId,long issueId,string sender)
     {
         sender=Required(sender,"От кого");using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        RequireWritableEvent(c,tx,eventId);
         using(var old=Command(c,"SELECT sender FROM issue_batch WHERE id=$i AND event_id=$e","$i",issueId,"$e",eventId))
         {old.Transaction=tx;var prior=old.ExecuteScalar() as string;if(prior is null)throw new TicketException("Выдача не найдена в этом мероприятии.");if(CatalogText.Key(prior)!=CatalogText.Key(sender)&&!SenderChoiceAllowed(sender))throw new TicketException("Отправитель удалён из списка. Выберите другого или создайте отправителя заново.");RememberSender(c,tx,prior);if(prior!=sender)CaptureIssueOrganization(c,tx,issueId,sender,true);}
         using var cmd=Command(c,"UPDATE issue_batch SET sender=$s WHERE id=$i AND event_id=$e","$s",sender,"$i",issueId,"$e",eventId);cmd.Transaction=tx;

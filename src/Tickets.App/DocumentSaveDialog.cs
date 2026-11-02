@@ -14,7 +14,7 @@ internal static class DocumentSaveDialog
     }
     internal static string? Save(Store store,Window owner,string fileName,Action<string> write)
     {
-        var dialog=new SaveFileDialog{Title="Сохранить документ",Filter="Документ Word (*.docx)|*.docx",DefaultExt=".docx",AddExtension=true,FileName=fileName};
+        var dialog=new SaveFileDialog{Title="Сохранить документ",Filter=Path.GetExtension(fileName)==".xlsx"?"Книга Excel (*.xlsx)|*.xlsx":"Документ Word (*.docx)|*.docx",DefaultExt=Path.GetExtension(fileName),AddExtension=true,FileName=fileName};
         var directory=store.DocumentSaveDirectory;
         if(Directory.Exists(directory))dialog.InitialDirectory=directory;
         if(dialog.ShowDialog(owner)!=true)return null;

@@ -17,10 +17,10 @@ internal sealed class RecipientFormsWindow:EditorWindow
     // Reopening this editor must recover the same Word working copies.
     private static readonly Dictionary<string,Dictionary<string,string>> editingSessions=[];
     private readonly Dictionary<string,string> editingPaths;
-    private readonly Button openWord,refreshWord;
+    private readonly Button upload,openWord,refreshWord;
     private readonly MenuItem remove=new(){Header="Удалить форму этого документа"};
     private string loadedKind="";
-    private string Kind=>(kinds.SelectedItem as Choice)?.Key??"contract";
+    private string Kind=>(kinds.SelectedItem as Choice)?.Key??"";
 
     internal RecipientFormsWindow(Store store,string recipient):base(store,"Формы документов · "+recipient,980,760)
     {
@@ -34,7 +34,7 @@ internal sealed class RecipientFormsWindow:EditorWindow
         header.Children.Add(new TextBlock{Text="Загрузите форму для каждого документа. Получатель в справочнике — короткое имя: юридические названия сторон и текст загруженной формы сохраняются. Подстановки меняют только отмеченные вами поля.",TextWrapping=TextWrapping.Wrap,FontSize=13,Margin=new Thickness(0,5,0,8)});
         var toolbar=new WrapPanel{VerticalAlignment=VerticalAlignment.Center};header.Children.Add(toolbar);toolbar.Children.Add(kinds);
         kinds.ItemsSource=new[]{"contract","act","specification","bill","ttn","invoice"}.Select(k=>new Choice(k,Tickets.Core.Store.RecipientDocumentName(k))).ToArray();
-        CompactButton(toolbar,"Загрузить форму",()=>Try(Upload));
+        upload=CompactButton(toolbar,"Загрузить форму",()=>Try(Upload));
         openWord=CompactButton(toolbar,"Сохранить текст / поля",()=>Try(SaveText));
         refreshWord=CompactButton(toolbar,"Обновить просмотр",()=>Try(()=>{SaveText();Reload();}));
         var menu=new ContextMenu();menu.Items.Add(remove);preview.ContextMenu=menu;filename.ContextMenu=menu;
@@ -43,7 +43,7 @@ internal sealed class RecipientFormsWindow:EditorWindow
         header.Children.Add(new TextBlock{Text="Обычный текст редактируется внутри программы. Красные поля «avto» защищены. Выделите фрагмент формы и назначьте автоматическое поле из списка. Исходное оформление DOCX сохраняется; изменения таблиц и макета выполняйте в исходном файле перед загрузкой.",TextWrapping=TextWrapping.Wrap,FontSize=12,Margin=new Thickness(0,5,0,0)});
         header.Children.Add(status);
         root.Children.Add(preview);
-        kinds.SelectionChanged+=(_,_)=>{if(!string.IsNullOrEmpty(loadedKind))Try(()=>SaveText(loadedKind));Reload();status.Text="";};kinds.SelectedIndex=0;
+        kinds.SelectionChanged+=(_,_)=>{if(!string.IsNullOrEmpty(loadedKind))Try(()=>SaveText(loadedKind));Reload();status.Text="";};kinds.SelectedIndex=-1;Reload();
         Closing+=(_,e)=>{try{SaveText();}catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Форма",MessageBoxButton.OK,MessageBoxImage.Warning);}};
     }
     private static Button CompactButton(Panel parent,string caption,Action action)
@@ -52,6 +52,14 @@ internal sealed class RecipientFormsWindow:EditorWindow
     }
     private void Reload()
     {
+        upload.IsEnabled=Kind.Length>0;
+        if(Kind.Length==0)
+        {
+            loadedKind="";preview.IsEnabled=false;preview.Visibility=Visibility.Hidden;
+            openWord.IsEnabled=false;refreshWord.IsEnabled=false;remove.IsEnabled=false;
+            filename.Text="Выберите документ";return;
+        }
+        preview.Visibility=Visibility.Visible;
         loadedKind=Kind;var custom=Store.RecipientForm(recipient,Kind);var form=custom??Store.DefaultRecipientForm(Kind);
         preview.IsEnabled=form is not null;if(form is not null)preview.Load(form.Content,Kind);
         filename.Text=form is null?"":((custom is null?"Стандартная форма: ":"Форма получателя: ")+form.FileName+" · DOCX");
@@ -59,6 +67,7 @@ internal sealed class RecipientFormsWindow:EditorWindow
     }
     private void Upload()
     {
+        if(Kind.Length==0)return;
         var dialog=new OpenFileDialog{Title="Загрузить форму: "+Tickets.Core.Store.RecipientDocumentName(Kind),Filter="Формы Office (*.docx;*.doc;*.xls;*.xlsx)|*.docx;*.doc;*.xls;*.xlsx|Документ Word (*.docx)|*.docx",CheckFileExists=true,Multiselect=false};
         if(dialog.ShowDialog(DialogOwner)!=true)return;
         if(editingPaths.ContainsKey(Kind))throw new TicketException("Сначала сохраните и закройте Word, затем нажмите «Обновить из Word», чтобы сохранить правки перед заменой формы.");
@@ -69,7 +78,7 @@ internal sealed class RecipientFormsWindow:EditorWindow
     private void SaveText()=>SaveText(Kind);
     private void SaveText(string selectedKind)
     {
-        if(!preview.IsEnabled||!preview.IsDirty)return;
+        if(selectedKind.Length==0||!preview.IsEnabled||!preview.IsDirty)return;
         var form=Store.RecipientForm(recipient,selectedKind)??Store.DefaultRecipientForm(selectedKind)??throw new TicketException("Сначала загрузите форму.");
         var bytes=preview.SaveBytes();Store.SaveRecipientForm(recipient,selectedKind,bytes,form.FileName);preview.Load(bytes,selectedKind);status.Text="Текст и автоматические поля сохранены в форме получателя.";
     }

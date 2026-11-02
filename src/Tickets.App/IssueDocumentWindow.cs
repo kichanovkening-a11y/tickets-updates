@@ -14,6 +14,7 @@ internal sealed class IssueDocumentWindow:EditorWindow
     private readonly DocumentPagePreview preview=new();
     private readonly TextBlock status=new(){FontSize=12,TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,3,0,3)};
     private string original="";
+    private bool UseExcel=>ExcelTtnData.CanRender(Store.GetIssueDocument(eventId,issueId,kind));
     public IssueDocumentWindow(Store store,long eventId,long issueId,string kind):base(store,IssueDocumentKinds.Name(kind)+$" · выдача № {issueId}",1030,850)
     {
         this.eventId=eventId;this.issueId=issueId;this.kind=kind;
@@ -22,11 +23,12 @@ internal sealed class IssueDocumentWindow:EditorWindow
         var header=new StackPanel();root.Children.Add(header);
         var info=Store.GetIssueDocument(eventId,issueId,kind);original=info.Template;template.Text=original;
         header.Children.Add(DocumentActions.Toolbar(
-            ()=>Try(()=>{SaveForNavigation();IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));}),
+            ()=>Try(()=>{SaveForNavigation();if(UseExcel){ExcelTtnExport.Open(DialogOwner,Store.GetIssueDocument(eventId,issueId,kind));return;}IssueDocumentNavigation.OpenWord(Store.IssueDocumentPath(issueId,kind),()=>Store.SaveIssueDocumentWord(eventId,issueId,kind));}),
             ()=>Try(()=>{
+            if(UseExcel){SaveForNavigation();ExcelTtnExport.Save(Store,DialogOwner,Store.GetIssueDocument(eventId,issueId,kind));return;}
             var path=DocumentSaveDialog.Save(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx",destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});
             if(path is not null)status.Text="Сохранено: "+path;
-        }),()=>Try(Print)));
+        }),()=>Try(Print),openCaption:UseExcel?"Открыть в Excel":"Открыть в Word"));
         header.Children.Add(status);
         var tabs=new TabControl();Grid.SetRow(tabs,1);root.Children.Add(tabs);
         tabs.Items.Add(new TabItem{Header="Документ",Content=preview});
@@ -37,9 +39,10 @@ internal sealed class IssueDocumentWindow:EditorWindow
         tabs.SelectionChanged+=(_,e)=>{if(e.Source==tabs&&tabs.SelectedIndex==0&&template.Text!=original)Try(Save);};
         preview.SetDocument(info,width=>Document(info,width));status.Text="Документ подготовлен для текущей выдачи.";
         DocumentFlag025.Apply(this,root,info.Invoice.Recipient,issueId,IssueDocumentKinds.Name(kind));
+        DocumentReadOnly047.Apply(root,Store.IsEventReadOnly(eventId));
         Closing+=(_,e)=>{
             if(template.Text==original)return;
-            try{e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}.docx",destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});}
+            try{e.Cancel=!DocumentSaveDialog.SaveOnClose(Store,DialogOwner,$"{IssueDocumentKinds.Name(kind)}-{issueId}."+(UseExcel?"xlsx":"docx"),destination=>{Save();InvoiceDocuments.SaveIssueDocumentWord(Store.GetIssueDocument(eventId,issueId,kind),destination);});}
             catch(Exception ex){e.Cancel=true;MessageBox.Show(DialogOwner,ex.Message,"Документ",MessageBoxButton.OK,MessageBoxImage.Warning);}
         };
     }

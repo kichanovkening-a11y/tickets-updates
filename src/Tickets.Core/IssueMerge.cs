@@ -88,7 +88,7 @@ public sealed partial class Store
         try
         {
             using var c=Open();EnsureInvoiceMergeTable(c);using var tx=c.BeginTransaction(deferred:false);
-            RequireActiveEvent(c,tx,eventId);var links=InvoiceMergeLinks(c,tx);
+            RequireWritableEvent(c,tx,eventId);var links=InvoiceMergeLinks(c,tx);
             string? recipient=null,sender=null;
             foreach(var id in issueIds)
             {

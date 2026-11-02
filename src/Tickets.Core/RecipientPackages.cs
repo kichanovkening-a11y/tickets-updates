@@ -31,12 +31,12 @@ public sealed partial class Store
         RecipientDocumentName(kind);var invoice=RecipientPackage(id).Invoice;
         if(kind!="invoice"&&invoice.RecipientDetails?.HasRequisites!=true)throw new TicketException("Для этого документа заполните реквизиты получателя перед созданием комплекта. Накладная доступна без реквизитов.");
         using var c=Open();EnsureRecipientPackages(c);using var cmd=Command(c,"SELECT content FROM recipient_package_document WHERE package_id=$i AND kind=$k","$i",id,"$k",kind);var bytes=cmd.ExecuteScalar() as byte[];
-        if(bytes is null){var form=RecipientForm(invoice.Recipient,kind)?.Content??StandardDocumentForms.Resolve(kind,null)??throw new TicketException("Бланк документа не найден.");return SaveRecipientPackageTemplate(id,kind,form);}
+        if(bytes is null){var form=RecipientForm(invoice.Recipient,kind)?.Content??StandardDocumentForms.Resolve(kind,null)??throw new TicketException("Бланк документа не найден.");return StoreRecipientPackageTemplate(id,kind,form,false);}
         return new(kind,invoice,"",CustomDocumentForms.Text(bytes)){SourceDocument=bytes};
     }
     public void SaveRecipientPackageDocument(long id,string kind,byte[] content)
     {
-        RecipientDocumentName(kind);RecipientPackage(id);CustomDocumentForms.Validate(content);using var c=Open();EnsureRecipientPackages(c);using var tx=c.BeginTransaction();
+        RecipientDocumentName(kind);RequireWritableRecipientPackage(id);CustomDocumentForms.Validate(content);using var c=Open();EnsureRecipientPackages(c);using var tx=c.BeginTransaction();
         using var cmd=Command(c,"INSERT INTO recipient_package_document(package_id,kind,content) VALUES($i,$k,$b) ON CONFLICT(package_id,kind) DO UPDATE SET content=excluded.content; DELETE FROM recipient_package_template WHERE package_id=$i AND kind=$k;","$i",id,"$k",kind,"$b",content);cmd.Transaction=tx;cmd.ExecuteNonQuery();tx.Commit();
     }
     public byte[] GetRecipientPackageTemplate(long id,string kind)
@@ -47,13 +47,27 @@ public sealed partial class Store
         // their exact saved content instead of guessing from today's forms.
         return cmd.ExecuteScalar() as byte[]??document.SourceDocument!;
     }
+    private void RequireWritableRecipientPackage(long id)
+    {
+        // A mixed-date package remains current until every included show is archived.
+        if(DocumentArchive().Contains(RecipientPackage(id)))
+            throw new TicketException("Архивный комплект доступен только для просмотра и печати сохранённых документов.");
+    }
     public IssueDocumentInfo SaveRecipientPackageTemplate(long id,string kind,byte[] content)
+    {
+        RequireWritableRecipientPackage(id);
+        return StoreRecipientPackageTemplate(id,kind,content,true);
+    }
+    // Lazy first rendering is allowed for old snapshots; it must never replace saved bytes.
+    private IssueDocumentInfo StoreRecipientPackageTemplate(long id,string kind,byte[] content,bool overwrite)
     {
         RecipientDocumentName(kind);CustomDocumentForms.Validate(content);var invoice=RecipientPackage(id).Invoice;
         if(kind!="invoice"&&invoice.RecipientDetails?.HasRequisites!=true)throw new TicketException("Для этого документа заполните реквизиты получателя перед созданием комплекта. Накладная доступна без реквизитов.");
         var filled=CustomDocumentForms.Fill(content,invoice,kind,invoice.ContractDate??DateTimeOffset.Parse(invoice.IssuedAt).Date);
         using var c=Open();EnsureRecipientPackages(c);using var tx=c.BeginTransaction();
-        using var cmd=Command(c,"INSERT INTO recipient_package_template(package_id,kind,content) VALUES($i,$k,$t) ON CONFLICT(package_id,kind) DO UPDATE SET content=excluded.content; INSERT INTO recipient_package_document(package_id,kind,content) VALUES($i,$k,$b) ON CONFLICT(package_id,kind) DO UPDATE SET content=excluded.content;","$i",id,"$k",kind,"$t",content,"$b",filled);cmd.Transaction=tx;cmd.ExecuteNonQuery();tx.Commit();
-        return new(kind,invoice,"",CustomDocumentForms.Text(filled)){SourceDocument=filled};
+        var conflict=overwrite?"DO UPDATE SET content=excluded.content":"DO NOTHING";
+        using var cmd=Command(c,$"INSERT INTO recipient_package_template(package_id,kind,content) VALUES($i,$k,$t) ON CONFLICT(package_id,kind) {conflict}; INSERT INTO recipient_package_document(package_id,kind,content) VALUES($i,$k,$b) ON CONFLICT(package_id,kind) {conflict};","$i",id,"$k",kind,"$t",content,"$b",filled);cmd.Transaction=tx;cmd.ExecuteNonQuery();
+        using var read=Command(c,"SELECT content FROM recipient_package_document WHERE package_id=$i AND kind=$k","$i",id,"$k",kind);read.Transaction=tx;var saved=(byte[])read.ExecuteScalar()!;tx.Commit();
+        return new(kind,invoice,"",CustomDocumentForms.Text(saved)){SourceDocument=saved};
     }
 }

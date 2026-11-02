@@ -50,6 +50,7 @@ public static class InvoiceDocuments
     }
     public static void SaveIssueDocumentWord(IssueDocumentInfo document,string destination)
     {
+        if(document.Kind==IssueDocumentKinds.Waybill&&System.IO.Path.GetExtension(destination).Equals(".xlsx",StringComparison.OrdinalIgnoreCase)){ExcelTtnWorkbook.Save(document,destination);return;}
         if(document.SourceDocument is {} custom)
         {
             if(document.Kind==IssueDocumentKinds.Contract)custom=ContractPagination.Prepare(custom);

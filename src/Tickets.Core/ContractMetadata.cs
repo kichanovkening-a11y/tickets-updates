@@ -16,6 +16,7 @@ public sealed partial class Store
     public string ContractNumber(long eventId,long issueId)=>Invoice(eventId,issueId).ContractNumber;
     public void SetContractNumber(long eventId,long issueId,string number)
     {
+        RequireWritableEvent(eventId);
         Invoice(eventId,issueId);number=(number??"").Trim();
         if(number.Length==0||number.Length>100||number.Any(char.IsControl))throw new TicketException("Укажите номер договора (до 100 символов).");
         using var c=Open();EnsureRecipientForms(c);using var cmd=Command(c,"INSERT INTO issue_contract_number(issue_id,value) VALUES($i,$v) ON CONFLICT(issue_id) DO UPDATE SET value=excluded.value","$i",issueId,"$v",number);cmd.ExecuteNonQuery();
@@ -23,6 +24,7 @@ public sealed partial class Store
     public OrganizationDetails ContractRepresentative(long eventId,long issueId)=>Invoice(eventId,issueId).RecipientDetails??new();
     public void SetContractRepresentative(long eventId,long issueId,string signatory,string position="")
     {
+        RequireWritableEvent(eventId);
         var invoice=Invoice(eventId,issueId);signatory=(signatory??"").Trim();position=(position??"").Trim();
         if(signatory.Length>2000||position.Length>2000||signatory.Any(char.IsControl)||position.Any(char.IsControl))throw new TicketException("Укажите представителя и должность одной строкой.");
         var details=(invoice.RecipientDetails??new(Name:invoice.Recipient)) with {Signatory=signatory,Position=position};

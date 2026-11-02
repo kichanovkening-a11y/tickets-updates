@@ -5,12 +5,11 @@ internal static class ArchivePricingChecks
 {
     public static void Register(Action<string,Action<Store>> test)
     {
-        test("deleted imported show pricing remains reusable after source removal",s=>{
+        test("047 deleted imported show pricing remains reusable after source removal",s=>{
             var source=s.Events().First(e=>s.Seats(e.Id).Count(x=>x.Amount.HasValue)>=2);
             var before=s.Seats(source.Id).Where(x=>x.Amount.HasValue).Select(x=>new PriceValue(x.Id,x.Amount!.Value,x.Color)).OrderBy(x=>x.SeatId).ToArray();
-            var performance=s.Performances().First(p=>CatalogText.Key(p.Title)==CatalogText.Key(source.Title));
             var template=s.GetOrCreateEventPlan(source.Id);
-            s.DeletePerformance(performance.Id);
+            s.DeleteEventsPermanently([source.Id]);
             Require(!s.Events(true).Any(e=>e.Id==source.Id),"deleted source show remains");
             Require(s.Plans(source.VenueId).Any(p=>p.Id==template),"archived source template not offered");
             var copied=s.CopyPlanPrices(template,source.VenueId).OrderBy(x=>x.SeatId).ToArray();

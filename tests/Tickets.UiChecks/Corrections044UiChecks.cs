@@ -41,9 +41,17 @@ internal static class Corrections044UiChecks
         var ids=store.VenueSeats(venue).Select(s=>s.Id).ToArray();
         var plan=store.SavePlan(venue,"Original044",ids.Select(id=>new PriceValue(id,1000,"#FFEF44")).ToArray());
         var second=store.SavePlan(venue,"Different044",ids.Select((id,i)=>new PriceValue(id,1000*(1+i%4),new[]{"#FFEF44","#F57333","#A003FF","#22AADD"}[i%4])).ToArray());
-        var past=store.CreateEvent(store.SavePerformance("Past044"),venue,plan,new DateTime(2000,1,1,19,0,0));
+        var past=store.CreateEvent(store.SavePerformance("Past044"),venue,plan,new DateTime(2098,1,1,19,0,0));
         var future=store.CreateEvent(store.SavePerformance("Future044"),venue,second,new DateTime(2099,1,1,19,0,0));
         var a=store.Issue(past,[ids[0]],"Recipient044","ARC044",1);var b=store.Issue(future,[ids[0]],"Recipient044","ARC044",2);
+        // Issue while active, then move the fixture into the archive. Archived
+        // shows intentionally reject new issuance under the 047 policy.
+        using(var connection=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+db))
+        {
+            connection.Open();using var command=connection.CreateCommand();
+            command.CommandText="UPDATE event SET starts_at='2000-01-01T19:00:00',legacy_date='01.01.2000 19:00:00' WHERE id=$id";
+            command.Parameters.AddWithValue("$id",past);command.ExecuteNonQuery();
+        }
         var mixed=store.CreateRecipientPackage("Recipient044",[(past,a),(future,b)]);
         var old=store.CreateRecipientPackage("Recipient044",[(past,a)]);
         var originalBytes=store.GetRecipientPackageDocument(old.Id,"invoice").SourceDocument!;

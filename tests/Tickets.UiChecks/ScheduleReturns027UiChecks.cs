@@ -34,7 +34,7 @@ internal static class ScheduleReturns027UiChecks
         var show=store.Events().First(e=>DateTime.TryParse(e.SortDate,out var starts)&&starts>DateTime.Now&&store.Seats(e.Id).Any(s=>s.Available));var seat=store.Seats(show.Id).First(s=>s.Available);
         const string recipient="UI Возврат027";store.SaveOrganizationDetails(recipient,false,new(Name:recipient));
         var issue=store.Issue(show.Id,[seat.Id],recipient,"UIRET027",1);store.Return([store.History(show.Id).Single(t=>t.IssueId==issue).Id]);
-        using(var connection=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+store.Path))
+        using(var connection=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+store.Path+";Pooling=False"))
         {
             connection.Open();using var command=connection.CreateCommand();
             command.CommandText="UPDATE event SET starts_at='2000-01-02T19:00:00',legacy_date='02.01.2000 19:00:00' WHERE id=$id";

@@ -46,7 +46,7 @@ internal static class Corrections044UiChecks
         var a=store.Issue(past,[ids[0]],"Recipient044","ARC044",1);var b=store.Issue(future,[ids[0]],"Recipient044","ARC044",2);
         // Issue while active, then move the fixture into the archive. Archived
         // shows intentionally reject new issuance under the 047 policy.
-        using(var connection=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+db))
+        using(var connection=new Microsoft.Data.Sqlite.SqliteConnection("Data Source="+db+";Pooling=False"))
         {
             connection.Open();using var command=connection.CreateCommand();
             command.CommandText="UPDATE event SET starts_at='2000-01-01T19:00:00',legacy_date='01.01.2000 19:00:00' WHERE id=$id";

@@ -49,15 +49,21 @@ internal static class Documents045MenuChecks
     }
     private static void WaitForPages(Window window,string label)
     {
-        if(!WordDocumentPages.Available){Check(Walk(window).OfType<TextBlock>().Any(t=>t.Text.Contains("Просмотр без Word")),"portable fallback is identified in "+label);return;}
+        var excel=label=="ttn";
+        if(excel?Type.GetTypeFromProgID("Excel.Application") is null:!WordDocumentPages.Available)
+        {
+            Check(Walk(window).OfType<TextBlock>().Any(t=>t.Text.Contains(excel?"установите Microsoft Excel":"Просмотр без Word")),"missing Office is identified in "+label);
+            if(excel)Check(!Walk(window).OfType<FlowDocumentScrollViewer>().Any(),"approved TTN is never replaced by a portable form");
+            return;
+        }
         var until=DateTime.UtcNow.AddSeconds(75);
         while(DateTime.UtcNow<until)
         {
             Application.Current.Dispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
-            if(Walk(window).OfType<DocumentPageView>().Any()){Check(true,"Word fixed pages load through "+label+" menu");return;}
+            if(Walk(window).OfType<DocumentPageView>().Any()){Check(true,"Office fixed pages load through "+label+" menu");return;}
             Thread.Sleep(20);
         }
-        throw new Exception("No Word pages in "+label+": "+string.Join(" | ",Walk(window).OfType<TextBlock>().Select(t=>t.Text)));
+        throw new Exception("No Office pages in "+label+": "+string.Join(" | ",Walk(window).OfType<TextBlock>().Select(t=>t.Text)));
     }
     private static void Offscreen(Window window){window.WindowStartupLocation=WindowStartupLocation.Manual;window.Left=-20000;window.Top=-20000;window.ShowInTaskbar=false;window.ShowActivated=false;}
     private static IEnumerable<DependencyObject> Walk(DependencyObject root){yield return root;foreach(var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())foreach(var item in Walk(child))yield return item;}

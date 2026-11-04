@@ -289,7 +289,8 @@ public partial class MainWindow : Window
         if(current is not null&&!events.Concat(archivedEvents).Any(e=>e.Id==current.Id)){current=null;Hall.Load([],[],true);HistoryGrid.ItemsSource=null;ShowHome();}
     }
     private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
-    private void IssueSelected(bool print,bool openInvoice=true)
+    private void IssueSelected(bool print)=>IssueSelectedCore(print,true);
+    private void IssueSelectedCore(bool print,bool openInvoice)
     {
         if(current is null||store.IsEventReadOnly(current.Id))return;
         var eventId=current.Id;var selected=Hall.SelectedSeats;

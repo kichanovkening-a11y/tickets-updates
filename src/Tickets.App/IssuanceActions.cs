@@ -5,7 +5,7 @@ namespace Tickets.App;
 
 public partial class MainWindow
 {
-    private void IssueWithoutInvoiceClick048(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false,false));
+    private void IssueWithoutInvoiceClick048(object sender,RoutedEventArgs e)=>Run(()=>IssueSelectedCore(false,false));
     private string confirmedSender025="";
     private bool refreshingSenders025;
     private bool confirmingSender026;

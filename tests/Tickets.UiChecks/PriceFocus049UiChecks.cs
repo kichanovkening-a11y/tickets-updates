@@ -110,8 +110,6 @@ internal static class PriceFocus049UiChecks
                 baseline.Measure(new Size(cell.ActualWidth-10,double.PositiveInfinity));
                 Check(cell.ActualHeight+0.6>=baseline.DesiredSize.Height+15,"price plaque gains five pixels over previous text and insets");
             }
-        }
-        finally{main.Close();}
         var type=typeof(MainWindow).Assembly.GetType("Tickets.App.PriceEditorWindow")!;
         var venue=store.Venues().First(v=>store.Plans(v.Id).Count>0);
         var plan=store.Plans(venue.Id).First();
@@ -119,15 +117,17 @@ internal static class PriceFocus049UiChecks
         editor.Left=-10000;editor.Top=-10000;editor.Show();Pump();
         try
         {
-            var hall=(HallView)type.GetField("preview",Private)!.GetValue(editor)!;
-            var legend=(Grid)type.GetField("priceSummary",Private)!.GetValue(editor)!;
-            hall.SetSelection([store.VenueSeats(venue.Id).First().Id]);
-            var plaque=legend.Children.OfType<Border>().First();
+            var editorHall=(HallView)type.GetField("preview",Private)!.GetValue(editor)!;
+            var editorLegend=(Grid)type.GetField("priceSummary",Private)!.GetValue(editor)!;
+            editorHall.SetSelection([store.VenueSeats(venue.Id).First().Id]);
+            var plaque=editorLegend.Children.OfType<Border>().First();
             plaque.RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});Pump();
-            Check(hall.FocusPrices.Count==1&&plaque.BorderBrush==Brushes.Black,"editor price click highlights plaque and seats");
-            var selection=hall.Selected.ToArray();Click((UIElement)editor.Content);
-            Check(hall.FocusPrices.Count==0&&hall.Selected.SetEquals(selection)&&plaque.BorderBrush==Brushes.Gray,"blank editor area clears price focus and keeps seat selection");
+            Check(editorHall.FocusPrices.Count==1&&plaque.BorderBrush==Brushes.Black,"editor price click highlights plaque and seats");
+            var selection=editorHall.Selected.ToArray();Click((UIElement)editor.Content);
+            Check(editorHall.FocusPrices.Count==0&&editorHall.Selected.SetEquals(selection)&&plaque.BorderBrush==Brushes.Gray,"blank editor area clears price focus and keeps seat selection");
         }
         finally{editor.Close();}
+        }
+        finally{main.Close();}
     }
 }

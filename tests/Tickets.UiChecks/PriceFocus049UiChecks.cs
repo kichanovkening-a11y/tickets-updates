@@ -38,8 +38,13 @@ internal static class PriceFocus049UiChecks
             var seats=store.Seats(ev.Id).Where(s=>s.Amount.HasValue&&!s.IsBlocked).ToArray();hall.SetSelection([seats[0].Id]);
             hall.TogglePriceFocus(seats[0].Amount!.Value);Pump();
             Check(legend.Children.OfType<Border>().Any(p=>p.BorderBrush==Brushes.Black),"price focus paints its active plaque");
-            Click((ComboBox)main.FindName("RecipientBox"));
+            var recipient=(ComboBox)main.FindName("RecipientBox");
+            Click(recipient);
             Check(hall.FocusPrices.Count==1,"input interaction keeps price focus");
+            Console.WriteLine($"TRACE 049 after recipient interaction dropdown={recipient.IsDropDownOpen} captured={Mouse.Captured?.GetType().Name}");
+            // Complete the control interaction before testing a click on the hall.
+            // A ComboBox popup consumes the first outside native click to dismiss itself.
+            recipient.IsDropDownOpen=false;Pump();
             Click((Border)main.FindName("SelectionSidebar"));
             Check(hall.FocusPrices.Count==0&&hall.Selected.SetEquals([seats[0].Id]),"blank sidebar click clears prices and preserves selected seats");
             Check(legend.Children.OfType<Border>().All(p=>p.BorderBrush==Brushes.Gray),"blank click removes every active price border");
@@ -70,11 +75,21 @@ internal static class PriceFocus049UiChecks
             var screen=hall.PointToScreen(empty);
             Check(SetCursorPos((int)screen.X,(int)screen.Y),"native cursor moves to an empty visible hall point");PumpInput();
             hall.TogglePriceFocus(seats[0].Amount!.Value);
-            var clicks=new List<int>();MouseButtonEventHandler track=(_,e)=>clicks.Add(e.ClickCount);
+            var clicks=new List<int>();
+            string State()=> $"focus=[{string.Join(',',hall.FocusPrices)}] selected=[{string.Join(',',hall.Selected)}] expected={seats[0].Id} mouse={Mouse.GetPosition(hall)} hit={hit.Invoke(hall,[Mouse.GetPosition(hall)])} inputHit={main.InputHitTest(Mouse.GetPosition(main))?.GetType().Name} captured={Mouse.Captured?.GetType().Name} active={main.IsActive} loaded={hall.IsLoaded} visible={hall.IsVisible} dropdown={recipient.IsDropDownOpen} clicks=[{string.Join(',',clicks)}]";
+            MouseButtonEventHandler track=(_,e)=>{clicks.Add(e.ClickCount);Console.WriteLine($"TRACE 049 hall down source={e.OriginalSource?.GetType().Name} handled={e.Handled} count={e.ClickCount} {State()}");};
+            MouseButtonEventHandler traceUp=(_,e)=>Console.WriteLine($"TRACE 049 hall up source={e.OriginalSource?.GetType().Name} handled={e.Handled} {State()}");
+            MouseButtonEventHandler traceWindow=(_,e)=>Console.WriteLine($"TRACE 049 window {e.RoutedEvent.Name} source={e.OriginalSource?.GetType().Name} {State()}");
+            main.AddHandler(Mouse.PreviewMouseDownEvent,traceWindow,true);main.AddHandler(Mouse.PreviewMouseUpEvent,traceWindow,true);
+            hall.AddHandler(Mouse.MouseUpEvent,traceUp,true);
+            Console.WriteLine($"TRACE 049 before native click intended={empty} screen={screen} {State()}");
+            Check(Mouse.Captured is null&&!recipient.IsDropDownOpen,"native hall click starts without an open dropdown or prior mouse capture");
+            Check(ReferenceEquals(main.InputHitTest(Mouse.GetPosition(main)),hall)&&hit.Invoke(hall,[Mouse.GetPosition(hall)]) is null,"native cursor hit-tests to empty hall background");
             hall.AddHandler(Mouse.MouseDownEvent,track,true);
             try
             {
                 NativeClick();
+                Console.WriteLine("TRACE 049 after native click "+State());
                 Check(hall.FocusPrices.Count==0&&hall.Selected.SetEquals([seats[0].Id]),"blank hall click clears price focus without clearing selected seats");
                 NativeClick();
                 Check(clicks.Contains(2),"native second click is delivered as a double-click");
@@ -83,7 +98,11 @@ internal static class PriceFocus049UiChecks
                 NativeClick();
                 Check(hall.Selected.Count==0,"blank hall click without price focus retains the existing selection-clear behavior");
             }
-            finally{hall.RemoveHandler(Mouse.MouseDownEvent,track);}
+            finally
+            {
+                hall.RemoveHandler(Mouse.MouseDownEvent,track);hall.RemoveHandler(Mouse.MouseUpEvent,traceUp);
+                main.RemoveHandler(Mouse.PreviewMouseDownEvent,traceWindow);main.RemoveHandler(Mouse.PreviewMouseUpEvent,traceWindow);
+            }
             foreach(var cell in legend.Children.OfType<Border>())
             {
                 var label=(CompactText043)cell.Child;Check(label.FontSize==13.44,"price font grows by two points");

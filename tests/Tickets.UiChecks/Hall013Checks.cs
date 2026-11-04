@@ -28,7 +28,26 @@ internal static class Hall013Checks
         Require(drawing.Children.OfType<GeometryDrawing>().Count(d=>d.Brush==Brushes.White&&d.Geometry is RectangleGeometry)==seats.Length,"Other prices render white");
         hall.Load(seats,Array.Empty<SectorInfo>(),false);
         Require(hall.FocusPrice==200,"Reload preserves caller controlled price focus");
+        var multiple=seats.Select((seat,i)=>seat with{Amount=i==0?100:i==1?200:i==2?null:300}).ToArray();
+        hall.Load(multiple,Array.Empty<SectorInfo>(),false);hall.SetSelection([1L]);changes=0;
+        hall.TogglePriceFocus(100);
+        Require(hall.FocusPrices.ToHashSet().SetEquals([100m,200m])&&changes==0,"Second price adds to visual focus without modifiers or selection events");
+        drawing=(DrawingGroup)field.GetValue(hall)!;
+        Require(drawing.Children.OfType<GeometryDrawing>().Count(d=>d.Brush==Brushes.White&&d.Geometry is RectangleGeometry)==3,"Union highlights both prices and dims other or unpriced seats");
+        hall.Load(multiple,Array.Empty<SectorInfo>(),false);hall.SetSelection([1L]);changes=0;
+        Require(hall.FocusPrices.ToHashSet().SetEquals([100m,200m]),"Reload preserves all focused prices");
+        hall.TogglePriceFocus(100);
+        Require(hall.FocusPrices.SequenceEqual([200m]),"Repeated price click removes only that price");
+        hall.TogglePriceFocus(200);
+        Require(hall.FocusPrices.Count==0,"Removing the last price restores all prices");
+        hall.TogglePriceFocus(100);hall.TogglePriceFocus(200);
+        hall.FocusStatus030=HallStatus030.Reserved;
+        Require(hall.FocusPrices.Count==0,"Status focus clears every price");
+        hall.TogglePriceFocus(100);hall.TogglePriceFocus(200);
+        Require(hall.FocusStatus030 is null,"Price focus clears status focus");
+        Require(hall.Selected.SetEquals([1L])&&changes==0,"Multiple price toggles never mutate seat selection");
         hall.FocusPrice=null;
+        Require(hall.FocusPrices.Count==0,"Clearing focus removes all prices");
         drawing=(DrawingGroup)field.GetValue(hall)!;
         Require(!drawing.Children.OfType<GeometryDrawing>().Any(d=>d.Brush==Brushes.White&&d.Geometry is RectangleGeometry),"Clearing focus restores category fill");
     }

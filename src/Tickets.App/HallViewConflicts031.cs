@@ -34,7 +34,7 @@ public sealed partial class HallView
         if(!conflictFlash031)return;
         foreach(var seat in seats.Where(Conflict031))
         {
-            if(focusPrice.HasValue&&seat.Amount!=focusPrice.Value||focusStatus030.HasValue&&!HallFocus030.Matches(seat,focusStatus030.Value))continue;
+            if(IsPriceDimmed(seat.Amount)||focusStatus030.HasValue&&!HallFocus030.Matches(seat,focusStatus030.Value))continue;
             // Draw only the flashing overlay; keep the cached hall and stored state intact.
             dc.DrawRoundedRectangle(new SolidColorBrush(Color.FromArgb(205,255,255,255)),new Pen(Brushes.Red,2/zoom),new Rect(seat.X,seat.Y,16,16),2,2);
         }

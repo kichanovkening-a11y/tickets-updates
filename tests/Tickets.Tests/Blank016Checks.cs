@@ -63,12 +63,11 @@ internal static class Blank016Checks
         var editableOriginal=JsonSerializer.Deserialize<TicketBlank>(JsonSerializer.Serialize(savedOriginal))!;
         TicketBlankEditing.EnsureIndependentLayouts(editableOriginal);
         TicketBlankEditing.LayoutFor(editableOriginal,editableOriginal.Positions[0]).Bands.SelectMany(b=>b.Elements).First().FontFamily="Courier New";
-        try
-        {
-            store.SaveTicketBlank(editableOriginal);
-            Check(store.TicketBlanks().Single(b=>b.Id==savedOriginal.Id).Positions[0].Legacy!.Bands.SelectMany(b=>b.Elements).First().FontFamily=="Courier New","Original identity may save customized geometry");
-        }
-        finally{store.SaveTicketBlank(savedOriginal);}
+        rejected=false;try{store.SaveTicketBlank(editableOriginal);}catch(TicketException){rejected=true;}
+        Check(rejected,"Saved original must reject customized geometry under its existing identity");
+        Check(JsonSerializer.Serialize(store.TicketBlanks().Single(b=>b.Id==savedOriginal.Id))==JsonSerializer.Serialize(savedOriginal),"Original geometry must remain unchanged");
+        var editableCopy=TicketBlankEditing.Clone(editableOriginal);store.SaveTicketBlank(editableCopy);
+        Check(store.TicketBlanks().Single(b=>b.Id==editableCopy.Id).Positions[0].Legacy!.Bands.SelectMany(b=>b.Elements).First().FontFamily=="Courier New","New copy must save customized geometry");
         Check(TicketBlankEditing.BindingName("theatre_adress")=="Адрес"&&TicketBlankEditing.BindingName("theatre_name")=="Площадка","User-facing binding labels are localized");
     }
 }

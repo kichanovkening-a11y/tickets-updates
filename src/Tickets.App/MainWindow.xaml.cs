@@ -289,7 +289,7 @@ public partial class MainWindow : Window
         if(current is not null&&!events.Concat(archivedEvents).Any(e=>e.Id==current.Id)){current=null;Hall.Load([],[],true);HistoryGrid.ItemsSource=null;ShowHome();}
     }
     private void IssueClick(object sender,RoutedEventArgs e)=>Run(()=>IssueSelected(false));
-    private void IssueSelected(bool print)
+    private void IssueSelected(bool print,bool openInvoice=true)
     {
         if(current is null||store.IsEventReadOnly(current.Id))return;
         var eventId=current.Id;var selected=Hall.SelectedSeats;
@@ -298,8 +298,9 @@ public partial class MainWindow : Window
         PersistSelectedSender();
         if(!long.TryParse(NumberBox.Text,out var first))throw new TicketException("Введите целый положительный номер.");
         var issueId=store.Issue(eventId,selected.Select(s=>s.Id).ToArray(),RecipientName,SeriesBox.Text,first);
-        LoadEvent(false);Hall.Clear();ClearIssuanceRecipient();StatusText.Text=$"Выдано билетов: {selected.Count}. Накладная № {issueId}.";
-        SaveIssuedDocuments(eventId,issueId);OpenInvoice(issueId,print);
+        ClearIssuanceRecipient();LoadEvent(false);Hall.Clear();StatusText.Text=$"Выдано билетов: {selected.Count}. Накладная № {issueId}.";
+        SaveIssuedDocuments(eventId,issueId);
+        if(openInvoice)OpenInvoice(issueId,print);
     }
     private void ReturnClick(object sender,RoutedEventArgs e)=>Run(()=>ReturnTickets(
         Hall.SelectedSeats.Where(s=>s.TicketId.HasValue).Select(s=>s.TicketId!.Value).ToArray()));

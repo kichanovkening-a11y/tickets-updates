@@ -3,16 +3,23 @@ internal static class TicketBlankChecks
 {
     public static void Register(Action<string,Action<Store>> test)
     {
-        test("print blanks persist independently, update and validate millimetre geometry",s=>{
+        test("048 print blanks preserve originals and require unused names",s=>{
             var first=new TicketBlank{Name="Первый"};var second=new TicketBlank{Name="Второй"};
             s.SaveTicketBlank(first);s.SaveTicketBlank(second);Check(s.TicketBlanks().Count(b=>b.Legacy is null)==2,"two blanks not saved");
-            first.Fields[0].Enabled=false;s.SaveTicketBlank(first);
-            Check(!s.TicketBlanks().Single(x=>x.Id==first.Id).Fields[0].Enabled,"disabled field did not persist");
-            var disabled=first with{Fields=first.Fields.Select(f=>f with{Enabled=false}).ToList()};Reject(()=>s.SaveTicketBlank(disabled));
-            first.Fields[0].X=500;s.SaveTicketBlank(first); // Disabled fields may lie outside resized ticket positions.
-            first.Fields[0].X=5;
-            first.Name="Изменённый";s.SaveTicketBlank(first);Check(s.TicketBlanks().Count(b=>b.Legacy is null)==2&&s.TicketBlanks().Single(x=>x.Id==first.Id).Name==first.Name,"update duplicated blank");
-            var reopened=new Store(s.Path);Check(reopened.TicketBlanks().Count(b=>b.Legacy is null)==2,"blanks not persisted");
+            var original=System.Text.Json.JsonSerializer.Serialize(s.TicketBlanks().Single(x=>x.Id==first.Id));
+            first.Fields[0].Enabled=false;
+            Reject(()=>s.SaveTicketBlank(first));
+            first.Name="Изменённый";Reject(()=>s.SaveTicketBlank(first));
+            Check(System.Text.Json.JsonSerializer.Serialize(s.TicketBlanks().Single(x=>x.Id==first.Id))==original,"saved original was overwritten");
+            var copy=TicketBlankEditing.Clone(first);copy.Name="  Новый бланк  ";s.SaveTicketBlank(copy);
+            Check(s.TicketBlanks().Single(x=>x.Id==copy.Id).Name=="Новый бланк","name not trimmed");
+            Check(!s.TicketBlanks().Single(x=>x.Id==copy.Id).Fields[0].Enabled,"copy lost edits");
+            Reject(()=>s.SaveTicketBlank(new TicketBlank{Name="  ПЕРВЫЙ  "}));
+            Reject(()=>s.SaveTicketBlank(new TicketBlank{Name="новый БЛАНК"}));
+            Reject(()=>s.SaveTicketBlank(new TicketBlank{Name="   "}));
+            var reopened=new Store(s.Path);Check(reopened.TicketBlanks().Count(b=>b.Legacy is null)==3,"blanks not persisted");
+            Check(System.Text.Json.JsonSerializer.Serialize(reopened.TicketBlanks().Single(x=>x.Id==first.Id))==original,"original changed after reopening");
+            s.DeleteTicketBlank(copy.Id);
             Reject(()=>s.SaveTicketBlank(first with{PageWidth=double.NaN}));Reject(()=>s.SaveTicketBlank(first with{Positions=[]}));
             Reject(()=>s.SaveTicketBlank(first with{Positions=[new(){X=200}]}));Reject(()=>s.SaveTicketBlank(first with{Fields=[new(){Key="event"}]}));
             Reject(()=>s.SaveTicketBlank(first with{Positions=[new(),new()]}));

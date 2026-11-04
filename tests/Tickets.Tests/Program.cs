@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--portable048")&&!name.StartsWith("048"))return;
     if(args.Contains("--corrections047")&&!name.StartsWith("047")&&!name.StartsWith("business forms use actual"))return;
     if(args.Contains("--documents045")&&!name.StartsWith("045"))return;
     if(args.Contains("--corrections044")&&!name.StartsWith("044"))return;
@@ -52,6 +53,7 @@ void Reject(Action action)
     }
     throw new Exception("seed has no event with 3 priced seats");
 }
+PortableDocuments048Checks.Register(Test);
 Documents045Checks.Register(Test);
 DocumentArchive044Checks.Register(Test);
 TicketPro037Checks.Register(Test);

@@ -59,6 +59,19 @@ internal static class Corrections044UiChecks
         Application.Current.MainWindow=main;main.Show();main.SelectEvent(future);Pump();
         try
         {
+            var focusedHall=(HallView)main.FindName("Hall");focusedHall.SetSelection([ids[1]]);
+            var mainLegend=(Grid)main.FindName("LegendPanel");
+            void ClickPrice(int index)=>mainLegend.Children.OfType<Border>().ElementAt(index).RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonDownEvent});
+            ClickPrice(0);ClickPrice(1);
+            Check(focusedHall.FocusPrices.ToHashSet().SetEquals([4000m,3000m])&&focusedHall.Selected.SetEquals([ids[1]]),"multiple main legend prices toggle independently without changing selected seats");
+            Check(mainLegend.Children.OfType<Border>().Take(2).All(cell=>cell.BorderBrush==Brushes.Black),"every selected price plaque has an active border");
+            ClickPrice(0);
+            Check(focusedHall.FocusPrices.SequenceEqual([3000m]),"clicking one selected main price keeps the other active");
+            ClickPrice(1);
+            Check(focusedHall.FocusPrices.Count==0,"clicking the final main price restores all prices");
+            ClickPrice(0);ClickPrice(1);
+            typeof(MainWindow).GetMethod("SetPriceFocus",Private)!.Invoke(main,[null]);
+            Check(focusedHall.FocusPrices.Count==0&&mainLegend.Children.OfType<Border>().All(cell=>cell.BorderBrush==Brushes.Gray),"empty-space focus reset clears all active price plaques");
             var view=(ComboBox)main.FindName("SelectedViewBox");
             Check(view.SelectedIndex==1,"price summary is the default");
             view.SelectedIndex=0;main.SelectEvent(past);Pump();
@@ -120,6 +133,13 @@ internal static class Corrections044UiChecks
                 var hall=PrivateValue<HallView>(pricing,"preview");hall.SetSelection([ids[1]]);
                 plaques[0].RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
                 Check(hall.FocusPrice.HasValue&&hall.Selected.SetEquals([ids[1]]),"moved pricing plaque retains focus behavior and selection");
+                var firstPrice=hall.FocusPrice!.Value;
+                plaques[1].RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                Check(hall.FocusPrices.Count==2&&hall.FocusPrices.Contains(firstPrice)&&hall.Selected.SetEquals([ids[1]]),"pricing editor adds a second highlighted price without changing selected seats");
+                plaques[0].RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                Check(hall.FocusPrices.Count==1&&!hall.FocusPrices.Contains(firstPrice),"pricing editor deselects only the clicked price");
+                plaques[1].RaiseEvent(new MouseButtonEventArgs(Mouse.PrimaryDevice,0,MouseButton.Left){RoutedEvent=UIElement.MouseLeftButtonUpEvent});
+                Check(hall.FocusPrices.Count==0,"pricing editor restores all prices after final deselection");
                 var amount=Walk(content).OfType<TextBox>().Last();amount.Text="4321";
                 amount.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice,PresentationSource.FromVisual(amount),Environment.TickCount,Key.Enter){RoutedEvent=Keyboard.PreviewKeyDownEvent});Pump();
                 Check(prices[ids[1]].Amount==4321&&hall.Selected.Count==0,"Enter still assigns price after button removal");

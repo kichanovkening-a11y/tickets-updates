@@ -45,10 +45,19 @@ internal static class Blank017Checks
             x.Text=expectedX.ToString(System.Globalization.CultureInfo.InvariantCulture);x.GetBindingExpression(TextBox.TextProperty)!.UpdateSource();
             Check(working.Positions[1].X==expectedX,"whole-ticket precise coordinates remain editable");
             Get<TextBox>("name").Text="Blank 017 selected property UI check";
-            Logical(editor).OfType<Button>().Single(button=>Equals(button.Content,"Сохранить шаблон")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
-            Check(Get<TextBlock>("notice").Text=="Бланк сохранён и доступен при печати.","saving reports success in the editor without a separate message window");
+            Logical(editor).OfType<Button>().Single(button=>Equals(button.Content,"Сохранить как новый")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            Check(Get<TextBlock>("notice").Text=="Новый бланк сохранён и доступен при печати. Исходный бланк не изменён.","saving reports success in the editor without a separate message window");
             var saved=store.TicketBlanks().Single(blank=>blank.Name=="Blank 017 selected property UI check");
             Check(saved.Positions[1].X==expectedX&&TicketBlankEditing.LayoutFor(saved,saved.Positions[0]).Bands.Where(b=>!b.Suppressed).SelectMany(b=>b.Elements).First().FontSize==13,"saving retains selected text formatting and precise whole-ticket placement");
+            var savedJson=System.Text.Json.JsonSerializer.Serialize(saved);
+            Get<TextBox>("name").Text="Blank 048 saved copy UI check";
+            var edited=Get<TicketBlank>("blank");
+            TicketBlankEditing.LayoutFor(edited,edited.Positions[0]).Bands.Where(b=>!b.Suppressed).SelectMany(b=>b.Elements).First().FontSize=14;
+            Logical(editor).OfType<Button>().Single(button=>Equals(button.Content,"Сохранить как новый")).RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            var copy=store.TicketBlanks().Single(blank=>blank.Name=="Blank 048 saved copy UI check");
+            Check(copy.Id!=saved.Id,"saving edited existing blank creates a new identity");
+            Check(System.Text.Json.JsonSerializer.Serialize(store.TicketBlanks().Single(blank=>blank.Id==saved.Id))==savedJson,"saving edited blank preserves original geometry");
+            Check(TicketBlankEditing.LayoutFor(copy,copy.Positions[0]).Bands.Where(b=>!b.Suppressed).SelectMany(b=>b.Elements).First().FontSize==14,"new blank contains edited font");
         }
         finally{editor.Close();}
     }

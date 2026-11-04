@@ -32,13 +32,38 @@ public sealed partial class Store
     private string DocumentSetting(string name,string fallback)
     {using var c=Open();using var cmd=Command(c,"SELECT value FROM document_setting WHERE name=$n","$n",name);return cmd.ExecuteScalar() as string??fallback;}
     public string Sender { get {var sender=DocumentSetting("sender",DefaultSender);return SenderChoiceAllowed(sender)?sender:Senders().FirstOrDefault()??"";} }
-    public string DocumentsDirectory=>DocumentSetting("directory",System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"Documents"));
+    private string DocumentDataDirectory=>System.IO.Path.GetDirectoryName(Path)!;
+    public string DocumentsDirectory=>ResolveDocumentDirectory(DocumentSetting("directory","data-relative:Documents"));
+    private string ResolveDocumentDirectory(string directory)
+    {
+        if(directory.StartsWith("absolute:",StringComparison.Ordinal))return directory[9..];
+        if(directory.StartsWith("data-relative:",StringComparison.Ordinal))
+            return System.IO.Path.GetFullPath(System.IO.Path.Combine(DocumentDataDirectory,directory[14..].Replace('/',System.IO.Path.DirectorySeparatorChar)));
+        // Earlier versions persisted the default as an absolute path on every issue.
+        // A copied database must use its copied Documents even if the old app still exists.
+        var normalized=directory.Replace('\\','/').TrimEnd('/');
+        // Only the known legacy installation layout is safe to relocate automatically.
+        // Other absolute custom directories retain their original meaning.
+        const string marker="/Tickets/Data/Documents";
+        var index=normalized.LastIndexOf(marker,StringComparison.OrdinalIgnoreCase);
+        if(index>=0&&(index+marker.Length==normalized.Length||normalized[index+marker.Length]=='/'))
+            return System.IO.Path.GetFullPath(System.IO.Path.Combine(DocumentDataDirectory,"Documents"+normalized[(index+marker.Length)..].Replace('/',System.IO.Path.DirectorySeparatorChar)));
+        return directory;
+    }
+    private string PortableDocumentDirectory(string directory)
+    {
+        var data=DocumentDataDirectory;
+        var app=string.Equals(System.IO.Path.GetFileName(data),"Data",StringComparison.OrdinalIgnoreCase)?System.IO.Path.GetDirectoryName(data)!:data;
+        var relative=System.IO.Path.GetRelativePath(app,directory);
+        var inside=!System.IO.Path.IsPathRooted(relative)&&relative!=".."&&!relative.StartsWith(".."+System.IO.Path.DirectorySeparatorChar,StringComparison.Ordinal);
+        return inside?"data-relative:"+System.IO.Path.GetRelativePath(data,directory).Replace(System.IO.Path.DirectorySeparatorChar,'/'):"absolute:"+directory;
+    }
     // Manual exports share their last destination without changing managed internal copies.
-    public string DocumentSaveDirectory=>DocumentSetting("manual-save-directory",DocumentsDirectory);
+    public string DocumentSaveDirectory=>ResolveDocumentDirectory(DocumentSetting("manual-save-directory","absolute:"+DocumentsDirectory));
     public void RememberDocumentSaveDirectory(string directory)
     {
         directory=System.IO.Path.GetFullPath(Required(directory,"Папка сохранения"));
-        using var c=Open();using var cmd=Command(c,"INSERT INTO document_setting(name,value) VALUES('manual-save-directory',$d) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$d",directory);cmd.ExecuteNonQuery();
+        using var c=Open();using var cmd=Command(c,"INSERT INTO document_setting(name,value) VALUES('manual-save-directory',$d) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$d",PortableDocumentDirectory(directory));cmd.ExecuteNonQuery();
     }
     public void SaveDocumentSettings(string sender,string directory)
     {
@@ -47,7 +72,7 @@ public sealed partial class Store
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);
         using(var prior=Command(c,"SELECT value FROM document_setting WHERE name='sender'"))
         {prior.Transaction=tx;if(prior.ExecuteScalar() is string previous)RememberSender(c,tx,previous);}
-        foreach(var pair in new[]{("sender",sender),("directory",directory)})
+        foreach(var pair in new[]{("sender",sender),("directory",PortableDocumentDirectory(directory))})
         {using var cmd=Command(c,"INSERT INTO document_setting(name,value) VALUES($n,$v) ON CONFLICT(name) DO UPDATE SET value=excluded.value","$n",pair.Item1,"$v",pair.Item2);cmd.Transaction=tx;cmd.ExecuteNonQuery();}RememberSender(c,tx,sender);tx.Commit();
     }
     public void UpdateInvoiceSender(long eventId,long issueId,string sender)

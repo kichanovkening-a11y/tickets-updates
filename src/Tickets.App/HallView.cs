@@ -15,19 +15,32 @@ public sealed partial class HallView : FrameworkElement
     private List<SeatInfo> seats=[];
     private DrawingGroup drawing=new();
     private IReadOnlyList<SectorInfo> sectors=[];
-    private decimal? focusPrice;
+    private readonly HashSet<decimal> focusPrices=[];
     private HallStatus030? focusStatus030;
     /// <summary>Visual price focus, preserved across reloads until the caller clears it.</summary>
+    public IReadOnlyCollection<decimal> FocusPrices=>focusPrices.ToArray();
+    // Retain the single-price setter for callers that replace or clear the focus.
     public decimal? FocusPrice
     {
-        get=>focusPrice;
-        set { if(focusPrice==value&&focusStatus030 is null)return; focusPrice=value; focusStatus030=null; RebuildDrawing(); InvalidateVisual(); }
+        get=>focusPrices.Count==1?focusPrices.Single():null;
+        set
+        {
+            if(focusStatus030 is null&&(value.HasValue?focusPrices.SetEquals([value.Value]):focusPrices.Count==0))return;
+            focusPrices.Clear();if(value.HasValue)focusPrices.Add(value.Value);
+            focusStatus030=null;RebuildDrawing();InvalidateVisual();
+        }
     }
     public HallStatus030? FocusStatus030
     {
         get=>focusStatus030;
-        set { if(focusStatus030==value&&focusPrice is null)return; focusStatus030=value; focusPrice=null; RebuildDrawing(); InvalidateVisual(); }
+        set { if(focusStatus030==value&&focusPrices.Count==0)return; focusStatus030=value; focusPrices.Clear(); RebuildDrawing(); InvalidateVisual(); }
     }
+    public void TogglePriceFocus(decimal price)
+    {
+        if(!focusPrices.Add(price))focusPrices.Remove(price);
+        focusStatus030=null;RebuildDrawing();InvalidateVisual();
+    }
+    private bool IsPriceDimmed(decimal? amount)=>focusPrices.Count>0&&(!amount.HasValue||!focusPrices.Contains(amount.Value));
     public void ClearFocus030()=>FocusPrice=null;
     private Rect bounds=new(0,0,100,100);
     private double zoom=1;
@@ -200,7 +213,7 @@ public sealed partial class HallView : FrameworkElement
                 var rect=new Rect(s.X,s.Y,16,16);
                 var occupied=s.TicketId.HasValue || s.IsReserved || s.IsTicketlandSold;
                 var printed=s.IsTicketlandSold || (occupied && s.IsPrinted && !s.IsReserved);
-                var dimmed=(focusPrice.HasValue && s.Amount!=focusPrice.Value)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
+                var dimmed=IsPriceDimmed(s.Amount)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
                 var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:s.IsTicketlandOccupied?Brushes.Black:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
                 if(occupied && !s.IsTicketlandOccupied && !s.IsBlocked && !dimmed)

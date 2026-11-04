@@ -142,6 +142,7 @@
               <local:CompactText043 x:Name="SelectedSummary" Text="Ничего не выбрано" FontSize="16.8" FontWeight="Bold" Foreground="#C1121F" Margin="{DynamicResource Px3Bottom043}" TextWrapping="Wrap"/>
               <local:CompactText043 x:Name="RecipientLabel043" Text="Получатель / организация" Margin="{DynamicResource Px3Bottom043}"/>
               <ComboBox x:Name="RecipientBox" IsEditable="True" IsTextSearchEnabled="False" StaysOpenOnEdit="True" MinHeight="34" Padding="4" DropDownOpened="RecipientOpened" SelectionChanged="RecipientSelected" PreviewMouseLeftButtonDown="RecipientFieldPressed"/>
+              <Button x:Name="IssueWithoutInvoiceButton048" Content="Выдать" Style="{StaticResource HallHeaderAction042}" MinHeight="34" Margin="0,4,0,0" Background="#2466A8" Foreground="White" IsEnabled="{Binding IsEnabled, ElementName=IssueButton}" Click="IssueWithoutInvoiceClick048"/>
               <TextBlock x:Name="IssuedRecipients" Visibility="Collapsed" Foreground="#9A3412" FontWeight="Bold" TextWrapping="Wrap" MaxHeight="44" Margin="0,4,0,3"/>
             </StackPanel>
             <ScrollViewer DockPanel.Dock="Bottom" MaxHeight="150" Margin="{DynamicResource Px5Top043}" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><Grid x:Name="LegendPanel"/></ScrollViewer>

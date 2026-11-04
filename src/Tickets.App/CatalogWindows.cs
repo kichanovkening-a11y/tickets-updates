@@ -271,7 +271,7 @@ internal sealed class PriceEditorWindow : EditorWindow
             var text=new CompactText043{Text=FormattableString.Invariant($"{item.Amount}₽×{item.Count}={item.Total}₽"),TextAlignment=TextAlignment.Left,FontSize=11.44,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold};
             var cell=new Border{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,BorderBrush=Brushes.Gray,HorizontalAlignment=HorizontalAlignment.Stretch};
             cell.SetResourceReference(Border.PaddingProperty,"EditorPlaquePadding044");cell.SetResourceReference(Border.BorderThicknessProperty,"EditorBorder044");cell.SetResourceReference(MarginProperty,"EditorBottom044");
-            cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.FocusPrice=preview.FocusPrice==item.Amount?null:item.Amount;e.Handled=true;};
+            cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.TogglePriceFocus(item.Amount);e.Handled=true;};
             priceSummary.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});Grid.SetRow(cell,priceSummary.Children.Count);priceSummary.Children.Add(cell);
         }
         if(priceSummary.Children.Count>0)((FrameworkElement)priceSummary.Children[^1]).Margin=new Thickness(0);
@@ -347,6 +347,9 @@ internal sealed class EventEditorWindow : EditorWindow
         };Grid.SetRow(date,1);dateRow.Children.Add(date);
         date.PreviewMouseLeftButtonDown+=(_,e)=>{
             if(date.Template.FindName("PART_TextBox",date) is not TextBox input)return;
+            // Popup input can route through the DatePicker, but belongs to a separate visual tree.
+            // Only redirect clicks on the date field itself; leave calendar navigation and days alone.
+            if(e.OriginalSource is not Visual source||!ReferenceEquals(source,date)&&!date.IsAncestorOf(source))return;
             for(DependencyObject? node=e.OriginalSource as DependencyObject;node is not null&&node!=date;node=node is Visual?VisualTreeHelper.GetParent(node):LogicalTreeHelper.GetParent(node))if(node==input)return;
             input.Focus();Keyboard.Focus(input);input.CaretIndex=input.Text.Length;e.Handled=true;
         };

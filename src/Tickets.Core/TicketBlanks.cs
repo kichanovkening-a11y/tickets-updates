@@ -105,7 +105,18 @@ public sealed partial class Store
     public void SaveTicketBlank(TicketBlank blank)
     {
         blank.Validate();TicketBlankEditing.EnsureFourUp(blank);blank.Validate();if(blank.ScanPath.Length>0&&!File.Exists(TicketBlankScanPath(blank.ScanPath)))throw new TicketException("Файл скана бланка не найден. Загрузите его заново.");
-        EnsureTicketBlanks();using var c=Open();using var cmd=Command(c,"INSERT INTO ticket_blank(id,name,definition) VALUES($id,$name,$json) ON CONFLICT(id) DO UPDATE SET name=excluded.name,definition=excluded.definition","$id",blank.Id,"$name",blank.Name.Trim(),"$json",JsonSerializer.Serialize(blank));cmd.ExecuteNonQuery();
+        EnsureTicketBlanks();using var c=Open();using var tx=c.BeginTransaction();
+        using(var existing=Command(c,"SELECT id,name FROM ticket_blank"))
+        {
+            existing.Transaction=tx;using var rows=existing.ExecuteReader();
+            while(rows.Read())
+            {
+                if(rows.GetString(0)==blank.Id)throw new TicketException("Сохранённый бланк нельзя перезаписать. Сохраните его как новый под другим названием.");
+                if(string.Equals(rows.GetString(1).Trim(),blank.Name.Trim(),StringComparison.OrdinalIgnoreCase))throw new TicketException("Бланк с таким названием уже существует. Укажите другое название.");
+            }
+        }
+        blank.Name=blank.Name.Trim();
+        using var cmd=Command(c,"INSERT INTO ticket_blank(id,name,definition) VALUES($id,$name,$json)","$id",blank.Id,"$name",blank.Name,"$json",JsonSerializer.Serialize(blank));cmd.Transaction=tx;cmd.ExecuteNonQuery();tx.Commit();
     }
     public string TicketVenueAddress(long eventId)
     {

@@ -54,6 +54,9 @@ internal static class Program
             if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--blank048")){Blank017Checks.Run(store);main.Close();return 0;}
+            if(args.Contains("--issuance048")){Issuance048UiChecks.Run(store,main);main.Close();return 0;}
+            if(args.Contains("--calendar048")){Calendar048UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--recipient047")){Recipient047UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--ticketpro-live038",StringComparer.Ordinal)){TicketPro038LiveChecks.Run(store,main,args[2]);main.Close();return 0;}
             if(args.Contains("--ticketpro037",StringComparer.Ordinal)){TicketPro037UiChecks.Run(store,main);main.Close();return 0;}

@@ -52,7 +52,12 @@ internal sealed class TicketBlankWindow:EditorWindow
         AddLabel(settings,"Выберите поле или нажмите на текст на листе");settings.Children.Add(fieldChoice);fieldChoice.SelectionChanged+=(_,_)=>{if(!loading)ShowProperties((fieldChoice.SelectedItem as Choice)?.Value);};
         settings.Children.Add(selection);settings.Children.Add(properties);
         Button(settings,"Обновить лист",()=>Try(()=>{Read();Render();}));
-        Button(settings,"Сохранить шаблон",()=>Try(()=>{Read();Store.SaveTicketBlank(blank);Refresh(blank.Id);notice.Text="Бланк сохранён и доступен при печати.";}));
+        Button(settings,"Сохранить как новый",()=>Try(()=>
+        {
+            Read();
+            var copy=TicketBlankEditing.Clone(blank);copy.Name=blank.Name;
+            Store.SaveTicketBlank(copy);Refresh(copy.Id);notice.Text="Новый бланк сохранён и доступен при печати. Исходный бланк не изменён.";
+        }));
         var preview=new StackPanel();preview.Children.Add(new TextBlock{Text="Лист в физических миллиметрах. Перетаскивайте текст; за синюю рамку — весь билет. Скан закреплён и по умолчанию служит только для настройки.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)});preview.Children.Add(paper);
         var scroll=new ScrollViewer{Content=preview,VerticalScrollBarVisibility=ScrollBarVisibility.Auto,HorizontalScrollBarVisibility=ScrollBarVisibility.Auto};Grid.SetColumn(scroll,1);root.Children.Add(scroll);
         Refresh();Load(templates.SelectedItem as TicketBlank??TicketBlankEditing.CreateA4From030879());
@@ -119,7 +124,7 @@ internal sealed class TicketBlankWindow:EditorWindow
         TicketBlankEditing.EnsureFourUp(blank);
         TicketBlankEditing.EnsureIndependentLayouts(blank);
         if(blank.Legacy is null)foreach(var p in blank.Positions)p.Fields??=blank.Fields.Select(f=>f with{}).ToList();
-        settings.IsEnabled=Editable;notice.Text="А4 · 210 × 297 мм · 4 билета. "+(blank.Legacy is {} legacy?"Исходный RPT: "+legacy.SourceFile+". Координаты, шрифты, повороты и секции сохранены. Все поля и постоянные подписи можно редактировать отдельно для каждого билета.":"А4: 210 × 297 мм. Четыре билета можно настраивать отдельно.");
+        settings.IsEnabled=Editable;notice.Text="Изменения сохраняются только как новый бланк. Укажите другое, свободное название. А4 · 210 × 297 мм · 4 билета. "+(blank.Legacy is {} legacy?"Исходный RPT: "+legacy.SourceFile+". Координаты, шрифты, повороты и секции сохранены. Все поля и постоянные подписи можно редактировать отдельно для каждого билета.":"А4: 210 × 297 мм. Четыре билета можно настраивать отдельно.");
         name.Text=blank.Name;width.Text=blank.PageWidth.ToString(CultureInfo.InvariantCulture);height.Text=blank.PageHeight.ToString(CultureInfo.InvariantCulture);printScan.IsChecked=blank.PrintBackground;
         loading=true;blocks.ItemsSource=blank.Positions.Select((p,i)=>new Choice("Билет "+(i+1),p)).ToArray();blocks.SelectedIndex=0;loading=false;SelectBlock(showBlockProperties:false);
     }

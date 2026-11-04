@@ -49,7 +49,13 @@ internal static class HallLayout043UiChecks
         foreach(var plaque in ((Grid)main.FindName("LegendPanel")).Children.OfType<Border>().Take(1))
         {
             var ink=Screen((FrameworkElement)plaque.Child);var bounds=Screen(plaque);
-            Check(Math.Abs(ink.Left-bounds.Left-5)<.6&&ink.Top-bounds.Top>=4.4&&Math.Abs((ink.Top-bounds.Top)-(bounds.Bottom-ink.Bottom))<.6,"price plaque keeps 5 pixel side inset and centers the enlarged label vertically");
+            // PointToScreen rounds each endpoint to screen pixels. Compare the
+            // child in its parent coordinates so odd pixel heights can center at half a pixel.
+            var child=(FrameworkElement)plaque.Child;
+            var local=child.TransformToAncestor(plaque).TransformBounds(new Rect(child.RenderSize));
+            var scaleY=bounds.Height/plaque.ActualHeight;
+            var top=local.Top*scaleY;var bottom=(plaque.ActualHeight-local.Bottom)*scaleY;
+            Check(Math.Abs(ink.Left-bounds.Left-5)<.6&&top>=4.4&&Math.Abs(top-bottom)<.6,$"price plaque keeps 5 pixel side inset and centers the enlarged label vertically (top={top:F3}, bottom={bottom:F3}, screenTop={ink.Top-bounds.Top:F3}, screenBottom={bounds.Bottom-ink.Bottom:F3})");
             Check(Math.Abs(bounds.Left-Screen(sidebar).Left-5)<.6,"price plaques start 5 pixels from sidebar edge");
         }
         foreach(var button in new[]{(Button)main.FindName("PrintTicketsButton"),(Button)main.FindName("IssueButton")})

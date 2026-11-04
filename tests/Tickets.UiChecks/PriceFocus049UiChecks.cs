@@ -23,6 +23,13 @@ internal static class PriceFocus049UiChecks
     {var until=DateTime.UtcNow.AddMilliseconds(milliseconds);while(DateTime.UtcNow<until){Pump();Thread.Sleep(5);}}
     private static void NativeClick()
     {mouse_event(2,0,0,0,UIntPtr.Zero);PumpInput();mouse_event(4,0,0,0,UIntPtr.Zero);PumpInput();}
+    private static void NativeDoubleClick()
+    {
+        // Queue both clicks before pumping WPF: rendering and CI console I/O
+        // must not stretch the native interval between the button-down events.
+        mouse_event(2,0,0,0,UIntPtr.Zero);mouse_event(4,0,0,0,UIntPtr.Zero);
+        mouse_event(2,0,0,0,UIntPtr.Zero);mouse_event(4,0,0,0,UIntPtr.Zero);PumpInput();
+    }
     [DllImport("user32.dll")]private static extern bool SetCursorPos(int x,int y);
     [DllImport("user32.dll")]private static extern void mouse_event(uint flags,uint x,uint y,uint data,UIntPtr extra);
     [DllImport("user32.dll")]private static extern uint GetDoubleClickTime();
@@ -41,7 +48,6 @@ internal static class PriceFocus049UiChecks
             var recipient=(ComboBox)main.FindName("RecipientBox");
             Click(recipient);
             Check(hall.FocusPrices.Count==1,"input interaction keeps price focus");
-            Console.WriteLine($"TRACE 049 after recipient interaction dropdown={recipient.IsDropDownOpen} captured={Mouse.Captured?.GetType().Name}");
             // Complete the control interaction before testing a click on the hall.
             // A ComboBox popup consumes the first outside native click to dismiss itself.
             recipient.IsDropDownOpen=false;Pump();
@@ -77,32 +83,26 @@ internal static class PriceFocus049UiChecks
             hall.TogglePriceFocus(seats[0].Amount!.Value);
             var clicks=new List<int>();
             string State()=> $"focus=[{string.Join(',',hall.FocusPrices)}] selected=[{string.Join(',',hall.Selected)}] expected={seats[0].Id} mouse={Mouse.GetPosition(hall)} hit={hit.Invoke(hall,[Mouse.GetPosition(hall)])} inputHit={main.InputHitTest(Mouse.GetPosition(main))?.GetType().Name} captured={Mouse.Captured?.GetType().Name} active={main.IsActive} loaded={hall.IsLoaded} visible={hall.IsVisible} dropdown={recipient.IsDropDownOpen} clicks=[{string.Join(',',clicks)}]";
-            MouseButtonEventHandler track=(_,e)=>{clicks.Add(e.ClickCount);Console.WriteLine($"TRACE 049 hall down source={e.OriginalSource?.GetType().Name} handled={e.Handled} count={e.ClickCount} {State()}");};
-            MouseButtonEventHandler traceUp=(_,e)=>Console.WriteLine($"TRACE 049 hall up source={e.OriginalSource?.GetType().Name} handled={e.Handled} {State()}");
-            MouseButtonEventHandler traceWindow=(_,e)=>Console.WriteLine($"TRACE 049 window {e.RoutedEvent.Name} source={e.OriginalSource?.GetType().Name} {State()}");
-            main.AddHandler(Mouse.PreviewMouseDownEvent,traceWindow,true);main.AddHandler(Mouse.PreviewMouseUpEvent,traceWindow,true);
-            hall.AddHandler(Mouse.MouseUpEvent,traceUp,true);
-            Console.WriteLine($"TRACE 049 before native click intended={empty} screen={screen} {State()}");
-            Check(Mouse.Captured is null&&!recipient.IsDropDownOpen,"native hall click starts without an open dropdown or prior mouse capture");
-            Check(ReferenceEquals(main.InputHitTest(Mouse.GetPosition(main)),hall)&&hit.Invoke(hall,[Mouse.GetPosition(hall)]) is null,"native cursor hit-tests to empty hall background");
+            void CheckNative(bool ok,string message)
+            {if(!ok)throw new Exception("049 "+message+"; "+State());Check(true,message);}
+            MouseButtonEventHandler track=(_,e)=>clicks.Add(e.ClickCount);
+            CheckNative(Mouse.Captured is null&&!recipient.IsDropDownOpen,"native hall click starts without an open dropdown or prior mouse capture");
+            CheckNative(ReferenceEquals(main.InputHitTest(Mouse.GetPosition(main)),hall)&&hit.Invoke(hall,[Mouse.GetPosition(hall)]) is null,"native cursor hit-tests to empty hall background");
             hall.AddHandler(Mouse.MouseDownEvent,track,true);
             try
             {
                 NativeClick();
-                Console.WriteLine("TRACE 049 after native click "+State());
-                Check(hall.FocusPrices.Count==0&&hall.Selected.SetEquals([seats[0].Id]),"blank hall click clears price focus without clearing selected seats");
-                NativeClick();
-                Check(clicks.Contains(2),"native second click is delivered as a double-click");
-                Check(hall.FocusPrices.Count==0&&hall.Selected.SetEquals([seats[0].Id]),"second click of price-dismissal double-click preserves selected seats");
+                CheckNative(hall.FocusPrices.Count==0&&hall.Selected.SetEquals([seats[0].Id]),"blank hall click clears price focus without clearing selected seats");
+                PumpInput((int)GetDoubleClickTime()+40);
+                hall.SetSelection([seats[0].Id]);hall.FocusPrice=seats[0].Amount!.Value;Pump();clicks.Clear();
+                NativeDoubleClick();
+                CheckNative(clicks.Contains(2),"native second click is delivered as a double-click");
+                CheckNative(hall.FocusPrices.Count==0&&hall.Selected.SetEquals([seats[0].Id]),"second click of price-dismissal double-click preserves selected seats");
                 PumpInput((int)GetDoubleClickTime()+40);
                 NativeClick();
-                Check(hall.Selected.Count==0,"blank hall click without price focus retains the existing selection-clear behavior");
+                CheckNative(hall.Selected.Count==0,"blank hall click without price focus retains the existing selection-clear behavior");
             }
-            finally
-            {
-                hall.RemoveHandler(Mouse.MouseDownEvent,track);hall.RemoveHandler(Mouse.MouseUpEvent,traceUp);
-                main.RemoveHandler(Mouse.PreviewMouseDownEvent,traceWindow);main.RemoveHandler(Mouse.PreviewMouseUpEvent,traceWindow);
-            }
+            finally{hall.RemoveHandler(Mouse.MouseDownEvent,track);}
             foreach(var cell in legend.Children.OfType<Border>())
             {
                 var label=(CompactText043)cell.Child;Check(label.FontSize==13.44,"price font grows by two points");

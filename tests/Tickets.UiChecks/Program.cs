@@ -42,6 +42,7 @@ internal static class Program
             if(args.Contains("--documentmenus045")){Documents045MenuChecks.Run(args[0]);return 0;}
             if(args.Contains("--office045")){Office045UiChecks.Run();return 0;}
             if(args.Contains("--documents045")){Documents045UiChecks.Run();return 0;}
+            if(args.Contains("--prices049")){PriceFocus049UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--corrections044")){Corrections044UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--layout043")){HallLayout043UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--layout042")){HallLayout042UiChecks.Run(args[0]);return 0;}

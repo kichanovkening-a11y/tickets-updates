@@ -49,7 +49,7 @@ internal static class HallLayout043UiChecks
         foreach(var plaque in ((Grid)main.FindName("LegendPanel")).Children.OfType<Border>().Take(1))
         {
             var ink=Screen((FrameworkElement)plaque.Child);var bounds=Screen(plaque);
-            Check(Math.Abs(ink.Left-bounds.Left-5)<.6&&Math.Abs(ink.Top-bounds.Top-5)<.6&&Math.Abs(bounds.Bottom-ink.Bottom-5)<.6,"price plaque has 5 pixel text insets");
+            Check(Math.Abs(ink.Left-bounds.Left-5)<.6&&ink.Top-bounds.Top>=4.4&&Math.Abs((ink.Top-bounds.Top)-(bounds.Bottom-ink.Bottom))<.6,"price plaque keeps 5 pixel side inset and centers the enlarged label vertically");
             Check(Math.Abs(bounds.Left-Screen(sidebar).Left-5)<.6,"price plaques start 5 pixels from sidebar edge");
         }
         foreach(var button in new[]{(Button)main.FindName("PrintTicketsButton"),(Button)main.FindName("IssueButton")})

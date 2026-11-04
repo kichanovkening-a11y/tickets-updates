@@ -19,6 +19,9 @@ public sealed partial class HallView : FrameworkElement
     private HallStatus030? focusStatus030;
     /// <summary>Visual price focus, preserved across reloads until the caller clears it.</summary>
     public IReadOnlyCollection<decimal> FocusPrices=>focusPrices.ToArray();
+    public event Action? PriceFocusChanged049;
+    public void ClearPriceFocus049()
+    {if(focusPrices.Count==0)return;focusPrices.Clear();RebuildDrawing();InvalidateVisual();PriceFocusChanged049?.Invoke();}
     // Retain the single-price setter for callers that replace or clear the focus.
     public decimal? FocusPrice
     {
@@ -27,7 +30,7 @@ public sealed partial class HallView : FrameworkElement
         {
             if(focusStatus030 is null&&(value.HasValue?focusPrices.SetEquals([value.Value]):focusPrices.Count==0))return;
             focusPrices.Clear();if(value.HasValue)focusPrices.Add(value.Value);
-            focusStatus030=null;RebuildDrawing();InvalidateVisual();
+            focusStatus030=null;RebuildDrawing();InvalidateVisual();PriceFocusChanged049?.Invoke();
         }
     }
     public HallStatus030? FocusStatus030
@@ -38,7 +41,7 @@ public sealed partial class HallView : FrameworkElement
     public void TogglePriceFocus(decimal price)
     {
         if(!focusPrices.Add(price))focusPrices.Remove(price);
-        focusStatus030=null;RebuildDrawing();InvalidateVisual();
+        focusStatus030=null;RebuildDrawing();InvalidateVisual();PriceFocusChanged049?.Invoke();
     }
     private bool IsPriceDimmed(decimal? amount)=>focusPrices.Count>0&&(!amount.HasValue||!focusPrices.Contains(amount.Value));
     public void ClearFocus030()=>FocusPrice=null;
@@ -141,6 +144,7 @@ public sealed partial class HallView : FrameworkElement
         seatTip.PlacementTarget=this;rejectionPopup.PlacementTarget=this;
         scrollTimer=new DispatcherTimer(TimeSpan.FromMilliseconds(30),DispatcherPriority.Input,(_,_)=>AutoScroll(),Dispatcher);
         scrollTimer.Stop();
+        EmptyPriceFocus049.Install(this);
         Unloaded+=(_,_)=> { EndGesture(); CloseTip(); rejectionPopup.IsOpen=false; };
         SizeChanged+=(_,_)=> { if(seats.Count>0) Fit(); };
     }
@@ -375,13 +379,18 @@ public sealed partial class HallView : FrameworkElement
     }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     { ZoomAt(e.GetPosition(this),e.Delta>0?1.15:1/1.15); e.Handled=true; }
+    private bool dismissedPriceOnPreviousClick049;
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         if(e.ChangedButton is not (MouseButton.Left or MouseButton.Right or MouseButton.Middle))return;
         if(transformRow is not null&&e.ChangedButton==MouseButton.Left){EndGesture();e.Handled=true;return;}
         if(dragging)return;
+        // WPF's ClickCount already enforces the native double-click interval and
+        // position. Keep the second click part of the first price dismissal.
+        var continuingPriceDismissal=e.ChangedButton==MouseButton.Left&&e.ClickCount==2&&dismissedPriceOnPreviousClick049;
+        dismissedPriceOnPreviousClick049=false;
         if(rotatingCaption031 is null&&e.ChangedButton==MouseButton.Left && e.ClickCount==2 && Hit(e.GetPosition(this)) is null)
-        { Clear(); Fit(); e.Handled=true; return; }
+        { if(focusPrices.Count>0)ClearPriceFocus049();else if(!continuingPriceDismissal)Clear(); Fit(); e.Handled=true; return; }
         CloseTip();rejectionPopup.IsOpen=false;
         Focus(); start=last=e.GetPosition(this); dragging=true;
         gestureButton=e.ChangedButton;
@@ -491,7 +500,7 @@ public sealed partial class HallView : FrameworkElement
                 {
                     var click=ClickSeat(s);rejected=click.Rejected;contextSeat=click.Context;
                 }
-                else if(e.ChangedButton==MouseButton.Left && Hit(start) is null){Selected.Clear();emptyClick=true;}
+                else if(e.ChangedButton==MouseButton.Left && Hit(start) is null){if(focusPrices.Count>0){dismissedPriceOnPreviousClick049=true;ClearPriceFocus049();}else Selected.Clear();emptyClick=true;}
             }
             SelectionChanged?.Invoke();
         }

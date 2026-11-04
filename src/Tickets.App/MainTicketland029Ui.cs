@@ -1,4 +1,7 @@
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 
 namespace Tickets.App;
 
@@ -6,17 +9,29 @@ public partial class MainWindow
 {
     private bool ticketlandUiInitialized029;
     private bool ticketlandManualRefresh029;
+    private bool ticketlandRefreshFlashing049;
 
     private void InitializeTicketlandUi029(object sender,RoutedEventArgs e)
     {
         if(ticketlandUiInitialized029)return;
         ticketlandUiInitialized029=true;
         TicketlandStatusChanged028+=UpdateTicketlandRefreshState029;
-        Closed+=(_,_)=>TicketlandStatusChanged028-=UpdateTicketlandRefreshState029;
+        Closed+=(_,_)=>{TicketlandStatusChanged028-=UpdateTicketlandRefreshState029;RefreshTicketlandButton029.BeginAnimation(Control.ForegroundProperty,null);};
         UpdateTicketlandRefreshState029();UpdateCompactLayout();
     }
 
-    internal void UpdateTicketlandRefreshState029()=>RefreshTicketlandButton029.IsEnabled=!TicketlandIsUpdating028&&!ticketlandManualRefresh029;
+    internal void UpdateTicketlandRefreshState029()
+    {
+        var updating=TicketlandIsUpdating028;
+        RefreshTicketlandButton029.IsEnabled=!updating&&!ticketlandManualRefresh029;
+        if(ticketlandRefreshFlashing049==updating)return;
+        ticketlandRefreshFlashing049=updating;
+        if(!updating){RefreshTicketlandButton029.BeginAnimation(Control.ForegroundProperty,null);return;}
+        var flash=new ObjectAnimationUsingKeyFrames{Duration=TimeSpan.FromMilliseconds(800),RepeatBehavior=RepeatBehavior.Forever};
+        flash.KeyFrames.Add(new DiscreteObjectKeyFrame(Brushes.Red,KeyTime.FromTimeSpan(TimeSpan.Zero)));
+        flash.KeyFrames.Add(new DiscreteObjectKeyFrame(RefreshTicketlandButton029.Foreground,KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(400))));
+        RefreshTicketlandButton029.BeginAnimation(Control.ForegroundProperty,flash);
+    }
 
     private async void RefreshTicketlandClick029(object sender,RoutedEventArgs e)
     {

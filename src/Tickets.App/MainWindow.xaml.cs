@@ -37,6 +37,7 @@ public partial class MainWindow : Window
         Hall.AllowOccupiedSelection=true;
         Hall.SelectionChanged+=UpdateSelection;
         Hall.EmptySpaceClicked+=(_,_)=>SetPriceFocus(null);
+        Hall.PriceFocusChanged049+=()=>{if(current is not null)RenderHallLegend(store.Seats(current.Id));};
         Hall.SeatContextRequested+=OpenSeatContext;
         Hall.SeatSelectionRejected+=seat=>StatusText.Text=$"{seat.Label}: {seat.Status}. В смешанном выборе оставлены свободные места. Повторная печать — из исходной накладной.";
         Loaded+=(_,_)=>Run(()=> {

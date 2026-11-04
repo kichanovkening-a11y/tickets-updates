@@ -59,20 +59,30 @@ try {
   $journals=@(Get-ChildItem "$target\.updates\transaction-*\journal.json" -ErrorAction SilentlyContinue | Sort-Object CreationTimeUtc -Descending | Select-Object -First 1)
   foreach($j in $journals){if((Get-Content $j.FullName -Raw|ConvertFrom-Json).Phase -eq $(if($RejectStartup){'restored'}else{'confirmed'})){$confirmed=$true}}
   if($confirmed){break}
-  $updater.Refresh();if($updater.HasExited){throw 'Updater exited before confirmation'}
+  $updater.Refresh();if($updater.HasExited){
+   # Completion can be published after the read above but before process exit is observed.
+   $journals=@(Get-ChildItem "$target\.updates\transaction-*\journal.json" -ErrorAction SilentlyContinue | Sort-Object CreationTimeUtc -Descending | Select-Object -First 1)
+   foreach($j in $journals){if((Get-Content $j.FullName -Raw|ConvertFrom-Json).Phase -eq $(if($RejectStartup){'restored'}else{'confirmed'})){$confirmed=$true}}
+   if($confirmed){break}
+   throw 'Updater exited before confirmation'
+  }
  } while((Get-Date) -lt $deadline)
  if(-not $confirmed){throw "No healthy-start confirmation: $root"}
  if(Test-Path "$target\.updates\pending.json"){throw 'Pending transaction remained'}
  if((Get-Content "$target\Data\preserve-me.txt").Trim() -ne 'user settings'){throw 'User settings changed'}
  if($RejectStartup){
+  if($updater.WaitForExit(1000)){throw 'Updater closed the error window after failed startup'}
+  $updater.Refresh();if($updater.MainWindowHandle -eq [IntPtr]::Zero){throw 'Updater error window is not visible'}
   if((Get-FileHash "$target\Tickets.dll").Hash -ne $oldBinaryHash){throw 'Failed startup did not restore original binary'}
   if((Get-FileHash "$target\Data\tickets.db").Hash -ne $oldDataHash){throw 'Failed startup did not restore original database bytes'}
-  Write-Host "PASS failed startup restores exact old binary and database: $root"
+  Write-Host "PASS failed startup keeps the error window open and restores exact old binary and database: $root"
   return
  }
+ if(-not $updater.WaitForExit(10000)){throw 'Updater did not close after successful update and healthy startup'}
+ if($updater.ExitCode -ne 0){throw "Updater exited with code $($updater.ExitCode) after successful update"}
  if((Get-FileHash "$target\! Tickets.exe").Hash -ne (Get-FileHash "$target\Tickets.exe").Hash){throw 'Launchers differ'}
  if(-not (Get-Process | Where-Object {$_.Path -eq "$target\! Tickets.exe"})){throw 'New app did not stay running'}
- Write-Host "PASS independent updater installs, validates database, preserves settings, confirms healthy leading launcher: $root"
+ Write-Host "PASS independent updater installs, validates database, preserves settings, confirms healthy leading launcher and closes itself: $root"
 } finally {
  Get-Process | Where-Object {$_.Path -eq "$target\! Tickets.exe" -or $_.Id -eq $updater.Id} | ForEach-Object {
   $null=$_.CloseMainWindow();if(-not $_.WaitForExit(5000)){$_.Kill();$_.WaitForExit()}

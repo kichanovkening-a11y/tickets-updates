@@ -252,10 +252,17 @@ internal sealed class PriceEditorWindow : EditorWindow
         {
             if(venue.SelectedItem is not VenueInfo v)return;seats=store.VenueSeats(v.Id);previewSectors029=store.Sectors(v.Id);prices.Clear();withdrawn.Clear();sourcePlan=null;name.Text="";preview.FocusPrice=null;history.Clear();copied.Text="";copied.Visibility=Visibility.Collapsed;LoadPlans();Refresh(true);SelectCategoryColor();SelectionSummary();
         }
-        preview.EmptySpaceClicked+=(_,_)=>preview.FocusPrice=null;
+        preview.EmptySpaceClicked+=(_,_)=>preview.ClearPriceFocus049();
+        preview.PriceFocusChanged049+=UpdatePriceLegend049;
         plans.SelectionChanged+=(_,_)=>{if(plans.SelectedItem is PlanChoice)Try(LoadSelectedPlan);};
         venue.SelectionChanged+=(_,_)=>Try(LoadVenue);OnShown(()=>Try(()=>{LoadVenue();if(planId.HasValue)plans.SelectedItem=plans.Items.Cast<PlanChoice>().FirstOrDefault(p=>p.Plan.Id==planId.Value);}));
     }
+    private void UpdatePriceLegend049()
+    {
+        foreach(var cell in priceSummary.Children.OfType<PriceLegendBorder049>())
+            cell.SetFocusStyle049(cell.Tag is long price&&preview.FocusPrices.Contains(price));
+    }
+
     private void Refresh(bool fit=false)
     {
         var sellable=seats.Where(s=>!withdrawn.Contains(s.Id)).ToList();
@@ -268,12 +275,14 @@ internal sealed class PriceEditorWindow : EditorWindow
         var summaries=Pricing012Presentation.Summaries(assigned);
         foreach(var item in summaries)
         {
-            var text=new CompactText043{Text=FormattableString.Invariant($"{item.Amount}₽×{item.Count}={item.Total}₽"),TextAlignment=TextAlignment.Left,FontSize=11.44,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold};
-            var cell=new Border{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,BorderBrush=Brushes.Gray,HorizontalAlignment=HorizontalAlignment.Stretch};
+            var text=new CompactText043{Text=FormattableString.Invariant($"{item.Amount}₽×{item.Count}={item.Total}₽"),TextAlignment=TextAlignment.Left,FontSize=13.44,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(item.Color))!,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold};
+            var cell=new PriceLegendBorder049{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,BorderBrush=Brushes.Gray,HorizontalAlignment=HorizontalAlignment.Stretch};
             cell.SetResourceReference(Border.PaddingProperty,"EditorPlaquePadding044");cell.SetResourceReference(Border.BorderThicknessProperty,"EditorBorder044");cell.SetResourceReference(MarginProperty,"EditorBottom044");
             cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.TogglePriceFocus(item.Amount);e.Handled=true;};
+            cell.Tag=item.Amount;
             priceSummary.RowDefinitions.Add(new RowDefinition{Height=GridLength.Auto});Grid.SetRow(cell,priceSummary.Children.Count);priceSummary.Children.Add(cell);
         }
+        UpdatePriceLegend049();
         if(priceSummary.Children.Count>0)((FrameworkElement)priceSummary.Children[^1]).Margin=new Thickness(0);
         var ids=preview.Selected.ToArray();
         preview.Load(seats.Select(s=>prices.TryGetValue(s.Id,out var p)?s with{Amount=p.Amount,Color=p.Color,IsBlocked=withdrawn.Contains(s.Id)}:s with{Amount=null,IsBlocked=withdrawn.Contains(s.Id)}).ToList(),

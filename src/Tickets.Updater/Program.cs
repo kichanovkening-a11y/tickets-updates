@@ -17,7 +17,7 @@ internal static class Program
         async Task Run()
         {
             if(busy)return;busy=true;button.IsEnabled=false;
-            string? work=null;UpdateTransaction? transaction=null;
+            string? work=null;UpdateTransaction? transaction=null;bool succeeded=false;
             try
             {
                 string Arg(string key,string fallback=""){var i=Array.IndexOf(args,key);return i>=0&&i+1<args.Length?args[i+1]:fallback;}
@@ -82,6 +82,7 @@ internal static class Program
                 }
                 catch{if(!transaction.IsHealthy&&!child.HasExited){child.Kill();await child.WaitForExitAsync();}throw;}
                 text.Text="Обновление завершено. Резерв сохранён.";
+                succeeded=true;
             }
             catch(Exception ex)
             {
@@ -95,7 +96,7 @@ internal static class Program
                 var log=Path.Combine(work??Path.GetTempPath(),"update-error.log");try{File.WriteAllText(log,details);}catch{}
                 text.Text=result+"\n"+ex.Message+"\nЖурнал: "+log;
             }
-            finally{transaction?.Dispose();busy=false;button.IsEnabled=true;button.Content="Повторить обновление";}
+            finally{transaction?.Dispose();busy=false;button.IsEnabled=true;button.Content="Повторить обновление";if(succeeded)window.Close();}
         }
         button.Click+=async(_,_)=>await Run();window.Loaded+=async(_,_)=>{if(args.Contains("--target"))await Run();};application.Run(window);
     }

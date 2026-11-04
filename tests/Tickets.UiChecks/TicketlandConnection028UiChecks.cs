@@ -56,6 +56,7 @@ internal static class TicketlandConnection028UiChecks
             Check(Equals(((Button)main.FindName("TicketlandConflictsButton033")).Content,"Конфликтов: 1"),"selected conflict count updates on switching shows");
             main.SelectEvent(eventId);Pump();Check(main.TicketlandStatus028.Contains("Отмечено на схеме: 1"),"switching back restores selected-show count");
             Ticketland029UiChecks.CheckRefreshButton(main);
+            Refresh049UiChecks.CheckRefreshButton(main,report);
             var json=File.ReadAllText(settingsPath);
             using(var document=JsonDocument.Parse(json))Check(document.RootElement.GetProperty("ConnectionId").GetString()==connection&&document.RootElement.GetProperty("Enabled").GetBoolean(),"nonsecret settings enable the same random connection");
             Check(!json.Contains(login.Username,StringComparison.Ordinal)&&!json.Contains(login.Password,StringComparison.Ordinal)&&!json.Contains("Username",StringComparison.OrdinalIgnoreCase)&&!json.Contains("Password",StringComparison.OrdinalIgnoreCase),"settings JSON contains no username or password");

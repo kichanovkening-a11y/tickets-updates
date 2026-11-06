@@ -24,6 +24,14 @@ internal static class Approved050UiChecks
             Require(legend.Children.Cast<object>().SequenceEqual(borders)&&statuses.Children.Cast<object>().SequenceEqual(entries),"focus must not recreate legend controls");
             Require(hall.Selected.SetEquals(selected),"focus changed selected seats");
         }
+        var current=(Tickets.Core.EventInfo)typeof(MainWindow).GetField("current",Private)!.GetValue(main)!;
+        var refreshed=store.Seats(current.Id).Select((seat,i)=>i==0?seat with{Color="#0055FF"}:seat).ToArray();
+        hall.FocusStatus030=HallStatus030.Printed;
+        hall.Load(refreshed,store.Sectors(current.VenueId),false);Pump();
+        var refreshedNormal=typeof(HallView).GetField("unfocusedDrawing050",Private)!.GetValue(hall);
+        Require(refreshedNormal is not null&&!ReferenceEquals(normal,refreshedNormal),"focused reload must prepare a current normal drawing before reset");
+        hall.ClearFocus030();Pump();
+        Require(ReferenceEquals(refreshedNormal,typeof(HallView).GetField("drawing",Private)!.GetValue(hall)),"reset after data refresh rebuilt drawing");
         var highContrast=typeof(CompactText043).GetProperty("HighContrast050")??throw new Exception("High contrast price rendering missing");
         foreach(var label in legend.Children.OfType<Border>().Select(b=>b.Child).OfType<CompactText043>())
             Require(label.Foreground==Brushes.White&&(bool)highContrast.GetValue(label)!&&label.FontSize==13.44,"price label style or size differs");

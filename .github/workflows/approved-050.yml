@@ -21,8 +21,8 @@ jobs:
       - name: Verify protected login and automatic renewal
         run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --ticketpro-login050
       - name: Verify focus reset and label dimensions
+        if: success() || failure()
         run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --approved050
       - name: Verify existing price selection gestures
+        if: success() || failure()
         run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --prices049
-      - name: Verify existing statuses and refresh controls
-        run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --corrections030

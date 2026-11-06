@@ -20,7 +20,7 @@ internal static class TicketPro050LoginChecks
         // Tests use the production login code with intercepted pages, never the live service.
         var web=(WebView2)typeof(TicketProSession037).GetField("view",Private)!.GetValue(session)!;
         session.Show();
-        var task=CheckAsync();var frame=new DispatcherFrame();
+        var task=Application.Current.Dispatcher.InvokeAsync(CheckAsync).Task.Unwrap();var frame=new DispatcherFrame();
         _=task.ContinueWith(_=>Application.Current.Dispatcher.BeginInvoke(new Action(()=>frame.Continue=false)));
         Dispatcher.PushFrame(frame);
         try{task.GetAwaiter().GetResult();}finally{session.DisposeSession();owner.Close();}

@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--approved050")&&!name.StartsWith("050"))return;
     if(args.Contains("--portable048")&&!name.StartsWith("048"))return;
     if(args.Contains("--corrections047")&&!name.StartsWith("047")&&!name.StartsWith("business forms use actual"))return;
     if(args.Contains("--documents045")&&!name.StartsWith("045"))return;
@@ -408,6 +409,7 @@ CatalogDeletionChecks.Register(Test);
 PricingChecks.Register(Test);
 RecipientHistoryChecks.Register(Test);
 EventReadOnly047Checks.Register(Test);
+ShowEdit050Checks.Register(Test);
 DocumentRender047Checks.Run(Test);
 ExcelTtn047Checks.Register(Test);
 SqliteConnection.ClearAllPools();

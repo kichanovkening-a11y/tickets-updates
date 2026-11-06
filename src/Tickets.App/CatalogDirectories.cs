@@ -50,6 +50,8 @@ internal sealed class PerformanceWindow : EditorWindow
                             {e.Handled=true;SelectedEventId=showing.Id;Finish(true);}
                         };
                         var leafMenu=new ContextMenu();leaf.ContextMenu=leafMenu;
+                        var editShow=new MenuItem{Header="Редактировать показ",IsEnabled=!store.IsEventReadOnly(showing.Id)};leafMenu.Items.Add(editShow);
+                        editShow.Click+=(_,_)=>Try(()=>{if(new ShowEdit050Window(store,showing).ShowDialog()==true)Refresh();});
                         var removeShow=new MenuItem{Header="Удалить показ окончательно",IsEnabled=!store.IsEventReadOnly(showing.Id)};leafMenu.Items.Add(removeShow);
                         removeShow.Click+=(_,_)=>Try(()=>{
                             if(!CatalogCleanup023.Confirm(DialogOwner,1))return;

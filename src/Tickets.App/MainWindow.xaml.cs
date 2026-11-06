@@ -37,7 +37,7 @@ public partial class MainWindow : Window
         Hall.AllowOccupiedSelection=true;
         Hall.SelectionChanged+=UpdateSelection;
         Hall.EmptySpaceClicked+=(_,_)=>SetPriceFocus(null);
-        Hall.PriceFocusChanged049+=()=>{if(current is not null)RenderHallLegend(store.Seats(current.Id));};
+        Hall.FocusChanged050+=UpdateFocusLegend050;
         Hall.SeatContextRequested+=OpenSeatContext;
         Hall.SeatSelectionRejected+=seat=>StatusText.Text=$"{seat.Label}: {seat.Status}. В смешанном выборе оставлены свободные места. Повторная печать — из исходной накладной.";
         Loaded+=(_,_)=>Run(()=> {
@@ -72,6 +72,8 @@ public partial class MainWindow : Window
                 label.Inlines.Add(new System.Windows.Documents.Run(show.Date){FontSize=19});label.Inlines.Add(new System.Windows.Documents.Run("\n"+show.Venue));
                 var item=new TreeViewItem{Header=label,Tag=show};
                 item.ContextMenu=CleanupMenu023(new[]{show.Id},"Удалить показ окончательно");
+                var edit=new MenuItem{Header="Редактировать показ",IsEnabled=!store.IsEventReadOnly(show.Id)};
+                edit.Click+=(_,_)=>EditShow050(show);item.ContextMenu.Items.Insert(0,edit);
                 var normal=past?Brushes.Gray:Brushes.SteelBlue;label.Foreground=normal;
                 item.Selected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.DarkSlateBlue;label.Foreground=Brushes.White;}};
                 item.Unselected+=(_,e)=>{if(ReferenceEquals(e.OriginalSource,item)){label.Background=Brushes.Transparent;label.Foreground=normal;}};

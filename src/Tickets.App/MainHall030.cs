@@ -25,7 +25,7 @@ public partial class MainWindow
         panel.Children.Add(new TextBlock{Text=text,FontSize=14.3,VerticalAlignment=VerticalAlignment.Center,FontWeight=active?FontWeights.Bold:FontWeights.Normal});
         panel.MouseLeftButtonDown+=(_,e)=>{
             Hall.FocusStatus030=Hall.FocusStatus030==status?null:status;
-            if(current is not null)RenderHallLegend(store.Seats(current.Id));
+
             e.Handled=true;
         };
         StatusLegendPanel.Children.Add(panel);

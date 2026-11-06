@@ -14,6 +14,14 @@ public sealed partial class HallView : FrameworkElement
 {
     private List<SeatInfo> seats=[];
     private DrawingGroup drawing=new();
+    private DrawingGroup? unfocusedDrawing050;
+    public event Action? FocusChanged050;
+    private void RebuildFocus050()
+    {
+        if(focusPrices.Count==0&&focusStatus030 is null&&unfocusedDrawing050 is not null)drawing=unfocusedDrawing050;
+        else RebuildDrawing(true);
+        InvalidateVisual();FocusChanged050?.Invoke();
+    }
     private IReadOnlyList<SectorInfo> sectors=[];
     private readonly HashSet<decimal> focusPrices=[];
     private HallStatus030? focusStatus030;
@@ -21,7 +29,7 @@ public sealed partial class HallView : FrameworkElement
     public IReadOnlyCollection<decimal> FocusPrices=>focusPrices.ToArray();
     public event Action? PriceFocusChanged049;
     public void ClearPriceFocus049()
-    {if(focusPrices.Count==0)return;focusPrices.Clear();RebuildDrawing();InvalidateVisual();PriceFocusChanged049?.Invoke();}
+    {if(focusPrices.Count==0)return;focusPrices.Clear();RebuildFocus050();PriceFocusChanged049?.Invoke();}
     // Retain the single-price setter for callers that replace or clear the focus.
     public decimal? FocusPrice
     {
@@ -30,18 +38,18 @@ public sealed partial class HallView : FrameworkElement
         {
             if(focusStatus030 is null&&(value.HasValue?focusPrices.SetEquals([value.Value]):focusPrices.Count==0))return;
             focusPrices.Clear();if(value.HasValue)focusPrices.Add(value.Value);
-            focusStatus030=null;RebuildDrawing();InvalidateVisual();PriceFocusChanged049?.Invoke();
+            focusStatus030=null;RebuildFocus050();PriceFocusChanged049?.Invoke();
         }
     }
     public HallStatus030? FocusStatus030
     {
         get=>focusStatus030;
-        set { if(focusStatus030==value&&focusPrices.Count==0)return; focusStatus030=value; focusPrices.Clear(); RebuildDrawing(); InvalidateVisual(); }
+        set { if(focusStatus030==value&&focusPrices.Count==0)return; focusStatus030=value; focusPrices.Clear(); RebuildFocus050(); }
     }
     public void TogglePriceFocus(decimal price)
     {
         if(!focusPrices.Add(price))focusPrices.Remove(price);
-        focusStatus030=null;RebuildDrawing();InvalidateVisual();PriceFocusChanged049?.Invoke();
+        focusStatus030=null;RebuildFocus050();PriceFocusChanged049?.Invoke();
     }
     private bool IsPriceDimmed(decimal? amount)=>focusPrices.Count>0&&(!amount.HasValue||!focusPrices.Contains(amount.Value));
     public void ClearFocus030()=>FocusPrice=null;
@@ -165,8 +173,9 @@ public sealed partial class HallView : FrameworkElement
         SelectionChanged?.Invoke();
     }
 
-    private void RebuildDrawing()
+    private void RebuildDrawing(bool focusOnly=false)
     {
+        if(!focusOnly)unfocusedDrawing050=null;
         var visible=seats.Where(s=>!s.IsHidden).ToArray();rowHits.Clear();sectorHits.Clear();sectorCaptionOrigins029.Clear();sectorCaptionCentres031.Clear();
         var group=new DrawingGroup();
         using(var dc=group.Open())
@@ -268,6 +277,7 @@ public sealed partial class HallView : FrameworkElement
             }
         }
         group.Freeze(); drawing=group;
+        if(focusPrices.Count==0&&focusStatus030 is null)unfocusedDrawing050=group;
         bounds=drawing.Bounds;
         // Rotated glyph ink can be smaller than the selectable caption rectangle.
         // Fit the entire hit region so every part remains reachable after fitting.
@@ -502,7 +512,7 @@ public sealed partial class HallView : FrameworkElement
                 }
                 else if(e.ChangedButton==MouseButton.Left && Hit(start) is null){if(focusPrices.Count>0){dismissedPriceOnPreviousClick049=true;ClearPriceFocus049();}else Selected.Clear();emptyClick=true;}
             }
-            SelectionChanged?.Invoke();
+            if(!emptyClick||!gestureSelection.SetEquals(Selected))SelectionChanged?.Invoke();
         }
         EndGesture(); e.Handled=true;
         if(rejected is not null){SeatSelectionRejected?.Invoke(rejected);ShowSeatRejection(rejected,p);}

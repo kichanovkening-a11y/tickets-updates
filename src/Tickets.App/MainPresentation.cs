@@ -57,7 +57,7 @@ public partial class MainWindow
     private void SetPriceFocus(decimal? price)
     {
         Hall.FocusPrice=price;
-        if(current is not null)RenderHallLegend(store.Seats(current.Id));
+
     }
     private void RenderHallLegend(IReadOnlyList<SeatInfo> seats)
     {
@@ -66,9 +66,9 @@ public partial class MainWindow
         for(var i=0;i<groups.Count;i++)
         {
             var group=groups[i];var price=group.Key;
-            var text=new CompactText043{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Left,FontSize=13.44,FontWeight=FontWeights.Bold,Foreground=(Brush)new BrushConverter().ConvertFromString(Pricing012Presentation.Foreground(group.First().Color))!};
+            var text=new CompactText043{Text=FormattableString.Invariant($"{price:0.##}₽×{group.Count()}={group.Sum(s=>(decimal)s.Amount!.Value):0.##}₽"),TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Left,FontSize=13.44,FontWeight=FontWeights.Bold,Foreground=Brushes.White,HighContrast050=true};
             var active=Hall.FocusPrices.Contains(price);
-            var button=new PriceLegendBorder049{Child=text,HorizontalAlignment=HorizontalAlignment.Stretch,Background=HallView.SeatBrush(group.First().Color),BorderBrush=active?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
+            var button=new PriceLegendBorder049{Tag=price,Child=text,HorizontalAlignment=HorizontalAlignment.Stretch,Background=HallView.SeatBrush(group.First().Color),BorderBrush=active?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
             button.SetResourceReference(Border.PaddingProperty,active?"Px2Inset043":"Px4Inset043");
             button.SetResourceReference(Border.BorderThicknessProperty,active?"Px3Border043":"Px1Border043");
             if(i<groups.Count-1)button.SetResourceReference(MarginProperty,"Px3Bottom043");

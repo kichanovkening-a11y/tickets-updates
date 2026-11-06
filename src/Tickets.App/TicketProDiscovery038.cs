@@ -73,7 +73,7 @@ internal sealed partial class TicketProSession037
         for(var i=0;i<90;i++)
         {
             token.ThrowIfCancellationRequested();
-            if(new Uri(view.CoreWebView2.Source).AbsolutePath=="/login")throw new TicketException("Ticket PRO: требуется вход в настройках. Последние данные сохранены.");
+            await Reauthenticate050(requested,token);
             var raw=JsonSerializer.Deserialize<string>(await view.ExecuteScriptAsync(script));
             var page=raw is null?null:JsonSerializer.Deserialize<TablePage038<T>>(raw,Json038);
             if(page is {Ready:true}&&page.Key!=previous&&MatchesRequestedDocument040(requested,page.Url))return page;

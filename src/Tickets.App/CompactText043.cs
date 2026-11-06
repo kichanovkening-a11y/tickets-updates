@@ -14,6 +14,8 @@ public sealed class CompactText043 : Control
     public static readonly DependencyProperty TextWrappingProperty=DependencyProperty.Register(nameof(TextWrapping),typeof(TextWrapping),typeof(CompactText043),new FrameworkPropertyMetadata(TextWrapping.NoWrap,FrameworkPropertyMetadataOptions.AffectsMeasure));
     public static readonly DependencyProperty TextAlignmentProperty=DependencyProperty.Register(nameof(TextAlignment),typeof(TextAlignment),typeof(CompactText043),new FrameworkPropertyMetadata(TextAlignment.Center,FrameworkPropertyMetadataOptions.AffectsRender));
     public static readonly DependencyProperty LineGapProperty=DependencyProperty.Register(nameof(LineGap),typeof(double),typeof(CompactText043),new FrameworkPropertyMetadata(3d,FrameworkPropertyMetadataOptions.AffectsMeasure),value=>value is double gap&&double.IsFinite(gap)&&gap>=0);
+    public static readonly DependencyProperty HighContrast050Property=DependencyProperty.Register(nameof(HighContrast050),typeof(bool),typeof(CompactText043),new FrameworkPropertyMetadata(false,FrameworkPropertyMetadataOptions.AffectsRender));
+    public bool HighContrast050{get=>(bool)GetValue(HighContrast050Property);set=>SetValue(HighContrast050Property,value);}
     public string Text{get=>(string)GetValue(TextProperty);set=>SetValue(TextProperty,value);}
     public TextWrapping TextWrapping{get=>(TextWrapping)GetValue(TextWrappingProperty);set=>SetValue(TextWrappingProperty,value);}
     public TextAlignment TextAlignment{get=>(TextAlignment)GetValue(TextAlignmentProperty);set=>SetValue(TextAlignmentProperty,value);}
@@ -67,7 +69,16 @@ public sealed class CompactText043 : Control
         {
             line.Text.SetForegroundBrush(Foreground);
             var x=TextAlignment==TextAlignment.Center?(ActualWidth-line.Ink.Width)/2:TextAlignment==TextAlignment.Right?ActualWidth-line.Ink.Width:0;
-            dc.DrawText(line.Text,new Point(x-line.Ink.X,y-line.Ink.Y));
+            var origin=new Point(x-line.Ink.X,y-line.Ink.Y);
+            if(HighContrast050)
+            {
+                var scale=PhysicalScale(this);
+                var glyphs=line.Text.BuildGeometry(origin);
+                dc.PushTransform(new TranslateTransform(1/scale.X,1/scale.Y));
+                dc.DrawGeometry(Brushes.Black,new Pen(Brushes.Black,.8/scale.X),glyphs);dc.Pop();
+                dc.DrawGeometry(Brushes.White,new Pen(Brushes.Black,.55/scale.X),glyphs);
+            }
+            else dc.DrawText(line.Text,origin);
             y+=line.Ink.Height+lineGap;
         }
     }

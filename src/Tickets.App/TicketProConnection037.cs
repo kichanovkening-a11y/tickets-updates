@@ -151,7 +151,7 @@ internal sealed partial class TicketProSession037:Window
             try
             {
                 if(!await IsSignedIn038())throw new TicketException("Войдите в Ticket PRO.");
-                await apply();
+                await RememberSignIn039Async();await apply();
             }
             catch(Exception ex){status.Text=ex is TicketException?ex.Message:"Не удалось прочитать схему. Последние данные сохранены.";}
             finally{busy=false;connect.IsEnabled=catalog.IsEnabled=off.IsEnabled=true;view.IsEnabled=true;}
@@ -175,7 +175,7 @@ internal sealed partial class TicketProSession037:Window
     private async Task RememberSignIn039Async()
     {
         if(!initialized)return;
-        try{await TicketProSessionCache039.SaveAsync(view.CoreWebView2.CookieManager,Path.Combine(profile,"session039.bin"));}
+        try{if(await IsSignedIn038())RememberCredentials050();await TicketProSessionCache039.SaveAsync(view.CoreWebView2.CookieManager,Path.Combine(profile,"session039.bin"));}
         catch(Exception ex) when(ex is IOException or UnauthorizedAccessException or System.Security.Cryptography.CryptographicException)
         {status.Text="Ticket PRO: вход выполнен, но не удалось сохранить сессию для следующего запуска.";}
     }
@@ -221,6 +221,7 @@ internal sealed partial class TicketProSession037:Window
                 var same=Uri.TryCreate(e.Request.Uri,UriKind.Absolute,out var destination)&&destination.Scheme=="https"&&destination.Host=="pro.ticketland.ru"&&destination.IsDefaultPort;
                 if(!login||!same)e.Response=environment.CreateWebResourceResponse(null,403,"Read-only connection","");
             };
+            await InitializeLogin050();
             view.Source=new Uri("https://pro.ticketland.ru/management/show");initialized=true;
         }
         finally
@@ -269,6 +270,7 @@ internal sealed partial class TicketProSession037:Window
             for(var i=0;i<70;i++)
             {
                 timeout.Token.ThrowIfCancellationRequested();
+                await Reauthenticate050(url,timeout.Token);
                 var json=await ReadCurrentAsync();
                 using var doc=JsonDocument.Parse(json);var root=doc.RootElement;
                 if(SnapshotReady040(root,url))return json;
@@ -278,5 +280,5 @@ internal sealed partial class TicketProSession037:Window
         }
         finally{view.NavigationStarting-=Starting;view.NavigationCompleted-=Done;}
     }
-    internal void DisposeSession(){disposing=true;view.Dispose();Close();}
+    internal void DisposeSession(){pendingLogin050=null;disposing=true;view.Dispose();Close();}
 }

@@ -39,6 +39,19 @@ internal static class Approved050UiChecks
         text.Measure(new Size(240,100));var size=text.DesiredSize;highContrast.SetValue(text,true);text.Measure(new Size(240,100));
         Require(text.DesiredSize==size,"contrast changed text measurement");
         Console.WriteLine("PASS 050 focus caching, stable controls, preserved selection and label dimensions");
+        var previous=store.Events().Single(x=>x.Id==current.Id);
+        Application.Current.Dispatcher.BeginInvoke(new Action(()=>{
+            var editor=Application.Current.Windows.OfType<ShowEdit050Window>().Single();
+            var panel=(StackPanel)editor.Content;var fields=panel.Children.OfType<TextBox>().ToArray();
+            Require(fields.Length==2,"show editor exposes unrelated fields");
+            fields[0].Text="Изменённый показ 050";fields[1].Text="20:17:31";
+            panel.Children.OfType<Button>().Single().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+        }),DispatcherPriority.ApplicationIdle);
+        typeof(MainWindow).GetMethod("EditShow050",Private)!.Invoke(main,[previous]);Pump();
+        var edited=(Tickets.Core.EventInfo)typeof(MainWindow).GetField("current",Private)!.GetValue(main)!;
+        Require(edited.Id==previous.Id&&edited.Title=="Изменённый показ 050"&&DateTime.Parse(edited.SortDate).TimeOfDay==new TimeSpan(20,17,31),"show editor did not save and refresh selected show");
+        Require(edited.VenueId==previous.VenueId&&DateTime.Parse(edited.SortDate).Date==DateTime.Parse(previous.SortDate).Date,"show editor changed venue or date");
+        Console.WriteLine("PASS 050 show editor saves title/time and refreshes current show");
     }
     private static void Pump()=>Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
     private static void Require(bool value,string message){if(!value)throw new Exception(message);}

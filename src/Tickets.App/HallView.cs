@@ -175,7 +175,17 @@ public sealed partial class HallView : FrameworkElement
 
     private void RebuildDrawing(bool focusOnly=false)
     {
-        if(!focusOnly)unfocusedDrawing050=null;
+        if(!focusOnly)
+        {
+            unfocusedDrawing050=null;
+            if(focusPrices.Count>0||focusStatus030.HasValue)
+            {
+                var prices=focusPrices.ToArray();var status=focusStatus030;
+                focusPrices.Clear();focusStatus030=null;
+                try{RebuildDrawing(true);}
+                finally{focusPrices.UnionWith(prices);focusStatus030=status;}
+            }
+        }
         var visible=seats.Where(s=>!s.IsHidden).ToArray();rowHits.Clear();sectorHits.Clear();sectorCaptionOrigins029.Clear();sectorCaptionCentres031.Clear();
         var group=new DrawingGroup();
         using(var dc=group.Open())

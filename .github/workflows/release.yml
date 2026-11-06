@@ -108,6 +108,12 @@ jobs:
           Write-Host 'Verified identical application source and completed UI/core checks; rerun updater and release validation.'
       - name: Restore test data
         run: python scripts/restore_seed.py
+      - name: Verify approved editing focus and protected PRO login
+        run: |
+          dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --ticketpro-login050
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --approved050
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
       - name: Verify price buttons and empty-area dismissal
         run: dotnet run --project tests/Tickets.UiChecks/Tickets.UiChecks.csproj -- data/seed.db --prices049
       - name: Verify Windows editor controls

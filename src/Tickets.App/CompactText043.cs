@@ -35,7 +35,7 @@ public sealed class CompactText043 : Control
         return new Vector(Math.Max(.1,(x-zero).Length*dpi.DpiScaleX),Math.Max(.1,(y-zero).Length*dpi.DpiScaleY));
     }
     private FormattedText Format(string text)=>new(text,CultureInfo.CurrentUICulture,FlowDirection,
-        new Typeface(FontFamily,FontStyle,FontWeight,FontStretch),FontSize,Foreground,VisualTreeHelper.GetDpi(this).PixelsPerDip);
+        new Typeface(FontFamily,FontStyle,FontWeight,FontStretch),FontSize,Foreground,null,TextOptions.GetTextFormattingMode(this),VisualTreeHelper.GetDpi(this).PixelsPerDip);
     protected override Size MeasureOverride(Size availableSize)
     {
         lines.Clear();lineGap=LineGap/PhysicalScale(this).Y;
@@ -78,7 +78,20 @@ public sealed class CompactText043 : Control
                 dc.DrawGeometry(Brushes.Black,new Pen(Brushes.Black,.8/scale.X),glyphs);dc.Pop();
                 dc.DrawGeometry(Brushes.White,new Pen(Brushes.Black,.55/scale.X),glyphs);
             }
-            else dc.DrawText(line.Text,origin);
+            else
+            {
+                if (TextOptions.GetTextRenderingMode(this) == TextRenderingMode.ClearType &&
+                    PresentationSource.FromVisual(this)?.RootVisual is Visual root)
+                {
+                    var dpi = VisualTreeHelper.GetDpi(this);
+                    var scale = PhysicalScale(this);
+                    var baseline = TransformToAncestor(root).Transform(new Point(origin.X, origin.Y + line.Text.Baseline));
+                    var px = baseline.X * dpi.DpiScaleX;
+                    var py = baseline.Y * dpi.DpiScaleY;
+                    origin.Offset((Math.Round(px) - px) / scale.X, (Math.Round(py) - py) / scale.Y);
+                }
+                dc.DrawText(line.Text, origin);
+            }
             y+=line.Ink.Height+lineGap;
         }
     }

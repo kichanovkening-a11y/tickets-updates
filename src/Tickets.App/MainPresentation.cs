@@ -66,7 +66,7 @@ public partial class MainWindow
         for(var i=0;i<groups.Count;i++)
         {
             var group=groups[i];var price=group.Key;
-            var text=new CompactText043{Text=PriceLabel.Format(price, group.Count(), group.Sum(s => (decimal)s.Amount!.Value)),TextWrapping=TextWrapping.Wrap,TextAlignment=TextAlignment.Left,FontSize=13.44,FontWeight=FontWeights.Bold,Foreground=Brushes.Black};
+            var text=PriceLabel.Create(price, group.Count(), group.Sum(s => (decimal)s.Amount!.Value));
             var active=Hall.FocusPrices.Contains(price);
             var button=new PriceLegendBorder049{Tag=(decimal)price,Child=text,HorizontalAlignment=HorizontalAlignment.Stretch,Background=HallView.SeatBrush(group.First().Color),BorderBrush=active?Brushes.Black:Brushes.Gray,Cursor=System.Windows.Input.Cursors.Hand};
             button.SetResourceReference(Border.PaddingProperty,active?"Px2Inset043":"Px4Inset043");

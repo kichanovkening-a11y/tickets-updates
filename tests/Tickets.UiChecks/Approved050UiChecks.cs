@@ -34,7 +34,7 @@ internal static class Approved050UiChecks
         Require(ReferenceEquals(refreshedNormal,typeof(HallView).GetField("drawing",Private)!.GetValue(hall)),"reset after data refresh rebuilt drawing");
         var highContrast=typeof(CompactText043).GetProperty("HighContrast050")??throw new Exception("High contrast price rendering missing");
         foreach(var label in legend.Children.OfType<Border>().Select(b=>b.Child).OfType<CompactText043>())
-            Require(label.Foreground==Brushes.Black&&!(bool)highContrast.GetValue(label)!&&label.FontSize==13.44,"price label style or size differs");
+            Require(label.Foreground==Brushes.Black&&TextOptions.GetTextRenderingMode(label)==TextRenderingMode.ClearType&&TextOptions.GetTextFormattingMode(label)==TextFormattingMode.Display&&label.SnapsToDevicePixels&&!(bool)highContrast.GetValue(label)!&&label.FontSize==13.44,"price label style or size differs");
         var text=new CompactText043{Text="1000₽×852=852000₽",FontSize=13.44};
         text.Measure(new Size(240,100));var size=text.DesiredSize;highContrast.SetValue(text,true);text.Measure(new Size(240,100));
         Require(text.DesiredSize==size,"contrast changed text measurement");

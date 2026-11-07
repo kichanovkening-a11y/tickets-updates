@@ -30,7 +30,7 @@ public partial class MainWindow
         {
             var cards = JsonSerializer.Deserialize<List<HomeCard>>(saved)!;
             var activeIds = locals.Select(p => p.Id).ToHashSet();
-            if (cards.RemoveAll(c => c.PerformanceId != 0 && !activeIds.Contains(c.PerformanceId)) > 0)
+            if (cards.RemoveAll(c => c.Hidden || (c.PerformanceId != 0 && !activeIds.Contains(c.PerformanceId))) > 0)
                 store.SaveHomeLayout(JsonSerializer.Serialize(cards));
             return cards;
         }
@@ -126,10 +126,19 @@ public partial class MainWindow
             var remove = new MenuItem { Header = "Удалить с главного экрана" };
             remove.Click += (_, _) => Run(() =>
             {
-                var cards = Cards(); var index = cards.IndexOf(card);
-                if (index >= 0) { cards[index] = card with { Hidden = true }; SaveCards(cards); }
+                var cards = Cards();
+                if (cards.Remove(card)) SaveCards(cards);
             });
-            menu.Items.Add(add); menu.Items.Add(remove); tile.ContextMenu = menu;
+            var link = new MenuItem { Header = local != null && card.Page.Length > 0 ? "Заменить связку" : "Связать" };
+            link.Click += (_, _) => Run(() =>
+            {
+                if (local == null) BindCard(card, title);
+                else EditPoster(local.Title, local.Id);
+            });
+            menu.Items.Add(add);
+            menu.Items.Add(link);
+            menu.Items.Add(remove);
+            tile.ContextMenu = menu;
             HomeTiles.Children.Add(tile);
         }
     }
@@ -153,7 +162,7 @@ public partial class MainWindow
     {
         var picker = new PosterPicker(store, repertoire, Cards(), null, card.Page, title);
         if (picker.ShowDialog() != true) return 0;
-        return SavePicked(picker);
+        return SavePicked(picker, card);
     }
 
     internal void EditPoster(string title, long id)
@@ -164,12 +173,13 @@ public partial class MainWindow
         if (picker.ShowDialog() == true) SavePicked(picker);
     }
 
-    private long SavePicked(PosterPicker picker)
+    private long SavePicked(PosterPicker picker, HomeCard? origin = null)
     {
         var cards = Cards();
         var local = store.Performances().FirstOrDefault(p => CatalogText.Key(p.Title) == CatalogText.Key(picker.LocalTitle));
         var page = picker.Page;
         var existing = local == null ? -1 : cards.FindIndex(c => c.PerformanceId == local.Id);
+        if (existing < 0 && origin != null) existing = cards.IndexOf(origin);
         var other = cards.FindIndex(c => page.Length > 0 && c.Page == page);
         if (other >= 0 && !cards[other].Hidden && cards[other].PerformanceId != 0 && cards[other].PerformanceId != local?.Id)
             throw new TicketException("Эта афиша уже привязана к другому спектаклю.");

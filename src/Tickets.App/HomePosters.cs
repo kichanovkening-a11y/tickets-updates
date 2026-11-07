@@ -169,8 +169,8 @@ public partial class MainWindow
     {
         if (string.IsNullOrWhiteSpace(title)) throw new TicketException("Укажите название спектакля.");
         var linked = Cards().FirstOrDefault(c => id != 0 && c.PerformanceId == id);
-        var picker = new PosterPicker(store, repertoire, Cards(), title, linked?.Page, title);
-        if (picker.ShowDialog() == true) SavePicked(picker);
+        var picker = new PosterPicker(store, repertoire, Cards(), title, linked?.Page, title, chooseExisting: id != 0);
+        if (picker.ShowDialog() == true) SavePicked(picker, linked);
     }
 
     private long SavePicked(PosterPicker picker, HomeCard? origin = null)
@@ -179,18 +179,19 @@ public partial class MainWindow
         var local = store.Performances().FirstOrDefault(p => CatalogText.Key(p.Title) == CatalogText.Key(picker.LocalTitle));
         var page = picker.Page;
         var existing = local == null ? -1 : cards.FindIndex(c => c.PerformanceId == local.Id);
-        if (existing < 0 && origin != null) existing = cards.IndexOf(origin);
+        var original = origin == null ? -1 : cards.IndexOf(origin);
         var other = cards.FindIndex(c => page.Length > 0 && c.Page == page);
-        if (other >= 0 && !cards[other].Hidden && cards[other].PerformanceId != 0 && cards[other].PerformanceId != local?.Id)
+        if (other >= 0 && other != original && !cards[other].Hidden && cards[other].PerformanceId != 0 && cards[other].PerformanceId != local?.Id)
             throw new TicketException("Эта афиша уже привязана к другому спектаклю.");
         var id = local?.Id ?? store.SavePerformance(picker.LocalTitle);
         var replacement = new HomeCard(page, id);
-        var index = existing >= 0 ? existing : other;
+        var index = original >= 0 ? original : existing >= 0 ? existing : other;
         if (index < 0) cards.Add(replacement);
         else
         {
             cards[index] = replacement;
-            if (existing >= 0 && other >= 0 && other != existing) cards.RemoveAt(other);
+            foreach (var duplicate in new[] { existing, other }.Distinct().OrderDescending())
+                if (duplicate >= 0 && duplicate != index) cards.RemoveAt(duplicate);
         }
         SaveCards(cards);
         return id;

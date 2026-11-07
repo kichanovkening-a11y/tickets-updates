@@ -10,7 +10,7 @@ internal sealed class PosterPicker : EditorWindow
     internal string LocalTitle { get; private set; } = "";
     internal string Page { get; private set; } = "";
 
-    internal PosterPicker(Store store, RepertoireCatalog catalog, List<HomeCard> cards, string? fixedTitle, string? page, string title)
+    internal PosterPicker(Store store, RepertoireCatalog catalog, List<HomeCard> cards, string? fixedTitle, string? page, string title, bool chooseExisting = false)
         : base(store, fixedTitle == null ? "Добавить спектакль" : "Афиша спектакля", 660, 600)
     {
         var form = new StackPanel { Margin = new Thickness(18) };
@@ -19,8 +19,8 @@ internal sealed class PosterPicker : EditorWindow
         var pages = catalog.Posters.ToList();
         var site = new ComboBox { DisplayMemberPath = "Title" };
         site.ItemsSource = pages.Prepend(new Poster("", "Без афиши сайта", "")).ToArray();
-        var local = new ComboBox { IsEditable = true, ItemsSource = locals.Select(p => p.Title).ToArray(), IsReadOnly = fixedTitle != null };
-        local.IsEnabled = fixedTitle == null;
+        var local = new ComboBox { IsEditable = !chooseExisting, ItemsSource = locals.Select(p => p.Title).ToArray(), IsReadOnly = fixedTitle != null };
+        local.IsEnabled = fixedTitle == null || chooseExisting;
         form.Children.Add(new TextBlock { Text = "Спектакль на VIP-Театре" });
         form.Children.Add(site);
         var preview = new Image { Height = 200, Stretch = Stretch.Uniform, Margin = new Thickness(0,8,0,8) };
@@ -31,6 +31,7 @@ internal sealed class PosterPicker : EditorWindow
         {
             var poster = site.SelectedItem as Poster;
             preview.Source = poster == null ? null : catalog.Photo(poster.Page);
+            if (chooseExisting) return;
             if (fixedTitle != null) { local.Text = fixedTitle; return; }
             if (poster == null || poster.Page.Length == 0) return;
             var matches = locals.Where(p => MainWindow.RelatedTitle(p.Title, poster.Title)).ToList();
@@ -44,10 +45,11 @@ internal sealed class PosterPicker : EditorWindow
                 ?? pages.FirstOrDefault(p => MainWindow.RelatedTitle(p.Title, title));
         if (suggestion != null) site.SelectedItem = suggestion;
         else if (fixedTitle != null) site.SelectedIndex = 0;
-        if (fixedTitle != null) local.Text = fixedTitle;
+        if (chooseExisting) local.SelectedItem = fixedTitle;
+        else if (fixedTitle != null) local.Text = fixedTitle;
         Button(form, fixedTitle == null ? "Добавить" : "Сохранить", () => Try(() =>
         {
-            var name = fixedTitle ?? local.Text.Trim();
+            var name = chooseExisting ? local.SelectedItem as string ?? "" : fixedTitle ?? local.Text.Trim();
             if (name.Length == 0) throw new TicketException("Выберите или введите название спектакля.");
             LocalTitle = name; Page = (site.SelectedItem as Poster)?.Page ?? ""; Finish(true);
         }));

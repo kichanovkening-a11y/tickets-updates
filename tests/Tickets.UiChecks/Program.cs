@@ -36,6 +36,12 @@ internal static class Program
         {
             if(args.Length>0&&Path.GetFileName(args[0]).Equals("seed.db",StringComparison.OrdinalIgnoreCase)&&!args.Any(a=>a.Contains("live",StringComparison.OrdinalIgnoreCase)))
             {var fixture=Path.Combine(work,"current-seed.db");File.Copy(args[0],fixture);FixtureDates047.PrepareSeedCopy(fixture);args[0]=fixture;}
+            if(args.Contains("--poster-choice"))
+            {
+                var copy=Path.Combine(work,"poster-choice.db");File.Copy(args[0],copy);var fixtureStore=new Store(copy);
+                var window=new Tickets.App.MainWindow(fixtureStore){SeparateWindows=true};app.MainWindow=window;window.Show();Pump();
+                PosterChoiceChecks.Run(fixtureStore,window);window.Close();return 0;
+            }
             if(args.Contains("--excel047")){Excel047UiChecks.Run(args[0]);return 0;}
             if(args.Contains("--office047")){Office047UiChecks.Run();return 0;}
             if(args.Contains("--forms047")){DocumentForms047Checks.Run(args[0]);return 0;}

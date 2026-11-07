@@ -1,28 +1,17 @@
-name: Verify approved 0.50 changes
+name: Verify poster chooser
 on:
   push:
-    branches: [fix/approved-050]
-  workflow_dispatch:
+    branches: [verify/poster-choice-0511]
 permissions:
   contents: read
 jobs:
   verify:
     runs-on: windows-2022
-    timeout-minutes: 25
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.408
-      - name: Restore fixtures
-        run: python scripts/restore_seed.py
-      - name: Verify show editing and data preservation
-        run: dotnet run --project tests/Tickets.Tests -- data/seed.db --approved050
-      - name: Verify protected login and automatic renewal
-        run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --ticketpro-login050
-      - name: Verify focus reset and label dimensions
-        if: success() || failure()
-        run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --approved050
-      - name: Verify existing price selection gestures
-        if: success() || failure()
-        run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --prices049
+      - run: python scripts/restore_seed.py
+      - run: dotnet run --project tests/Tickets.UiChecks -- data/seed.db --poster-choice

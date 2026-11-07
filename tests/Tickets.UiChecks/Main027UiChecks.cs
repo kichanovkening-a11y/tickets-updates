@@ -19,7 +19,7 @@ internal static class Main027UiChecks
         typeof(MainWindow).GetMethod("ReadEventCatalog",Private)!.Invoke(main,null);typeof(MainWindow).GetMethod("ApplyFilter",Private)!.Invoke(main,null);main.SelectEvent(eventId);Pump();
         var search=(TextBox)main.FindName("SearchBox");var brand=(TextBlock)main.FindName("AppBrand");
         Check(ReferenceEquals(search.Parent,brand.Parent),"search is next to brand in top band");
-        Check(!Walk((DependencyObject)main.FindName("HomePanel")).OfType<Button>().Any(),"home has no duplicate creation or search commands");
+        Check(Walk((DependencyObject)main.FindName("HomePanel")).OfType<Button>().Single().Content?.ToString()=="Добавить спектакль","home has no duplicate creation or search commands");
         var root=(FrameworkElement)main.Content;var transform=root.LayoutTransform;
         var width=main.Width;var height=main.Height;main.Width=1420;main.Height=880;
         try{foreach(var scale in new[]{1d,1.25,1.5}){

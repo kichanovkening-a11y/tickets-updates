@@ -177,14 +177,13 @@
           <TextBlock x:Name="SelectionHint"/>
         </StackPanel>
       </Grid>
-      <Border x:Name="HomePanel" Grid.Column="2" Background="White" Padding="35">
-        <StackPanel VerticalAlignment="Center" MaxWidth="600" HorizontalAlignment="Center">
-          <TextBlock Text="Билеты" FontSize="34" FontWeight="Bold" Foreground="#152C46"/>
-
-          <TextBlock Text="Выберите мероприятие" FontSize="24" Margin="0,20,0,12"/>
-          <TextBlock Text="Список мероприятий находится слева. Найдите спектакль по названию, площадке или дате и нажмите на него, чтобы открыть зал." TextWrapping="Wrap" FontSize="16" Foreground="#475569"/>
-          <TextBlock x:Name="HomeSummary" Foreground="#64748B" TextWrapping="Wrap"/>
-        </StackPanel>
+      <Border x:Name="HomePanel" Grid.Column="2" Background="White" Padding="12">
+        <DockPanel>
+          <Button DockPanel.Dock="Top" HorizontalAlignment="Right" Content="Добавить спектакль" Click="AddHomePoster" Margin="6"/>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <UniformGrid x:Name="HomeTiles" Columns="5" VerticalAlignment="Top"/>
+          </ScrollViewer>
+        </DockPanel>
       </Border>
     </Grid>
   </DockPanel>

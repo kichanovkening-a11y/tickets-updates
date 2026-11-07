@@ -56,7 +56,7 @@ internal static class Program
             if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
-            if(args.Contains("--approved050")){main.SelectEvent(store.Events().First().Id);Pump();Approved050UiChecks.Run(store,main);main.Close();return 0;}
+            if(args.Contains("--approved050")){Home051Checks.Run(store,main);main.SelectEvent(store.Events().First().Id);Pump();Approved050UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--blank048")){Blank017Checks.Run(store);main.Close();return 0;}
             if(args.Contains("--issuance048")){Issuance048UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--calendar048")){Calendar048UiChecks.Run(store,main);main.Close();return 0;}
@@ -429,7 +429,7 @@ internal static class Program
             var categoryCells=priceSummary.Children.OfType<Border>().ToArray();
             Check(priceSummary.RowDefinitions.Count==4&&priceSummary.ColumnDefinitions.Count==0&&categoryCells.Length==4,"pricing categories use one sidebar column");
             Check(categoryCells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(new[]{(0,0),(1,0),(2,0),(3,0)}),"pricing summary orders categories downward");
-            Check(categoryCells.Select(cell=>((Tickets.App.CompactText043)cell.Child).Text).SequenceEqual(new[]{4000L,3000L,2000L,1000L}.Select(amount=>$"{amount}₽×1={amount}₽")),"colored pricing summary uses descending amounts with quantity and total");
+            Check(categoryCells.Select(cell=>((Tickets.App.CompactText043)cell.Child).Text).SequenceEqual(new[]{"4 000 × 1 = 4 000","3 000 × 1 = 3 000","2 000 × 1 = 2 000","1 000 × 1 = 1 000"}),"colored pricing summary uses descending amounts with quantity and total");
             Check(categoryCells.All(cell=>cell.Background is SolidColorBrush&&((Tickets.App.CompactText043)cell.Child).Foreground is SolidColorBrush&&cell.ActualWidth>50&&cell.ActualHeight>10),"pricing summary renders colored readable cells in the sidebar");categoryEditor.Close();
             var copyEditor=(Window)Activator.CreateInstance(priceEditorType,new object?[]{store,(long?)venueId,(long?)planId})!;copyEditor.Show();Pump();
             Check(Field(copyEditor,"Название новой расценовки").Text=="","loaded pricing copy leaves the new name empty");
@@ -883,7 +883,7 @@ internal static class Program
         var cells=legend.Children.OfType<Border>().ToArray();
         Check(legend.ColumnDefinitions.All(column=>column.Width.IsAuto)&&cells.All(cell=>cell.Child is TextBlock {TextWrapping:TextWrapping.NoWrap,FontSize:14.3,FontWeight:var weight}&&weight==FontWeights.Bold),"main price legend retains unbroken bold expressions in content-sized columns");
         var priceGroups=store.Seats(store.Events().Single(show=>show.Title=="UI event").Id).Where(seat=>seat.Amount.HasValue&&!seat.IsBlocked).GroupBy(seat=>seat.Amount!.Value).OrderByDescending(group=>group.Key);
-        Check(cells.Select(cell=>((Tickets.App.CompactText043)cell.Child).Text).SequenceEqual(priceGroups.Select(group=>$"{group.Key:0.##}₽×{group.Count()}={group.Sum(seat=>(decimal)seat.Amount!.Value):0.##}₽")),"main price legend shows exact compact price quantity and sum");
+        Check(cells.Select(cell=>((Tickets.App.CompactText043)cell.Child).Text).SequenceEqual(priceGroups.Select(group=>$"{DocumentTotals.Amount(group.Key)} × {DocumentTotals.Amount(group.Count())} = {DocumentTotals.Amount(group.Sum(seat=>(decimal)seat.Amount!.Value))}")),"main price legend shows exact compact price quantity and sum");
         Check(cells.Select(cell=>(Grid.GetRow(cell),Grid.GetColumn(cell))).SequenceEqual(Enumerable.Range(0,cells.Length).Select(index=>(index%legend.RowDefinitions.Count,index/legend.RowDefinitions.Count))),"main price legend fills each column downward");
         NativeClick(cells[0]);Pump();Check(hall.FocusPrice.HasValue&&hall.Selected.SetEquals(selection),"clicking price legend focuses its price without changing selection");
         NativeClick(legend.Children.OfType<Border>().First());Pump();Check(hall.FocusPrice is null&&hall.Selected.SetEquals(selection),"clicking focused price again restores all prices without changing selection");

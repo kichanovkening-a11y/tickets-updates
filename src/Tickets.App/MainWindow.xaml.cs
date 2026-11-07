@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     public MainWindow(Store store)
     {
         this.store=store;
+        repertoire = new RepertoireCatalog(store);
         InitializeComponent();InitializeLayout043();ReadWindowSettings();InitializeJournalLayout();InitializeTicketland028();InitializeTicketPro037();
         SeriesBox.Text=store.LastIssueSeries;
         Workspace.SizeChanged+=(_,_)=>UpdateCompactLayout();
@@ -42,7 +43,6 @@ public partial class MainWindow : Window
         Hall.SeatSelectionRejected+=seat=>StatusText.Text=$"{seat.Label}: {seat.Status}. В смешанном выборе оставлены свободные места. Повторная печать — из исходной накладной.";
         Loaded+=(_,_)=>Run(()=> {
             ReadEventCatalog(); ready=true; ApplyFilter();RefreshRecipients();RefreshSenders();
-            HomeSummary.Text=$"В базе мероприятий: {events.Count}. Старые выдачи не переносились.";
             ShowHome();
             UpdateNumber();
         });
@@ -124,6 +124,7 @@ public partial class MainWindow : Window
     }
     private void ShowHome()
     {
+        DrawCards(); RefreshPosters();
         HomePanel.Visibility=Visibility.Visible; Workspace.Visibility=Visibility.Collapsed;UpdateCompactLayout();
         if(ticketProEnabled037)_=RefreshTicketPro037();
     }
@@ -131,7 +132,7 @@ public partial class MainWindow : Window
     private void FindEventClick(object sender,RoutedEventArgs e) { SearchBox.Focus(); SearchBox.SelectAll(); }
     private void UpdateClick(object sender,RoutedEventArgs e)=>Run(()=>new UpdateWindow(store).ShowDialog());
     private void CloseClick(object sender,RoutedEventArgs e)=>Close();
-    private void PerformancesClick(object sender,RoutedEventArgs e)=>Run(()=>{var catalog=new PerformanceWindow(store);catalog.ShowDialog();RefreshCatalogNavigation();if(catalog.SelectedEventId!=0){SearchBox.Clear();ApplyFilter();SelectEvent(catalog.SelectedEventId);}});
+    private void PerformancesClick(object sender,RoutedEventArgs e)=>Run(()=>{var catalog=new PerformanceWindow(store);catalog.ShowDialog();RefreshCatalogNavigation();if(HomePanel.IsVisible)DrawCards();if(catalog.SelectedEventId!=0){SearchBox.Clear();ApplyFilter();SelectEvent(catalog.SelectedEventId);}});
     private void NewHallClick(object sender,RoutedEventArgs e)=>Run(()=>new HallEditorWindow(store).ShowDialog());
     private void PricesClick(object sender,RoutedEventArgs e)=>Run(()=>new PricingDirectoryWindow(store).ShowDialog());
     private void NewEventClick(object sender,RoutedEventArgs e)=>Run(()=>{

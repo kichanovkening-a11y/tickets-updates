@@ -29,7 +29,7 @@ internal static class Pricing014Checks
         foreach(var cell in summary.Children.OfType<Border>())
         {
             var text=(Tickets.App.CompactText043)cell.Child;
-            Require(text.Text=="10000₽×2=20000₽"&&text.TextWrapping==TextWrapping.Wrap,"Summary retains the exact price expression");
+            Require(text.Text=="10 000 × 2 = 20 000"&&text.TextWrapping==TextWrapping.Wrap,"Summary retains the exact price expression");
             Require(cell.HorizontalAlignment==HorizontalAlignment.Stretch,"Colored summaries fill the sidebar column");
         }
         Require(summary.ColumnDefinitions.All(c=>c.Width.IsAuto),"Summary columns measure their content");

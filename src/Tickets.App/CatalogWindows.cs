@@ -275,7 +275,7 @@ internal sealed class PriceEditorWindow : EditorWindow
         var summaries=Pricing012Presentation.Summaries(assigned);
         foreach(var item in summaries)
         {
-            var text=new CompactText043{Text=FormattableString.Invariant($"{item.Amount}₽×{item.Count}={item.Total}₽"),TextAlignment=TextAlignment.Left,FontSize=13.44,Foreground=Brushes.White,HighContrast050=true,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold};
+            var text=new CompactText043{Text=PriceLabel.Format(item.Amount, item.Count, item.Total),TextAlignment=TextAlignment.Left,FontSize=13.44,Foreground=Brushes.Black,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.Bold};
             var cell=new PriceLegendBorder049{Background=(Brush)new BrushConverter().ConvertFromString(item.Color)!,Child=text,BorderBrush=Brushes.Gray,HorizontalAlignment=HorizontalAlignment.Stretch};
             cell.SetResourceReference(Border.PaddingProperty,"EditorPlaquePadding044");cell.SetResourceReference(Border.BorderThicknessProperty,"EditorBorder044");cell.SetResourceReference(MarginProperty,"EditorBottom044");
             cell.Cursor=Cursors.Hand;cell.MouseLeftButtonUp+=(_,e)=>{preview.TogglePriceFocus(item.Amount);e.Handled=true;};

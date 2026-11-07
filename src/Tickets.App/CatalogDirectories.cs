@@ -24,7 +24,7 @@ internal sealed class PerformanceWindow : EditorWindow
         var name=Field(header,"Название нового спектакля");
         var search= new TextBox{Margin=new Thickness(0,10,0,8)};
         var tree=new TreeView();var openingContext=false;
-        Button(header,"Создать спектакль",()=>Try(()=>{store.SavePerformance(name.Text);name.Clear();Refresh();}));
+        Button(header,"Создать спектакль",()=>Try(()=>{((MainWindow)Application.Current.MainWindow).EditPoster(name.Text.Trim(),0);Refresh();}));
         header.Children.Add(new TextBlock{Text="Поиск спектакля",Margin=new Thickness(0,10,0,0)});header.Children.Add(search);
         root.Children.Add(tree);
         void Refresh()
@@ -71,6 +71,8 @@ internal sealed class PerformanceWindow : EditorWindow
                 if(past.Count>0){var archive=new TreeViewItem{Header=$"Прошедшие ({past.Count})",Foreground=Brushes.Gray};node.Items.Add(archive);Add(archive,past);}
                 if(shows.Count==0)node.Items.Add(new TreeViewItem{Header="Показов пока нет",IsEnabled=false});
                 var menu=new ContextMenu();node.ContextMenu=menu;
+                var poster=new MenuItem{Header="Привязать афишу"};menu.Items.Add(poster);
+                poster.Click+=(_,_)=>Try(()=>((MainWindow)Application.Current.MainWindow).EditPoster(performance.Title,performance.Id));
                 var dates=new MenuItem{Header="Добавить даты"};menu.Items.Add(dates);
                 dates.Click+=(_,_)=>Try(()=>{var editor=new EventEditorWindow(store,performance.Id);if(editor.ShowDialog()==true)Refresh();});
                 var delete=new MenuItem{Header="Удалить"};menu.Items.Add(delete);

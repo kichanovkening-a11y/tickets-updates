@@ -26,6 +26,12 @@ internal static class Home051Checks
             throw new Exception("Hiding a home card must leave the shows intact");
         var persisted = System.Text.Json.JsonSerializer.Deserialize<List<HomeCard>>(new Store(store.Path).HomeLayout)!;
         if (!persisted.Single(c => c.Page == card.Page).Hidden) throw new Exception("Card visibility was not persisted");
+        var retired = store.SavePerformance("Проверка освобождения афиши 0511");
+        store.SaveHomeLayout(System.Text.Json.JsonSerializer.Serialize(new[] { new HomeCard(card.Page, retired), new HomeCard("/keep", 0, true) }));
+        store.DeletePerformance(retired);
+        var remaining = System.Text.Json.JsonSerializer.Deserialize<List<HomeCard>>(new Store(store.Path).HomeLayout)!;
+        if (!remaining.SequenceEqual(new[] { new HomeCard("/keep", 0, true) }))
+            throw new Exception("Deleted performance still owns its poster or unrelated cards changed");
         Console.WriteLine("PASS home grid, offline artwork, repertoire parsing and safe persistent hiding");
     }
 }

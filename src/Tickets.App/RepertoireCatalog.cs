@@ -11,7 +11,7 @@ using Tickets.Core;
 namespace Tickets.App;
 
 internal sealed record Poster(string Page, string Title, string Image);
-internal sealed record HomeCard(string Page, long PerformanceId, bool Hidden = false);
+
 
 internal sealed class RepertoireCatalog
 {

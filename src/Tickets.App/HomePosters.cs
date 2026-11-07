@@ -25,8 +25,15 @@ public partial class MainWindow
     private List<HomeCard> Cards()
     {
         var saved = store.HomeLayout;
-        if (saved.Length > 0) return JsonSerializer.Deserialize<List<HomeCard>>(saved)!;
         var locals = store.Performances();
+        if (saved.Length > 0)
+        {
+            var cards = JsonSerializer.Deserialize<List<HomeCard>>(saved)!;
+            var activeIds = locals.Select(p => p.Id).ToHashSet();
+            if (cards.RemoveAll(c => c.PerformanceId != 0 && !activeIds.Contains(c.PerformanceId)) > 0)
+                store.SaveHomeLayout(JsonSerializer.Serialize(cards));
+            return cards;
+        }
         return repertoire.Posters.Select(p =>
         {
             var exact = locals.Where(l => PosterKey(l.Title) == PosterKey(p.Title)).ToList();
@@ -164,7 +171,7 @@ public partial class MainWindow
         var page = picker.Page;
         var existing = local == null ? -1 : cards.FindIndex(c => c.PerformanceId == local.Id);
         var other = cards.FindIndex(c => page.Length > 0 && c.Page == page);
-        if (other >= 0 && cards[other].PerformanceId != 0 && cards[other].PerformanceId != local?.Id)
+        if (other >= 0 && !cards[other].Hidden && cards[other].PerformanceId != 0 && cards[other].PerformanceId != local?.Id)
             throw new TicketException("Эта афиша уже привязана к другому спектаклю.");
         var id = local?.Id ?? store.SavePerformance(picker.LocalTitle);
         var replacement = new HomeCard(page, id);

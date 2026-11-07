@@ -188,6 +188,8 @@ public sealed partial class Store
                 DELETE FROM event WHERE id IN(SELECT id FROM deleting_events);
                 DELETE FROM performance WHERE id=$i AND $i>0;
                 ""","$i",id)){delete.Transaction=tx;delete.ExecuteNonQuery();}
+            var removedPerformanceIds = new HashSet<long>();
+            if (id > 0) removedPerformanceIds.Add(id);
             // Keep a tombstone to prevent seed/import routines from silently restoring it.
             if(selectedEvents is null)HideCatalogEntry(c,tx,"performance",key);
             // Remove only hidden performance shells made orphaned by this purge.
@@ -196,8 +198,10 @@ public sealed partial class Store
                 var candidates=new List<(long Id,string Title)>();
                 using(var q=Command(c,"SELECT id,title FROM performance")){q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())candidates.Add((r.GetInt64(0),r.GetString(1)));}
                 var shells=candidates.Where(p=>IsCatalogHidden(c,tx,"performance",CatalogText.Key(p.Title))&&!EventsTitleExists(c,tx,p.Title)).Select(p=>p.Id).ToArray();
+                removedPerformanceIds.UnionWith(shells);
                 foreach(var shell in shells){using var q=Command(c,"DELETE FROM performance WHERE id=$i","$i",shell);q.Transaction=tx;q.ExecuteNonQuery();}
             }
+            ReleaseDeletedPosters(c, tx, removedPerformanceIds);
             tx.Commit();
         }
         catch

@@ -165,7 +165,8 @@ internal sealed class WordAutomationSession:IDisposable
             session.application=Activator.CreateInstance(type)??throw new InvalidOperationException("Не удалось открыть Word.");
             dynamic word=session.application;word.Visible=false;word.DisplayAlerts=0;word.AutomationSecurity=3;
             session.documents=word.Documents;blank=((dynamic)session.documents).Add(Visible:false);
-            window=((dynamic)blank).ActiveWindow;GetWindowThreadProcessId(new IntPtr((int)((dynamic)window).Hwnd),out var pid);
+            window=((dynamic)blank).ActiveWindow;
+            GetWindowThreadProcessId(FindWordWindow(window!),out var pid);
             if(pid==0||existing.Contains((int)pid))throw new InvalidOperationException("Не удалось создать отдельный процесс Word для просмотра.");
             session.owned=true;
             using var process=Process.GetProcessById((int)pid);
@@ -179,6 +180,30 @@ internal sealed class WordAutomationSession:IDisposable
             Release(window);Release(blank);
         }
     }
+    private static IntPtr FindWordWindow(object window)
+    {
+        try { return new IntPtr((int)((dynamic)window).Hwnd); }
+        catch (Exception ex) when (ex is Microsoft.CSharp.RuntimeBinder.RuntimeBinderException ||
+            ex is COMException { HResult: unchecked((int)0x80020003) or unchecked((int)0x80020006) })
+        {
+            // Word 2010 may omit Hwnd. Identify only our temporary document window.
+            string marker = "Tickets-" + Guid.NewGuid().ToString("N");
+            ((dynamic)window).Caption = marker;
+            IntPtr handle = IntPtr.Zero;
+            while ((handle = FindWindowEx(IntPtr.Zero, handle, "OpusApp", null)) != IntPtr.Zero)
+            {
+                var caption = new System.Text.StringBuilder(512);
+                GetWindowText(handle, caption, caption.Capacity);
+                if (caption.ToString().Contains(marker, StringComparison.Ordinal)) return handle;
+            }
+            return IntPtr.Zero;
+        }
+    }
+
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    private static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string windowClass, string? caption);
+    [DllImport("user32.dll", CharSet=CharSet.Unicode)]
+    private static extern int GetWindowText(IntPtr window, System.Text.StringBuilder text, int capacity);
     internal object OpenDocument(string path)=>((dynamic)documents!).Open(FileName:path,ConfirmConversions:false,ReadOnly:true,AddToRecentFiles:false,Visible:false,NoEncodingDialog:true);
     public void Dispose()
     {

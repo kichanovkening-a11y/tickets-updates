@@ -54,7 +54,12 @@ public static class ContractPagination
                 props.Elements(W+"pageBreakBefore").Remove();
                 p.Descendants(W+"br").Where(b=>(string?)b.Attribute(W+"type")=="page").Remove();
             }
-            foreach(var row in block.Descendants(W+"tr"))Set(Props(row,"trPr"),"cantSplit",true);
+            foreach(var row in block.Descendants(W+"tr"))
+            {
+                var properties=Props(row,"trPr");
+                properties.Elements(W+"cantSplit").Remove();
+                properties.Add(new XElement(W+"cantSplit"));
+            }
         }
         if(blocks[end].Name==W+"p")Set(Props(blocks[end],"pPr"),"keepNext",false);
         else

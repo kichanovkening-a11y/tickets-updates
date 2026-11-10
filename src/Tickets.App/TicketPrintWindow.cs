@@ -18,6 +18,7 @@ internal sealed class TicketPrintWindow:EditorWindow
     private readonly bool draft;
     private InvoiceInfo? issuedSnapshot;
     private Action? refreshPreview;
+    private readonly CheckBox hidePrice=new(){Content="Печатать без цены",Margin=new Thickness(0,0,0,8)};
     private readonly TextBlock status=new(){TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,0,0,10)};
     private readonly ComboBox blankChoice=new(){Width=200,MinHeight=44,DisplayMemberPath="Name",Margin=new Thickness(8,4,8,4),FontSize=18,FontWeight=FontWeights.Bold,VerticalContentAlignment=VerticalAlignment.Center,VerticalAlignment=VerticalAlignment.Center};
     private TicketBlank? SelectedBlank=>blankChoice.SelectedItem as TicketBlank;
@@ -47,6 +48,9 @@ internal sealed class TicketPrintWindow:EditorWindow
         blankChoice.SelectedItem=blankChoice.Items.OfType<TicketBlank>().FirstOrDefault(b=>b.Id==lastBlankId)??blankChoice.Items[0];
         blankChoice.SelectionChanged+=(_,_)=>Try(()=>{Store.RememberTicketBlank(SelectedBlank?.Id);refreshPreview?.Invoke();});
         options.Children.Add(status);
+        options.Children.Add(hidePrice);
+        hidePrice.Checked+=(_,_)=>refreshPreview?.Invoke();hidePrice.Unchecked+=(_,_)=>refreshPreview?.Invoke();
+        hidePrice.ToolTip="Скрыть цену на билете и корешке только для этой печати. Стоимость в учёте и накладных сохраняется. Цена на готовом изображении бланка не удаляется.";
         status.Text=draft?"Предпросмотр. Новые билеты будут выданы после подтверждения печати. Ранее выданные билеты останутся в исходных накладных.":"Печать билетов исходной накладной. Серии, номера, цены и привязка к накладной сохраняются.";
         refreshPreview=UnifiedPrintPreview.Attach(this,BuildPreview,Print,options,blankChoice,()=>Store.TicketPrintWarningSuppressed(SelectedBlank?.Id),()=>Store.SuppressTicketPrintWarning(SelectedBlank?.Id,true));
     }
@@ -116,7 +120,7 @@ internal sealed class TicketPrintWindow:EditorWindow
         foreach(var issue in invoice.Tickets.Where(t=>t.IssueId>0).GroupBy(t=>t.IssueId))
         {var original=Store.Invoice(eventId,issue.Key);foreach(var ticket in issue)headers[ticket.Id]=original;}
         if(SelectedBlank is {} blank)return BuildBlankDocument(invoice,blank,pageWidth,pageHeight,headers,printer,allowOverflow);
-        var document=BuildDocumentCore(invoice,pageWidth,pageHeight,headers);
+        var document=BuildDocumentCore(invoice,pageWidth,pageHeight,headers,hidePrice.IsChecked==true);
         var area=printer?.PrintQueue?.GetPrintCapabilities(printer.PrintTicket).PageImageableArea;
         if(area is not null)ValidatePrintableArea(document,new Rect(area.OriginWidth,area.OriginHeight,area.ExtentWidth,area.ExtentHeight),allowOverflow);
         return document;
@@ -169,7 +173,7 @@ internal sealed class TicketPrintWindow:EditorWindow
             for(var i=0;i<blank.Positions.Count&&offset+i<invoice.Tickets.Count;i++)
             {
                 var ticket=invoice.Tickets[offset+i];var source=headers.TryGetValue(ticket.Id,out var original)?original:invoice;var position=blank.Positions[i];
-                foreach(var field in TicketBlankEditing.FieldsFor(blank,position).Where(f=>f.Enabled))
+                foreach(var field in TicketBlankEditing.FieldsFor(blank,position).Where(f=>f.Enabled&&!(hidePrice.IsChecked==true&&f.Key=="price")))
                 {
                     var text=field.Key switch {"event"=>source.Title,"venue"=>source.Venue,"date"=>source.EventDate,"sector"=>ticket.Sector,"row"=>ticket.Row,"seat"=>ticket.Seat,"price"=>InvoiceDocuments.Money(ticket.Amount),"number"=>ticket.Code,_=>""};
                     var fit=BlankFieldVisual(field,text,DipsPerMm);
@@ -239,7 +243,8 @@ internal sealed class TicketPrintWindow:EditorWindow
             foreach(var placement in layoutPage.Elements)
             {
                 var field=placement.Element;var ticket=invoice.Tickets[placement.TicketIndex];var source=headers.TryGetValue(ticket.Id,out var original)?original:invoice;
-                var text=field.Binding.Length==0?field.Text:LegacyTicketTemplates.Value(field.Binding,source,ticket,address,printed,placement.PageNumber);
+                if(hidePrice.IsChecked==true&&field.Binding.Length==0&&IsPriceCaption(field.Text))continue;
+                var text=field.Binding.Length==0?field.Text:LegacyTicketTemplates.Value(field.Binding,source,ticket,address,printed,placement.PageNumber,hidePrice.IsChecked==true);
                 if(text.Length==0)continue;
                 var box=new Rect(Mm(placement.X),Mm(placement.Y),Mm(field.Width),Mm(field.Height));
                 var visual=LegacyElementVisual(field,text,DipsPerMm);
@@ -254,7 +259,8 @@ internal sealed class TicketPrintWindow:EditorWindow
     }
     internal static FixedDocument BuildDocument(InvoiceInfo invoice,double pageWidth=794,double pageHeight=1123)
         =>BuildDocumentCore(invoice with{Tickets=TicketPrintOrder.Order(invoice.Tickets)},pageWidth,pageHeight,null);
-    private static FixedDocument BuildDocumentCore(InvoiceInfo invoice,double pageWidth,double pageHeight,IReadOnlyDictionary<long,InvoiceInfo>? headers)
+    private static bool IsPriceCaption(string text)=>System.Text.RegularExpressions.Regex.IsMatch(text.Trim(),@"^(?:цена\s*[:：]?\s*(?:руб\.?|р\.?|₽)?|руб\.?|р\.|₽)$",System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+    private static FixedDocument BuildDocumentCore(InvoiceInfo invoice,double pageWidth,double pageHeight,IReadOnlyDictionary<long,InvoiceInfo>? headers,bool hidePrice=false)
     {
         if(!double.IsFinite(pageWidth)||!double.IsFinite(pageHeight)||pageWidth<160||pageHeight<180)
             throw new TicketException("Печатная область принтера слишком мала для билета.");
@@ -281,7 +287,7 @@ internal sealed class TicketPrintWindow:EditorWindow
                 }
                 Line(0,source.Title,20,true);Line(1,source.Venue,15);Line(2,source.EventDate,16,true);
                 Line(3,$"Сектор: {ticket.Sector} · ряд {ticket.Row} · место {ticket.Seat}",16,true);
-                Line(4,"Цена: "+InvoiceDocuments.Money(ticket.Amount),16);Line(5,"БИЛЕТ · "+ticket.Code,18,true);
+                if(!hidePrice)Line(4,"Цена: "+InvoiceDocuments.Money(ticket.Amount),16);Line(5,"БИЛЕТ · "+ticket.Code,18,true);
                 var card=new Border{Width=width,Height=height,BorderBrush=Brushes.Black,BorderThickness=new Thickness(1),Background=Brushes.White,Child=form};
                 FixedPage.SetLeft(card,margin+index%columns*(width+gap));FixedPage.SetTop(card,margin+index/columns*(height+gap));page.Children.Add(card);
             }

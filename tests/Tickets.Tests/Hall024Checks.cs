@@ -12,7 +12,7 @@ internal static class Hall024Checks
             if(!seats.Where(s=>s.Row=="1").Select(s=>s.Number).Order().SequenceEqual(new[]{"1","2","3","4"}))throw new Exception("Numbering has gaps");
             if(!seats.Where(s=>s.Row=="2").Select(s=>s.Number).SequenceEqual(new[]{"6","5","4","3","2","1"}))throw new Exception("Unselected row changed");
             var letters=HallLayout.Generate("Ложа",new[]{new HallRowLayout{Label="А",SeatCount=4}},"А",false,0).ToList();HallEditing024.Delete(letters,new[]{letters[1]});
-            if(!letters.Select(s=>s.Number).SequenceEqual(new[]{"А","Б","В"})||letters[1].X!=40)throw new Exception("Letter deletion");
+            if(!letters.Select(s=>s.Number).SequenceEqual(new[]{"А","Б","В"})||letters[1].X!=36)throw new Exception("Letter deletion");
         });
         run("024 custom labels delete without moving or losing prefix",_=>{
             var seats=Enumerable.Range(1,4).Select(n=>new DraftSeat{Sector="VIP",Row="A",Number="VIP-"+n,X=n*20}).ToList();

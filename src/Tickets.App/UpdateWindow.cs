@@ -24,6 +24,7 @@ internal sealed class UpdateWindow : EditorWindow
         var source=Path.Combine(AppContext.BaseDirectory,"Data","update-source.txt");
         var repository=Field(form,"Репозиторий обновлений",File.Exists(source)?File.ReadAllText(source).Trim():"kichanovkening-a11y/tickets-updates");
         var status=new TextBlock{Text="Нажмите «Проверить обновления».",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,18,0,10)};form.Children.Add(status);
+        var activity=new ProgressBar{Height=18,Margin=new Thickness(0,0,0,12),Visibility=Visibility.Collapsed,IsIndeterminate=true};form.Children.Add(activity);
         var check=new Button{Content="Проверить обновления"};form.Children.Add(check);
         var install=new Button{Content="Скачать и установить",IsEnabled=false,Margin=new Thickness(0,12,0,0)};form.Children.Add(install);
         form.Children.Add(new TextBlock{Text="Обновлятор проверяет полный комплект файлов и копию базы. Перед установкой сохраняется резерв программы и данных; затем программа перезапускается.",TextWrapping=TextWrapping.Wrap,Margin=new Thickness(0,20,0,0)});
@@ -31,14 +32,14 @@ internal sealed class UpdateWindow : EditorWindow
             if(busy)return;busy=true;check.IsEnabled=false;install.IsEnabled=false;repository.IsEnabled=false;
             try
             {
-                var repo=GitHubUpdates.Repository(repository.Text);status.Text="Проверка…";
+                var repo=GitHubUpdates.Repository(repository.Text);status.Text="Проверка…";activity.Visibility=Visibility.Visible;
                 manifest=await client.CheckAsync(repo,cancel.Token);File.WriteAllText(source,repo);
                 var newer=UpdateFiles.VersionNumber(manifest.Version)>UpdateFiles.VersionNumber(installed);
                 status.Text=newer?"Доступна версия "+manifest.Version:"Установлена актуальная версия.";install.IsEnabled=newer;
             }
             catch(OperationCanceledException){}
             catch(Exception ex){status.Text="Обновление пока недоступно. "+ex.Message;}
-            finally{busy=false;check.IsEnabled=true;repository.IsEnabled=true;}
+            finally{busy=false;check.IsEnabled=true;repository.IsEnabled=true;activity.Visibility=Visibility.Collapsed;}
         };
         repository.TextChanged+=(_,_)=>{manifest=null;install.IsEnabled=false;};
         install.Click+=(_,_)=>{

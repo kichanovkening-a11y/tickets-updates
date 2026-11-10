@@ -99,7 +99,8 @@ public sealed partial class Store
         ValidateSectorCaptions029(seats);
         HallAnchors027.Capture(seats.ToArray());
         using var c=Open(); using var tx=c.BeginTransaction(deferred:false);
-        var id=InsertHall033(c,tx,name,address,seats);tx.Commit();return id;
+        var id=InsertHall033(c,tx,name,address,seats);
+        tx.Commit();return id;
     }
     private static long InsertHall033(SqliteConnection c,SqliteTransaction tx,string name,string address,IReadOnlyCollection<DraftSeat> seats)
     {
@@ -118,6 +119,7 @@ public sealed partial class Store
                 if(s.Hidden){using var hidden=Command(c,"INSERT INTO hall_hidden_seat(seat_id) VALUES($s)","$s",seatId);hidden.Transaction=tx;hidden.ExecuteNonQuery();}
             }
         }
+        using var compact=Command(c,"INSERT OR IGNORE INTO hall_compaction_052 VALUES($v)","$v",id);compact.Transaction=tx;compact.ExecuteNonQuery();
         return id;
     }
     public List<PlanInfo> Plans(long venueId)

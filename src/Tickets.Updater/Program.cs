@@ -12,7 +12,7 @@ internal static class Program
     {
         var application=new Application();var window=new Window{Title="Обновление Билетов",Width=620,Height=390,WindowStartupLocation=WindowStartupLocation.CenterScreen};
         var panel=new StackPanel{Margin=new Thickness(20)};var text=new TextBlock{Text="Обновление программы с сохранением данных",FontSize=18,TextWrapping=TextWrapping.Wrap};
-        var button=new Button{Content="Выбрать папку и обновить",Padding=new Thickness(10),Margin=new Thickness(0,18,0,0)};panel.Children.Add(text);panel.Children.Add(button);window.Content=panel;bool busy=false,finished=false;
+        var button=new Button{Content="Выбрать папку и обновить",Padding=new Thickness(10),Margin=new Thickness(0,18,0,0)};panel.Children.Add(text);panel.Children.Add(button);window.Content=panel;bool busy=false,finished=false,reporting=false;
         var bar=new ProgressBar{Height=22,Margin=new Thickness(0,16,0,0),Minimum=0,Maximum=100,IsIndeterminate=true};
         var detail=new TextBlock{Margin=new Thickness(0,8,0,0),TextWrapping=TextWrapping.Wrap};
         var elapsed=new TextBlock{Margin=new Thickness(0,6,0,0)};
@@ -27,14 +27,14 @@ internal static class Program
             elapsed.Text=summary;
         }
         void Stage(string label)=>Show(new(label));
-        var progress=new DispatcherProgress(window,Show);
+        var progress=new DispatcherProgress(window,Show,()=>busy&&reporting);
         var timer=new System.Windows.Threading.DispatcherTimer{Interval=TimeSpan.FromSeconds(1)};
         timer.Tick+=(_,_)=>{if(busy)elapsed.Text=summary+$" · прошло {(DateTime.UtcNow-stageStarted).TotalSeconds:0} с";};
         timer.Start();window.Closed+=(_,_)=>timer.Stop();
         window.Closing+=(_,e)=>{if(busy)e.Cancel=true;};
         async Task Run()
         {
-            if(busy)return;busy=true;button.IsEnabled=false;Stage("Подготовка обновления");
+            if(busy)return;busy=true;reporting=true;button.IsEnabled=false;Stage("Подготовка обновления");
             string? work=null;UpdateTransaction? transaction=null;bool succeeded=false;
             try
             {
@@ -103,7 +103,7 @@ internal static class Program
             }
             catch(Exception ex)
             {
-                var details=ex.ToString();var result="Установка не выполнена.";
+                reporting=false;var details=ex.ToString();var result="Установка не выполнена.";
                 if(transaction?.IsHealthy==true)result="Новая версия работает. Не удалось завершить служебную запись обновления; данные сохранены.";
                 else if(transaction is not null)
                 {
@@ -113,7 +113,7 @@ internal static class Program
                 var log=Path.Combine(work??Path.GetTempPath(),"update-error.log");try{File.WriteAllText(log,details);}catch{}
                 bar.IsIndeterminate=false;elapsed.Text="Ошибка обновления";text.Text=result+"\n"+ex.Message+"\nЖурнал: "+log;
             }
-            finally{transaction?.Dispose();busy=false;button.IsEnabled=true;button.Content="Повторить обновление";bar.IsIndeterminate=false;if(succeeded){finished=true;button.Content="Закрыть";await Task.Delay(2000);if(window.IsVisible)window.Close();}}
+            finally{reporting=false;transaction?.Dispose();busy=false;button.IsEnabled=true;button.Content="Повторить обновление";bar.IsIndeterminate=false;if(succeeded){finished=true;button.Content="Закрыть";await Task.Delay(2000);if(window.IsVisible)window.Close();}}
         }
         button.Click+=async(_,_)=>{if(finished)window.Close();else await Run();};window.Loaded+=async(_,_)=>{if(args.Contains("--target"))await Run();};application.Run(window);
     }

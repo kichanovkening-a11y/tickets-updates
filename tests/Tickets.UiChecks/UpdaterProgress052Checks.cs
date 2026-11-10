@@ -13,6 +13,13 @@ internal static class UpdaterProgress052Checks
         Task.Run(()=>progress.Report(new("phase",3,10))).GetAwaiter().GetResult();
         Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
         if(!called)throw new Exception("background progress was not delivered");
+        var active=true;called=false;
+        var guarded=type.GetConstructor([typeof(Window),typeof(Action<UpdateProgress>),typeof(Func<bool>)]);
+        if(guarded is null)throw new Exception("queued progress must not overwrite completion or errors");
+        var cancellable=(IProgress<UpdateProgress>)guarded.Invoke([window,callback,(Func<bool>)(()=>active)]);
+        Task.Run(()=>cancellable.Report(new("late",3,10))).GetAwaiter().GetResult();active=false;
+        Dispatcher.CurrentDispatcher.Invoke(()=>{},DispatcherPriority.ApplicationIdle);
+        if(called)throw new Exception("stale progress overwrote completion");
         window.Close();Console.WriteLine("PASS 052 updater progress safely reaches WPF dispatcher");
     }
 }

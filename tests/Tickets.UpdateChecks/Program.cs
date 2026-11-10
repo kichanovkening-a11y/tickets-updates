@@ -120,4 +120,29 @@ Test("052 preparation and installation offer progress callbacks",root=>{
  Check(typeof(UpdateTransaction).GetMethods().Any(m=>m.Name=="Install"&&m.GetParameters().Length==1),"file progress missing");
 });
 
+
+Test("052 unknown length stays indeterminate and corrupt lengths or excessive streams are refused",root=>{
+ var reports=new List<long?>();using var input=new MemoryStream(new byte[200000]);using var output=new MemoryStream();
+ GitHubUpdates.CopyWithProgressAsync(input,output,300000,null,(done,total)=>reports.Add(total)).GetAwaiter().GetResult();
+ Check(output.Length==200000&&reports.All(total=>total is null),"unknown size invented a total");
+ foreach(var spec in new[]{(Limit:100L,Length:(long?)null),(Limit:300000L,Length:(long?)10)}){
+  using var stream=new MemoryStream(new byte[101]);using var destination=new MemoryStream();bool refused=false;
+  try{GitHubUpdates.CopyWithProgressAsync(stream,destination,spec.Limit,spec.Length,null).GetAwaiter().GetResult();}catch(Exception ex) when(ex is IOException or InvalidDataException){refused=true;}
+  Check(refused,"invalid download accepted");
+ }
+});
+Test("052 real backup and installation progress ends at the actual file count and rollback remains exact",root=>{
+ var app=Path.Combine(root,"app");var stage=Path.Combine(root,"stage");Directory.CreateDirectory(Path.Combine(app,"Data"));Directory.CreateDirectory(stage);
+ foreach(var name in new[]{"Tickets.dll","Tickets.Core.dll"}){File.WriteAllText(Path.Combine(stage,name),"new");File.WriteAllText(Path.Combine(app,name),"old");}
+ File.WriteAllText(Path.Combine(app,"Data","settings.txt"),"user");
+ var plan=new InstallPlan(app,stage,new(){new("Tickets.dll",UpdateFiles.Hash(Path.Combine(stage,"Tickets.dll"))),new("Tickets.Core.dll",UpdateFiles.Hash(Path.Combine(stage,"Tickets.Core.dll")))});
+ var observed=new List<UpdateProgress>();var progress=new SynchronousProgress<UpdateProgress>(observed.Add);
+ using var transaction=UpdateTransaction.Prepare(plan,progress);transaction.Install(progress);
+ var installed=observed.Where(p=>p.Stage=="Установка файлов").ToArray();
+ Check(installed.Select(p=>p.Completed).SequenceEqual(new long[]{0,1,2})&&installed.All(p=>p.Total==2)&&installed[^1].Percent==100,"install progress skipped or invented files");
+ var backup=observed.Last(p=>p.Stage=="Резервное копирование");Check(backup.Completed==3&&backup.Total==3,"backup total ignores data");
+ transaction.Rollback();Check(File.ReadAllText(Path.Combine(app,"Tickets.dll"))=="old"&&File.ReadAllText(Path.Combine(app,"Data","settings.txt"))=="user","progress broke rollback");
+});
+
 return failures==0?0:1;
+public sealed class SynchronousProgress<T>(Action<T> callback):IProgress<T>{public void Report(T value)=>callback(value);}

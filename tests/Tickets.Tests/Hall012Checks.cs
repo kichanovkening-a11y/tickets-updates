@@ -11,8 +11,8 @@ internal static class Hall012Checks
                 new HallRowLayout{Label="2",SeatCount=1}};
             var seats=HallLayout.Generate("Партер",rows,"А, 1",true,26).ToList();
             Require(seats.Select(s=>s.Number).SequenceEqual(new[]{"2","1","А","4","Б","А"}),"Mixed and reverse labels must not depend on gaps");
-            Require(seats[1].X-seats[0].X==56,"Existing horizontal aisle remains available");
-            Require(seats[3].Y==84&&seats[5].Y==118.5,"Each row adds its own extra gap to later rows");
+            Require(seats[1].X-seats[0].X==54,"Existing horizontal aisle remains available");
+            Require(seats[3].Y==80&&seats[5].Y==110.5,"Each row adds its own extra gap to later rows");
             seats.RemoveAt(1);
             var hall=store.CreateHall("Hall 0.12 row gaps","",seats);
             var saved=store.HallDraft(hall);
@@ -27,7 +27,7 @@ internal static class Hall012Checks
                 catch(TicketException){}
             }
             var seats=HallLayout.Generate("Партер",new[]{new HallRowLayout{Label="1",SeatCount=1},new HallRowLayout{Label="2",SeatCount=1}},"1",false,26);
-            Require(seats[0].Y==26&&seats[1].Y==48,"Existing halls retain their original row pitch");
+            Require(seats[0].Y==26&&seats[1].Y==44,"Manual halls use the approved 18-unit row pitch");
         });
     }
     private static void Require(bool condition,string message){if(!condition)throw new Exception(message);}

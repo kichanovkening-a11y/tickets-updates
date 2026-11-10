@@ -20,8 +20,8 @@ internal static class Hall027UiChecks
                 editor.Show();Pump();var nodes=Logical(editor).ToArray();
                 Check(!nodes.OfType<Expander>().Any(e=>Equals(e.Header,"Настройки рядов")||Equals(e.Header,"Нумерация и общие настройки")),"obsolete manual hall settings removed");
                 Check(!nodes.OfType<TextBox>().Any(t=>t.Text.Contains("А, 1")),"obsolete manual instructions removed");
-                Check(nodes.OfType<Button>().Any(b=>Equals(b.Content,"Загрузить скан — проба"))==!edit,"scan exists only during creation");
-                Check(nodes.OfType<Button>().Any(b=>Equals(b.Content,"Сетка как в старой программе"))==!edit,"legacy grid exists only during creation");
+                Check(!nodes.OfType<Button>().Any(b=>Equals(b.Content,"Загрузить скан — проба")),"scan creation is removed");
+                Check(!nodes.OfType<Button>().Any(b=>Equals(b.Content,"Сетка как в старой программе")),"legacy grid creation is removed");
                 Check(!nodes.OfType<CheckBox>().Any(c=>Equals(c.Content,"Нумерация справа налево")),"numbering direction absent from saved scheme editor");
                 var hall=(HallView)type.GetField("preview",Private)!.GetValue(editor)!;
                 var notify=(Action<long,Point>)typeof(HallView).GetField("RowContextRequested",Private)!.GetValue(hall)!;

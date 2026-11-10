@@ -69,7 +69,7 @@ internal static class Hall027Checks
             HallEditing023.MakeAisle(draft,new[]{draft[3]});var before=Anchors(draft).Where(a=>a.Centre).ToArray();Check(before.Length==1,"explicit aisle did not refresh frozen metadata");
             HallEditing027.RenameSector(draft,"Партер","Новый сектор");HallEditing027.MoveRow(draft,"Новый сектор","1",25);
             Check(Anchors(draft).Where(a=>a.Centre).SequenceEqual(before.Select(a=>a with{X=a.X+25})),"rename or row move lost aisle position");
-            var cx=draft.Average(s=>s.X);var cy=draft.Average(s=>s.Y);var shifted=Anchors(draft).Where(a=>a.Centre).ToArray();HallEditing023.Rotate(draft,90);
+            var cx=draft.Average(s=>s.X)+SeatSelection.SeatSize/2;var cy=draft.Average(s=>s.Y)+SeatSelection.SeatSize/2;var shifted=Anchors(draft).Where(a=>a.Centre).ToArray();HallEditing023.Rotate(draft,90);
             Check(Anchors(draft).Where(a=>a.Centre).Zip(shifted,(a,b)=>Math.Abs(a.X-(cx-(b.Y-cy)))<.001&&Math.Abs(a.Y-(cy+(b.X-cx)))<.001).All(x=>x),"sector rotation lost aisle position");
         });
     }

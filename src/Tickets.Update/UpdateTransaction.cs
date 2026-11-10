@@ -70,7 +70,8 @@ public sealed class UpdateTransaction : IDisposable
         File.Move(tmp,path,true);
     }
     private void Phase(string phase){journal=journal with{Phase=phase};WriteJson(Path.Combine(folder,"journal.json"),journal);}
-    public static UpdateTransaction Prepare(InstallPlan plan)
+    public static UpdateTransaction Prepare(InstallPlan plan)=>Prepare(plan,null);
+    public static UpdateTransaction Prepare(InstallPlan plan,IProgress<UpdateProgress>? progress)
     {
         var target=Path.GetFullPath(plan.Target);NoLinks(target);NoLinks(plan.Stage);
         if(!Directory.Exists(target))throw new IOException("Папка программы не найдена.");
@@ -81,12 +82,12 @@ public sealed class UpdateTransaction : IDisposable
             if(HasPending(target))throw new IOException("Есть незавершённое обновление. Сначала восстановите предыдущую версию.");
             var data=Path.Combine(target,"Data");NoLinks(data);Directory.CreateDirectory(data);guard=Lock(Path.Combine(data,"session.lock"));
             if(plan.Files.Count==0||plan.Files.Select(x=>x.Path).Distinct(StringComparer.OrdinalIgnoreCase).Count()!=plan.Files.Count)throw new InvalidDataException("Неверный список файлов.");
-            long needed=0;
+            long needed=0;var verified=0;progress?.Report(new("Проверка файлов",0,plan.Files.Count));
             foreach(var f in plan.Files)
             {
                 var source=UpdateFiles.SafePath(plan.Stage,f.Path);var dest=UpdateFiles.SafePath(target,f.Path);
                 if(!UpdateFiles.Hash(source).Equals(f.Sha256,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Повреждён файл: "+f.Path);
-                needed+=new FileInfo(source).Length*2;
+                needed+=new FileInfo(source).Length*2;progress?.Report(new("Проверка файлов",++verified,plan.Files.Count,f.Path));
                 if(Directory.Exists(dest))throw new IOException("Вместо файла обнаружена папка: "+f.Path);
                 if(File.Exists(dest)){using var probe=new FileStream(dest,FileMode.Open,FileAccess.ReadWrite,FileShare.None);needed+=probe.Length;if((File.GetAttributes(dest)&FileAttributes.ReadOnly)!=0)throw new IOException("Файл только для чтения: "+f.Path);}
                 var parent=Path.GetDirectoryName(dest)!;Directory.CreateDirectory(parent);
@@ -95,14 +96,14 @@ public sealed class UpdateTransaction : IDisposable
             var dataFiles=DataFiles(data).ToList();needed+=dataFiles.Sum(x=>new FileInfo(x).Length)*3;
             var drive=new DriveInfo(Path.GetPathRoot(target)!);if(drive.AvailableFreeSpace<needed+16*1024*1024)throw new IOException("Недостаточно места для обновления и резервной копии.");
             var id="transaction-"+Guid.NewGuid().ToString("N");var folder=Path.Combine(updates,id);Directory.CreateDirectory(folder);
-            var originals=new List<Original>();var snapshot=new List<Original>();
+            var originals=new List<Original>();var snapshot=new List<Original>();long backedUp=0;var backupTotal=plan.Files.Count+dataFiles.Count;progress?.Report(new("Резервное копирование",0,backupTotal));
             foreach(var f in plan.Files)
             {
                 var dest=UpdateFiles.SafePath(target,f.Path);var exists=File.Exists(dest);var hash=exists?UpdateFiles.Hash(dest):"";
                 if(exists)DurableCopy(dest,UpdateFiles.SafePath(Path.Combine(folder,"files"),f.Path));
-                originals.Add(new(f.Path,exists,hash));
+                originals.Add(new(f.Path,exists,hash));progress?.Report(new("Резервное копирование",++backedUp,backupTotal,f.Path));
             }
-            foreach(var file in dataFiles){var relative=Path.GetRelativePath(data,file);var hash=UpdateFiles.Hash(file);DurableCopy(file,DataPath(Path.Combine(folder,"data"),relative));snapshot.Add(new(relative,true,hash));}
+            foreach(var file in dataFiles){var relative=Path.GetRelativePath(data,file);var hash=UpdateFiles.Hash(file);DurableCopy(file,DataPath(Path.Combine(folder,"data"),relative));snapshot.Add(new(relative,true,hash));progress?.Report(new("Резервное копирование",++backedUp,backupTotal,relative));}
             var journal=new Journal(1,target,"prepared",originals,snapshot);
             WriteJson(Path.Combine(folder,"inventory.json"),journal);
             PublishHealth(Path.Combine(folder,"inventory.sha256"),UpdateFiles.Hash(Path.Combine(folder,"inventory.json")));
@@ -112,16 +113,17 @@ public sealed class UpdateTransaction : IDisposable
         }
         catch{guard?.Dispose();updateLock.Dispose();throw;}
     }
-    public void Install()
+    public void Install()=>Install(null);
+    public void Install(IProgress<UpdateProgress>? progress)
     {
         if(plan is null||journal.Phase!="prepared")throw new InvalidOperationException("Неверное состояние установки.");
-        Phase("installing");
+        Phase("installing");var installed=0;progress?.Report(new("Установка файлов",0,plan.Files.Count));
         foreach(var f in plan.Files)
         {
             var dest=UpdateFiles.SafePath(target,f.Path);var temporary=dest+".installing";NoLinks(temporary);
             DurableCopy(UpdateFiles.SafePath(plan.Stage,f.Path),temporary);
             if(!UpdateFiles.Hash(temporary).Equals(f.Sha256,StringComparison.OrdinalIgnoreCase))throw new IOException("Не удалось проверить записанный файл: "+f.Path);
-            File.Move(temporary,dest,true);
+            File.Move(temporary,dest,true);progress?.Report(new("Установка файлов",++installed,plan.Files.Count,f.Path));
         }
         Phase("installed");
     }

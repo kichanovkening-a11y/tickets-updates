@@ -5,7 +5,7 @@ namespace Tickets.Core;
 public sealed partial class Store
 {
     public string Path { get; }
-    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureHallRowAnchors027(); EnsureHallSectorCaptions029(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); EnsureTicketland028(); EnsureTicketPro037(); }
+    public Store(string path) { Path=System.IO.Path.GetFullPath(path); EnsureCatalog(); EnsureCatalogDeletion(); EnsureHallHiddenSeats024(); EnsureHallRowAnchors027(); EnsureHallSectorCaptions029(); EnsureIssues(); EnsureScheduling(); EnsureDocuments(); EnsurePricing(); EnsurePackageDocuments(); EnsureSaleStates(); EnsureTicketLifecycle(); EnsurePlanAvailability(); EnsureOrganizationDirectory(); EnsureSberDocumentForms(); using var formConnection=Open(); EnsureRecipientForms(formConnection); EnsureVenueLayouts019(); EnsureCompactVenueLayouts020(); EnsureRetiredHallSectors021(); EnsureContiguousEstrada022(); EnsureTicketland028(); EnsureTicketPro037(); EnsureHallCompaction052(); }
 
     private SqliteConnection Open()
     {

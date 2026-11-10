@@ -13,7 +13,7 @@ public static class HallEditing023
         if(!double.IsFinite(degrees))throw new TicketException("Некорректный угол.");
         if(seats.Count==0)return;
         var cx=seats.Average(s=>s.X);var cy=seats.Average(s=>s.Y);var a=degrees*Math.PI/180;
-        foreach(var s in seats){var x=s.X-cx;var y=s.Y-cy;s.X=cx+x*Math.Cos(a)-y*Math.Sin(a);s.Y=cy+x*Math.Sin(a)+y*Math.Cos(a);s.RowAisleAnchors=HallAnchors027.Rotate(s.RowAisleAnchors,cx,cy,a);}
+        foreach(var s in seats){var x=s.X-cx;var y=s.Y-cy;s.X=cx+x*Math.Cos(a)-y*Math.Sin(a);s.Y=cy+x*Math.Sin(a)+y*Math.Cos(a);s.RowAisleAnchors=HallAnchors027.Rotate(s.RowAisleAnchors,cx+SeatSelection.SeatSize/2,cy+SeatSelection.SeatSize/2,a);}
     }
     // Insert one chair-width gap before each selected run, following the stored row order,
     // including rotated rows. No place is removed or renumbered by this operation.
@@ -33,7 +33,7 @@ public static class HallEditing023
             var ordered=points.OrderBy(s=>s.X*dx+s.Y*dy).ToArray();
             HallAnchors027.Capture(points);
             var anchors=points[0].RowAisleAnchors!;
-            var original=ordered.Select(s=>(s.X+8)*dx+(s.Y+8)*dy).ToArray();
+            var original=ordered.Select(s=>(s.X+SeatSelection.SeatSize/2)*dx+(s.Y+SeatSelection.SeatSize/2)*dy).ToArray();
             var shifts=new double[ordered.Length];var starts=new List<int>();var gaps=0;var previous=false;
             for(var i=0;i<ordered.Length;i++)
             {
@@ -59,7 +59,7 @@ public static class HallEditing023
                 // Widening an existing aisle keeps its saved caption; only a new
                 // selected-run boundary introduces an additional aisle number.
                 if(anchors.Any(a=>{var p=a.X*dx+a.Y*dy;return p>=original[i-1]&&p<=original[i];}))continue;
-                updated.Add(new((ordered[i-1].X+ordered[i].X)/2+8,(ordered[i-1].Y+ordered[i].Y)/2+8,true));
+                updated.Add(new((ordered[i-1].X+ordered[i].X)/2+SeatSelection.SeatSize/2,(ordered[i-1].Y+ordered[i].Y)/2+SeatSelection.SeatSize/2,true));
             }
             foreach(var seat in points)seat.RowAisleAnchors=updated.ToArray();
         }

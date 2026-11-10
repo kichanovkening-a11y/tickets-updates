@@ -117,20 +117,22 @@ public static class LegacyTicketTemplates
     // Matches recovered Tickets.PrintForm.PrintForm_Load's XML values, including
     // the three tear-off strings. Always use the original issuance's ticket data.
     public static string Value(string binding,InvoiceInfo source,TicketInfo ticket,string venueAddress,DateTime printDate,int pageNumber)
+        =>Value(binding,source,ticket,venueAddress,printDate,pageNumber,false);
+    public static string Value(string binding,InvoiceInfo source,TicketInfo ticket,string venueAddress,DateTime printDate,int pageNumber,bool hidePrice)
     {
         var ru=CultureInfo.GetCultureInfo("ru-RU");
         if(!DateTime.TryParse(source.EventDate,ru,DateTimeStyles.None,out var date)&&!DateTime.TryParse(source.EventDate,CultureInfo.InvariantCulture,DateTimeStyles.None,out date))throw new TicketException("Не удалось прочитать дату показа для исходного бланка.");
         var number=ticket.Series+" № "+ticket.Number.ToString("D6",CultureInfo.InvariantCulture);
-        var price="Цена: "+ticket.Amount.ToString(CultureInfo.InvariantCulture)+"р.";
+        var price=hidePrice?"":"Цена: "+ticket.Amount.ToString(CultureInfo.InvariantCulture)+"р.";
         return binding switch
         {
             "ticket_series"=>ticket.Series,"ticket_serial"=>ticket.Number.ToString("D6",CultureInfo.InvariantCulture),
             "event_date"=>date.ToString("dd.MM.yyyy",ru),"event_time"=>date.ToString("HH:mm",ru),
-            "ticket_row"=>ticket.Row,"ticket_seat"=>ticket.Seat,"ticket_amount"=>ticket.Amount.ToString(CultureInfo.InvariantCulture),
+            "ticket_row"=>ticket.Row,"ticket_seat"=>ticket.Seat,"ticket_amount"=>hidePrice?"":ticket.Amount.ToString(CultureInfo.InvariantCulture),
             "theatre_name"=>source.Venue,"theatre_adress"=>venueAddress,"ticket_number"=>number,
             "perf_name"=>source.Title.Trim().ToUpper(ru),"perf_date"=>date.ToString("D",ru)+" "+date.Hour+" ч. "+date.ToString("mm",ru)+" мин.","perf_small_date"=>date.ToString("dd.MM.yyyy HH:mm",ru),
             "ticket_zone"=>ticket.Sector,"ticket_place"=>"Ряд: "+ticket.Row+"   Место: "+ticket.Seat,"ticket_price"=>price,
-            "small_info1"=>number+" "+price+" "+date.ToString("dd.MM.yyyy HH:mm",ru),"small_info2"=>ticket.Sector+" Ряд: "+ticket.Row+" Место: "+ticket.Seat,"small_info3"=>source.Title.Trim(),
+            "small_info1"=>number+" "+(hidePrice?"":price+" ")+date.ToString("dd.MM.yyyy HH:mm",ru),"small_info2"=>ticket.Sector+" Ряд: "+ticket.Row+" Место: "+ticket.Seat,"small_info3"=>source.Title.Trim(),
             "PrintDate"=>printDate.ToString("dd.MM.yyyy",ru),"PageNumber"=>pageNumber.ToString(ru),_=>throw new TicketException("Неизвестное поле исходного бланка: "+binding)
         };
     }

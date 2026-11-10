@@ -106,4 +106,18 @@ Test("Windows-normalized traversal in recovery inventory is rejected",root=>{
   Check(refused,"unsafe recovery path accepted: "+path);Check(File.ReadAllText(Path.Combine(app,"Data","tickets.db"))=="valuable","data changed before path validation");
  }
 });
+
+Test("052 download reports real byte progress",root=>{
+ var copy=typeof(GitHubUpdates).GetMethod("CopyWithProgressAsync");
+ Check(copy is not null,"byte progress missing");
+ using var input=new MemoryStream(new byte[200000]);using var output=new MemoryStream();var values=new List<long>();
+ Action<long,long?> report=(done,total)=>{Check(done>=0&&done<=200000&&total==200000,"invalid progress");values.Add(done);};
+ ((Task)copy!.Invoke(null,[input,output,300000L,200000L,report,CancellationToken.None])!).GetAwaiter().GetResult();
+ Check(output.Length==200000&&values.Count>=3&&values[^1]==200000&&values.SequenceEqual(values.Order()),"intermediate progress missing");
+});
+Test("052 preparation and installation offer progress callbacks",root=>{
+ Check(typeof(UpdateTransaction).GetMethods().Any(m=>m.Name=="Prepare"&&m.GetParameters().Length==2),"backup progress missing");
+ Check(typeof(UpdateTransaction).GetMethods().Any(m=>m.Name=="Install"&&m.GetParameters().Length==1),"file progress missing");
+});
+
 return failures==0?0:1;

@@ -38,7 +38,7 @@ internal static class HallStatus030UiChecks
                 var drawing=(DrawingGroup)typeof(HallView).GetField("drawing",Private)!.GetValue(hall)!;
                 foreach(var seat in original)
                 {
-                    var fill=drawing.Children.OfType<GeometryDrawing>().Single(d=>d.Geometry is RectangleGeometry&&d.Geometry.Bounds==new Rect(seat.X,seat.Y,16,16));
+                    var fill=drawing.Children.OfType<GeometryDrawing>().Single(d=>d.Geometry is RectangleGeometry&&d.Geometry.Bounds==new Rect(seat.X,seat.Y,SeatSelection.SeatSize,SeatSelection.SeatSize));
                     Check(Equals(fill.Brush,Brushes.White)==!HallFocus030.Matches(seat,status),"only matching seats retain their fill: "+status+" / "+seat.Number);
                 }
                 Check(hall.Selected.SetEquals([ids[5]])&&store.Seats(eventId).SequenceEqual(original),"status focus preserves selection and stored state: "+status);

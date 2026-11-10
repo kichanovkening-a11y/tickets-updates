@@ -76,8 +76,8 @@ public static class HallLayout
             var labels=Enumerable.Range(0,row.SeatCount).Select(i=>Label(start,i)).ToArray();
             if(labels.Distinct(StringComparer.OrdinalIgnoreCase).Count()!=labels.Length)throw new TicketException($"В ряду {row.Label} повторяются подписи мест.");
             for(var c=0;c<row.SeatCount;c++)result.Add(new DraftSeat{Sector=sector,Row=row.Label.Trim(),
-                Number=labels[reverse?row.SeatCount-1-c:c],X=c*20+(row.AisleAfter>0&&c>=row.AisleAfter?36:0),Y=y});
-            y+=22+row.RowGapAfter;
+                Number=labels[reverse?row.SeatCount-1-c:c],X=c*SeatSelection.SeatSize+(row.AisleAfter>0&&c>=row.AisleAfter?36:0),Y=y});
+            y+=SeatSelection.SeatSize+row.RowGapAfter;
         }
         return result;
     }

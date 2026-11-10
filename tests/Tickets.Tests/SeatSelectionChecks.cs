@@ -12,7 +12,7 @@ internal static class SeatSelectionChecks
         });
         test("marquee requires positive overlap in both dimensions",_=>{
             var seats=Grid();
-            Require(SeatSelection.ApplyRectangle(seats,Array.Empty<long>(),16,0,30,16,false).Count==0,"edge-only touches selected seats");
+            Require(SeatSelection.ApplyRectangle(seats,Array.Empty<long>(),18,0,30,18,false).Count==0,"edge-only touches selected seats");
             Require(SeatSelection.ApplyRectangle(seats,Array.Empty<long>(),8,0,8,46,false).Count==0,"zero-width marquee selected seats");
             Require(SeatSelection.ApplyRectangle(seats,Array.Empty<long>(),0,8,76,8,false).Count==0,"zero-height marquee selected seats");
             Require(SeatSelection.ApplyRectangle(seats,Array.Empty<long>(),15.5,15.5,16.5,16.5,false).SetEquals(new long[]{1}),"small corner overlap missed");
@@ -33,7 +33,7 @@ internal static class SeatSelectionChecks
             Require(hit?.Id==1,"occupied hit missing");SeatSelection.Toggle(selection,hit!);
             Require(selection.SetEquals(new long[]{6}),"occupied click selected a seat");
             SeatSelection.Toggle(selection,hit!);Require(selection.SetEquals(new long[]{6}),"second click did not remove only hit seat");
-            Require(SeatSelection.Hit(seats,16,8) is null,"point at seat outer edge must not hit");
+            Require(SeatSelection.Hit(seats,18,8) is null,"point at seat outer edge must not hit");
             Require(SeatSelection.ApplyRectangle(seats,selection,0,0,15,15,false).SetEquals(new long[]{6}),"occupied seat entered marquee");
         });
     }

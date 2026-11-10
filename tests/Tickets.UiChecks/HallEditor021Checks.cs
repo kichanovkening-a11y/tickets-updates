@@ -19,7 +19,7 @@ internal static class HallEditor021Checks
             var preview=(HallView)type.GetField("preview",Private)!.GetValue(editor)!;
             var drawn=(List<SeatInfo>)typeof(HallView).GetField("seats",Private)!.GetValue(preview)!;
             Check(drawn.Count==0,"new hall starts empty until a creation method is accepted");
-            Check(Logical(editor).OfType<Button>().Any(b=>Equals(b.Content,"Загрузить скан — проба"))&&Logical(editor).OfType<Button>().Any(b=>Equals(b.Content,"Сетка как в старой программе")),"new hall offers scan and legacy grid creation");
+            Check(Logical(editor).OfType<Button>().Any(b=>Equals(b.Content,"Добавить сектор"))&&!Logical(editor).OfType<Button>().Any(b=>Equals(b.Content,"Загрузить скан — проба")||Equals(b.Content,"Сетка как в старой программе")||Equals(b.Content,"Весь зал")),"new hall offers only manual sector creation");
             Check(!Logical(editor).OfType<Expander>().Any(e=>Equals(e.Header,"Настройки рядов")),"obsolete manual row settings are absent");
             Check(((System.Collections.ICollection)type.GetField("seats",Private)!.GetValue(editor)!).Count==0,"opening an empty hall never silently creates seats");
         }

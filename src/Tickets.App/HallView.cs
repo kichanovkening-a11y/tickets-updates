@@ -191,7 +191,7 @@ public sealed partial class HallView : FrameworkElement
         using(var dc=group.Open())
         {
             var sectorSeats=visible.ToLookup(s=>s.Sector);
-            var seatBounds=visible.Select(seat=>new Rect(seat.X,seat.Y,16,16)).ToArray();
+            var seatBounds=visible.Select(seat=>new Rect(seat.X,seat.Y,SeatSelection.SeatSize,SeatSelection.SeatSize)).ToArray();
             var rowLabels=new List<RowCaption>();
             var fixedCaptions=new List<Rect>();
             foreach(var row in visible.GroupBy(s=>(s.Sector,s.Row)))
@@ -233,19 +233,20 @@ public sealed partial class HallView : FrameworkElement
             }
             foreach(var s in visible)
             {
-                var rect=new Rect(s.X,s.Y,16,16);
+                var rect=new Rect(s.X,s.Y,SeatSelection.SeatSize,SeatSelection.SeatSize);
                 var occupied=s.TicketId.HasValue || s.IsReserved || s.IsTicketlandSold;
                 var printed=s.IsTicketlandSold || (occupied && s.IsPrinted && !s.IsReserved);
                 var dimmed=IsPriceDimmed(s.Amount)||(focusStatus030.HasValue&&!HallFocus030.Matches(s,focusStatus030.Value));
                 var brush=s.Id<0?Brushes.Silver:dimmed?Brushes.White:s.IsBlocked?Brushes.LightGray:s.IsTicketlandOccupied?Brushes.Black:occupied?(printed?Brushes.Red:Brushes.Black):s.Amount.HasValue?SeatBrush(s.Color):Brushes.Gainsboro;
                 dc.DrawRoundedRectangle(brush,s.IsBlocked?new Pen(Brushes.Black,1):null,rect,2,2);
+                if(!s.IsBlocked)dc.DrawRectangle(null,new Pen(Brushes.White,1),new Rect(s.X+.5,s.Y+.5,SeatSelection.SeatSize-1,SeatSelection.SeatSize-1));
                 if(occupied && !s.IsTicketlandOccupied && !s.IsBlocked && !dimmed)
                 {
                     // Clip a dense pattern to the seat, including its rounded corners.
                     dc.PushClip(new RectangleGeometry(rect,2,2));
                     var hatchPen=new Pen(printed?Brushes.Black:Brushes.White,.9);
-                    for(var x=-16;x<16;x+=4)
-                        dc.DrawLine(hatchPen,new Point(s.X+x,s.Y+16),new Point(s.X+x+16,s.Y));
+                    for(var x=-SeatSelection.SeatSize;x<SeatSelection.SeatSize;x+=4)
+                        dc.DrawLine(hatchPen,new Point(s.X+x,s.Y+SeatSelection.SeatSize),new Point(s.X+x+SeatSelection.SeatSize,s.Y));
                     dc.Pop();
                 }
                 if(s.IsBlocked && !dimmed)
@@ -260,7 +261,7 @@ public sealed partial class HallView : FrameworkElement
                 var occupiedBadge=s.IsTicketlandOccupied&&!s.IsBlocked&&!dimmed&&s.Id>0;
                 if(occupiedBadge)
                 {
-                    dc.DrawEllipse(Brushes.White,null,new Point(s.X+8,s.Y+8),6.5,6.5);
+                    dc.DrawEllipse(Brushes.White,null,new Point(s.X+SeatSelection.SeatSize/2,s.Y+SeatSelection.SeatSize/2),6.5,6.5);
                     textColor=Brushes.Black;
                 }
                 var text=Text(s.Number,10.4,textColor);
@@ -275,8 +276,8 @@ public sealed partial class HallView : FrameworkElement
                     var scale=occupiedBadge?Math.Min(1,11/Math.Sqrt(inkBounds.Width*inkBounds.Width+inkBounds.Height*inkBounds.Height)):
                         Math.Min(1,Math.Min(14/inkBounds.Width,14/inkBounds.Height));
                     ink.Transform=new MatrixTransform(scale,0,0,scale,
-                        s.X+8-(inkBounds.X+inkBounds.Width/2)*scale,
-                        s.Y+8-(inkBounds.Y+inkBounds.Height/2)*scale);
+                        s.X+SeatSelection.SeatSize/2-(inkBounds.X+inkBounds.Width/2)*scale,
+                        s.Y+SeatSelection.SeatSize/2-(inkBounds.Y+inkBounds.Height/2)*scale);
                     dc.DrawGeometry(textColor,null,ink);
                 }
             }
@@ -332,9 +333,9 @@ public sealed partial class HallView : FrameworkElement
     private static Point SectorCaptionOrigin(Rect glyph,IReadOnlyList<SeatInfo> own,IReadOnlyList<SeatInfo> all,IReadOnlyList<Rect> captions,Point fallback)
     {
         if(own.Count==0)return fallback;
-        var left=own.Min(s=>s.X);var right=own.Max(s=>s.X)+16;
+        var left=own.Min(s=>s.X);var right=own.Max(s=>s.X)+SeatSelection.SeatSize;
         var centre=(left+right)/2-(glyph.Left+glyph.Width/2);var y=own.Min(s=>s.Y)-5-glyph.Bottom;
-        var obstacles=all.Select(s=>new Rect(s.X,s.Y,16,16)).Concat(captions).ToArray();
+        var obstacles=all.Select(s=>new Rect(s.X,s.Y,SeatSelection.SeatSize,SeatSelection.SeatSize)).Concat(captions).ToArray();
         bool Clear(double x){var ink=glyph;ink.Offset(x,y);return !obstacles.Any(ink.IntersectsWith);}
         // Keep the requested vertical gap even in dense existing halls. If another
         // sector occupies the caption band, resolve the collision horizontally.
@@ -389,8 +390,8 @@ public sealed partial class HallView : FrameworkElement
         {
             // Two screen-pixel borders remain visible over every price and hatch color.
             // Neither border covers the seat fill or changes its status pattern.
-            dc.DrawRoundedRectangle(null,outerPen,new Rect(s.X-3/zoom,s.Y-3/zoom,16+6/zoom,16+6/zoom),2,2);
-            dc.DrawRoundedRectangle(null,innerPen,new Rect(s.X-1/zoom,s.Y-1/zoom,16+2/zoom,16+2/zoom),2,2);
+            dc.DrawRoundedRectangle(null,outerPen,new Rect(s.X-3/zoom,s.Y-3/zoom,SeatSelection.SeatSize+6/zoom,SeatSelection.SeatSize+6/zoom),2,2);
+            dc.DrawRoundedRectangle(null,innerPen,new Rect(s.X-1/zoom,s.Y-1/zoom,SeatSelection.SeatSize+2/zoom,SeatSelection.SeatSize+2/zoom),2,2);
         }
         dc.Pop();
         if(marquee && dragging) dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(30,30,110,220)),
@@ -601,7 +602,7 @@ public sealed partial class HallView : FrameworkElement
         =>(Math.Atan2(current.Y-centre.Y,current.X-centre.X)-Math.Atan2(anchor.Y-centre.Y,anchor.X-centre.X))*180/Math.PI;
 
     private IReadOnlyList<HallEditing025.RowAnchor>? TransformAnchors(IReadOnlyList<HallEditing025.RowAnchor>? anchors)
-        =>anchors?.Select(a=>{var point=sectorMatrix.Transform(new Point(a.X,a.Y));return a with{X=point.X,Y=point.Y};}).ToArray();
+        =>anchors?.Select(a=>{var half=SeatSelection.SeatSize/2;var point=sectorMatrix.Transform(new Point(a.X-half,a.Y-half));return a with{X=point.X+half,Y=point.Y+half};}).ToArray();
     private void CacheSectorDrawing()
     {
         var originalSeats=seats;var originalSectors=sectors;var originalBounds=bounds;

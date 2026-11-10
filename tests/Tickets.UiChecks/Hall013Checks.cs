@@ -16,9 +16,9 @@ internal static class Hall013Checks
         var drawing=(DrawingGroup)field.GetValue(hall)!;
         foreach(var seat in seats)
         {
-            var ink=drawing.Children.OfType<GeometryDrawing>().Where(d=>d.Geometry.Bounds.Width>0&&d.Geometry.Bounds.Height>0&&d.Brush==Brushes.Black&&d.Pen is null).Select(d=>d.Bounds).SingleOrDefault(r=>Math.Abs(r.X+r.Width/2-seat.X-8)<.01);
+            var ink=drawing.Children.OfType<GeometryDrawing>().Where(d=>d.Geometry.Bounds.Width>0&&d.Geometry.Bounds.Height>0&&d.Brush==Brushes.Black&&d.Pen is null).Select(d=>d.Bounds).SingleOrDefault(r=>Math.Abs(r.X+r.Width/2-seat.X-SeatSelection.SeatSize/2)<.01);
             Require(!ink.IsEmpty&&ink.Width>0,"Seat label is drawn as measurable ink");
-            Require(Math.Abs(ink.Y+ink.Height/2-seat.Y-8)<.01,"Seat label ink is vertically centered: "+seat.Number);
+            Require(Math.Abs(ink.Y+ink.Height/2-seat.Y-SeatSelection.SeatSize/2)<.01,"Seat label ink is vertically centered: "+seat.Number);
             Require(ink.Width<=14.001&&ink.Height<=14.001,"Complete seat label fits within seat: "+seat.Number);
         }
         hall.SetSelection(new[]{1L});var changes=0;hall.SelectionChanged+=()=>changes++;

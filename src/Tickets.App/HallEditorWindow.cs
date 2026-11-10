@@ -57,18 +57,7 @@ internal sealed class HallEditorWindow : EditorWindow
         sidebar.Children.Add(summary);
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
         var toolbar=new WrapPanel();DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
-        if(!editExisting)
-        {
-            Button(toolbar,"Загрузить скан — проба",()=>Try(()=>{
-                var picker=new OpenFileDialog{Title="Новый скан зала для пробного распознавания",Filter="Изображения PNG / JPEG|*.png;*.jpg;*.jpeg",CheckFileExists=true};
-                if(picker.ShowDialog(DialogOwner)!=true)return;
-                var review=new ScanReviewWindow021(store,picker.FileName,"Партер");if(review.ShowSeparateDialog()!=true)return;Append(review.Result,0);
-            }));
-            Button(toolbar,"Сетка как в старой программе",()=>Try(()=>{
-                var editor=new LegacyHallGridWindow(store,"Партер");if(editor.ShowDialog()!=true)return;Append(editor.Result,26);
-            }));
-        }
-        Button(toolbar,"Весь зал",()=>preview.Fit());toolbar.Children.Add(showHidden);
+        toolbar.Children.Add(showHidden);
         showHidden.Checked+=(_,_)=>Refresh(false);showHidden.Unchecked+=(_,_)=>Refresh(false);
         area.Children.Add(preview);
         grid.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Z&&Keyboard.Modifiers==ModifierKeys.Control&&Keyboard.FocusedElement is not TextBox){Try(Undo);e.Handled=true;}};

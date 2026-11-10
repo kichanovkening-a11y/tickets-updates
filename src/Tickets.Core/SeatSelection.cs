@@ -3,7 +3,7 @@ namespace Tickets.Core;
 /// <summary>Selection geometry in hall coordinates, shared by clicks and drag gestures.</summary>
 public static class SeatSelection
 {
-    public const double SeatSize=16;
+    public const double SeatSize=18;
 
     public static SeatInfo? Hit(IEnumerable<SeatInfo> seats,double x,double y)
         =>seats.LastOrDefault(s=>x>=s.X && x<s.X+SeatSize && y>=s.Y && y<s.Y+SeatSize);

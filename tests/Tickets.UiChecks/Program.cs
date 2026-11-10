@@ -62,6 +62,7 @@ internal static class Program
             if(!args.Contains("--corrections032",StringComparer.Ordinal)&&!args.Contains("--corrections033",StringComparer.Ordinal)){Hall013Checks.Run();DocumentEditor019Checks.Run();}
             var db=Path.Combine(work,"tickets.db");File.Copy(args[0],db);var store=new Store(db);
             var main=new Tickets.App.MainWindow(store);app.MainWindow=main;Check(!main.SeparateWindows,"embedded forms are the default");main.SeparateWindows=true;main.WindowState=WindowState.Normal;main.Width=1420;main.Height=880;main.Show();Pump();
+            if(args.Contains("--agreed052")){Agreed052UiChecks.Run(store);main.Close();return 0;}
             if(args.Contains("--approved050")){Home051Checks.Run(store,main);main.SelectEvent(store.Events().First().Id);Pump();Approved050UiChecks.Run(store,main);main.Close();return 0;}
             if(args.Contains("--blank048")){Blank017Checks.Run(store);main.Close();return 0;}
             if(args.Contains("--issuance048")){Issuance048UiChecks.Run(store,main);main.Close();return 0;}

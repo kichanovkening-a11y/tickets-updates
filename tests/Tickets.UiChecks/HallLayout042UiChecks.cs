@@ -86,7 +86,7 @@ internal static class HallLayout042UiChecks
         IEnumerable<GeometryDrawing> Shapes(Drawing item)
         {if(item is GeometryDrawing shape)yield return shape;if(item is DrawingGroup group)foreach(var child in group.Children)foreach(var nested in Shapes(child))yield return nested;}
         var shapes=Shapes(drawing).ToArray();
-        Check(shapes.Any(s=>s.Geometry is RectangleGeometry&&s.Geometry.Bounds==new Rect(0,0,16,16)&&Equals(s.Brush,Brushes.Black))&&shapes.Any(s=>s.Geometry is EllipseGeometry circle&&circle.Center==new Point(8,8)&&Equals(s.Brush,Brushes.White))&&!shapes.Any(s=>s.Geometry is LineGeometry&&Equals(s.Pen?.Brush,Brushes.Red)),"externally occupied seat renders black with a white number circle and no red hatching");
+        Check(shapes.Any(s=>s.Geometry is RectangleGeometry&&s.Geometry.Bounds==new Rect(0,0,SeatSelection.SeatSize,SeatSelection.SeatSize)&&Equals(s.Brush,Brushes.Black))&&shapes.Any(s=>s.Geometry is EllipseGeometry circle&&circle.Center==new Point(SeatSelection.SeatSize/2,SeatSelection.SeatSize/2)&&Equals(s.Brush,Brushes.White))&&!shapes.Any(s=>s.Geometry is LineGeometry&&Equals(s.Pen?.Brush,Brushes.Red)),"externally occupied seat renders black with a white number circle and no red hatching");
         Check(!seat.Available&&!seat.IsTicketlandSold,"occupied rendering keeps the original seat status");
     }
     private static void CheckContextCommands(Store store,MainWindow main)

@@ -95,6 +95,30 @@ internal sealed class RepertoireCatalog
         return result.DistinctBy(p => p.Page).ToList();
     }
 
+    internal static async Task<string> TicketProSessionFromPage(string page, DateTime date, string venue, CancellationToken token)
+    {
+        if (!Uri.TryCreate(Site, page, out var uri) ||
+            uri.GetLeftPart(UriPartial.Authority) != Site.GetLeftPart(UriPartial.Authority) ||
+            !uri.AbsolutePath.StartsWith("/repertuar/", StringComparison.Ordinal) ||
+            uri.UserInfo.Length != 0 || uri.Query.Length != 0 || uri.Fragment.Length != 0)
+            throw new TicketException("Ticket PRO: неверная ссылка привязанной афиши.");
+        try
+        {
+            var html = await Client.GetStringAsync(uri, token);
+            var siteId = TicketProPerformance.SitePerformanceId(html, date, venue);
+            if (siteId is null)
+                throw new TicketException("Ticket PRO: на привязанной странице не найден сеанс с этой датой, временем и площадкой.");
+            var payload = await Client.GetStringAsync(new Uri(Site, "/ticket.php?performance_id=" + siteId), token);
+            return TicketProPerformance.FrameSessionId(payload);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or JsonException or FormatException or
+            InvalidOperationException or KeyNotFoundException or RegexMatchTimeoutException ||
+            ex is OperationCanceledException && !token.IsCancellationRequested)
+        {
+            throw new TicketException("Ticket PRO: не удалось прочитать сеанс на привязанной странице VIP-Театра.");
+        }
+    }
+
     private static async Task WriteAsync(string file, byte[] bytes)
     {
         var temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";

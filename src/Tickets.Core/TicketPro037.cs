@@ -60,6 +60,9 @@ public sealed partial class Store
     private void EnsureTicketPro037()
     {
         using var c=Open();using var q=Command(c,"""
+            CREATE TABLE IF NOT EXISTS ticketpro_performance(
+                performance_id INTEGER NOT NULL REFERENCES performance(id) ON DELETE CASCADE,
+                page TEXT NOT NULL,card_url TEXT NOT NULL,PRIMARY KEY(performance_id,page));
             CREATE TABLE IF NOT EXISTS ticketpro_show_037(event_id INTEGER PRIMARY KEY REFERENCES event(id) ON DELETE CASCADE,source_url TEXT NOT NULL UNIQUE,fetched_at TEXT NOT NULL,place_count INTEGER NOT NULL);
             CREATE TABLE IF NOT EXISTS ticketpro_place_037(event_id INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,seat_id INTEGER NOT NULL REFERENCES seat(id),place_id TEXT NOT NULL,state TEXT NOT NULL,status TEXT NOT NULL,fund TEXT NOT NULL,price TEXT NOT NULL,PRIMARY KEY(event_id,seat_id),UNIQUE(event_id,place_id));
             CREATE TABLE IF NOT EXISTS ticketpro_release_037(event_id INTEGER NOT NULL REFERENCES event(id) ON DELETE CASCADE,seat_id INTEGER NOT NULL REFERENCES seat(id),PRIMARY KEY(event_id,seat_id));
@@ -78,7 +81,10 @@ public sealed partial class Store
     {
         using var c=Open();using var q=Command(c,"SELECT event_id,source_url,fetched_at,place_count FROM ticketpro_show_037 ORDER BY event_id");using var r=q.ExecuteReader();var result=new List<TicketProBinding037>();while(r.Read())result.Add(new(r.GetInt64(0),r.GetString(1),DateTimeOffset.Parse(r.GetString(2),CultureInfo.InvariantCulture),r.GetInt32(3)));return result;
     }
-    public void ApplyTicketPro037(long eventId,TicketProSnapshot037 snapshot)
+    public void ApplyTicketPro037(long eventId,TicketProSnapshot037 snapshot) =>
+        ApplyTicketPro037(eventId,snapshot,null,null);
+
+    private void ApplyTicketPro037(long eventId,TicketProSnapshot037 snapshot,string? page,string? expectedUrl)
     {
         TicketPro037.Validate(snapshot);
         using var c=Open();using var tx=c.BeginTransaction(deferred:false);RequireActiveEvent(c,tx,eventId);
@@ -90,7 +96,21 @@ public sealed partial class Store
         {
             q.Transaction=tx;using var r=q.ExecuteReader();bound=r.Read();if(bound&&(r.GetString(0)!=snapshot.SourceUrl||snapshot.FetchedAt<DateTimeOffset.Parse(r.GetString(1),CultureInfo.InvariantCulture)))throw new TicketException("Ticket PRO: другой сеанс или устаревшая схема. Предыдущие данные сохранены.");
         }
-        if(!bound&&Title029(show.Title)!=Title029(snapshot.Title))throw new TicketException("Ticket PRO: название сеанса не совпадает с выбранным показом.");
+        if(page is not null)
+        {
+            var performance=LinkedTicketProPerformance(c,tx,show.Title,page);
+            if(performance==0||snapshot.SourceUrl!=expectedUrl)
+                throw new TicketException("Ticket PRO: привязка афиши или ссылка на сеанс изменилась.");
+            var card=snapshot.SourceUrl[..snapshot.SourceUrl.LastIndexOf("/ticket-control/",StringComparison.Ordinal)];
+            var previous=ReadTicketProCard(c,tx,performance,page);
+            if(previous is not null&&previous!=card)
+                throw new TicketException("Ticket PRO: сеанс относится к другой карточке мероприятия.");
+            using var save=Command(c,"INSERT OR IGNORE INTO ticketpro_performance(performance_id,page,card_url) VALUES($id,$page,$url)",
+                "$id",performance,"$page",page,"$url",card);
+            save.Transaction=tx;
+            save.ExecuteNonQuery();
+        }
+        if(!bound&&page is null&&Title029(show.Title)!=Title029(snapshot.Title))throw new TicketException("Ticket PRO: название сеанса не совпадает с выбранным показом.");
         var source=snapshot.Places.Select(p=>new TicketlandSale028(show.Title,snapshot.StartsAt,p.Sector,p.Row,p.Seat,"PRO:"+p.Id,p.Price){Venue=show.Venue}).ToArray();
         var matches=Matches029(c,tx,source,[show],TicketlandBindings028(c,tx),TicketlandSectorBindings028(c,tx));
         var prepared=new List<(long Seat,TicketProPlace037 Place)>();var unique=new HashSet<long>();

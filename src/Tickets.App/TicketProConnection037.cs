@@ -56,18 +56,43 @@ public partial class MainWindow
         ticketProSelection041??=new(RefreshSelectedTicketPro041,ticketlandLifetime028.Token);
         return ticketProSelection041.RequestAsync(selected);
     }
-    private async Task<string> ReadSelectedTicketPro041(long eventId,CancellationToken token)
+    private async Task<(string Json, string? Page, string? Url)> ReadSelectedTicketPro041(long eventId,CancellationToken token)
     {
         var session=ProSession037();
         if(session.IsVisible)throw new TicketException("Ticket PRO: закройте окно подключения для фонового обновления.");
         // Finish shared WebView initialization even if selection changes halfway through it.
         await session.PrepareAsync(true,ticketlandLifetime028.Token);token.ThrowIfCancellationRequested();
         var url=store.TicketProBindings037().FirstOrDefault(b=>b.EventId==eventId)?.SourceUrl;
-        return await TicketProTarget041.ReadAsync(eventId,url,async cancellation=>
+        if (url is null && current is { } selected && selected.Id == eventId)
+        {
+            var performance = store.Performances().SingleOrDefault(p => CatalogText.Key(p.Title) == CatalogText.Key(selected.Title));
+            var savedLayout = store.HomeLayout;
+            var cards = savedLayout.Length == 0 ? [] : JsonSerializer.Deserialize<HomeCard[]>(savedLayout) ?? [];
+            var pages = performance is null ? [] : cards
+                .Where(card => !card.Hidden && card.PerformanceId == performance.Id && card.Page.Length > 0)
+                .Select(card => card.Page).Distinct().ToArray();
+            if (pages.Length > 1)
+                throw new TicketException("Ticket PRO: к спектаклю привязано несколько афиш.");
+            var page = pages.SingleOrDefault();
+            if (page is not null)
+            {
+                SetTicketlandStatus028("Ticket PRO: ищу сеанс привязанного спектакля…");
+                var startsAt = DateTime.Parse(selected.SortDate, System.Globalization.CultureInfo.InvariantCulture);
+                var card = store.TicketProCardForPage(eventId, page);
+                var id = card is null
+                    ? await RepertoireCatalog.TicketProSessionFromPage(page, startsAt, selected.Venue, token)
+                    : null;
+                var title = repertoire.Posters.FirstOrDefault(poster => poster.Page == page)?.Title ?? selected.Title;
+                var linkedUrl = await session.FindLinkedSession(card, id, title, startsAt, selected.Venue, token);
+                return (await session.ReadSchemeAsync(linkedUrl, token), page, linkedUrl);
+            }
+        }
+        var json = await TicketProTarget041.ReadAsync(eventId,url,async cancellation=>
         {
             SetTicketlandStatus028("Ticket PRO: ищу сеанс выбранного показа…");
             return await session.DiscoverShows038Async(cancellation,eventId);
         },session.ReadSchemeAsync,token);
+        return (json, null, null);
     }
     private async Task RefreshSelectedTicketPro041(long eventId,CancellationToken token)
     {
@@ -78,10 +103,19 @@ public partial class MainWindow
             if(!ticketProEnabled037||current?.Id!=eventId)return;
             ticketProLastError037="";
             SetTicketlandStatus028($"Ticket PRO: обновляю «{current.Title}»…");
-            var json=TicketProFetch041 is null?await ReadSelectedTicketPro041(eventId,token):await TicketProFetch041(eventId,token);
+            (string Json, string? Page, string? Url) result = TicketProFetch041 is null
+                ? await ReadSelectedTicketPro041(eventId,token)
+                : (await TicketProFetch041(eventId,token), null, null);
             token.ThrowIfCancellationRequested();
-            var snapshot=TicketPro037.Parse(json,DateTimeOffset.UtcNow);
-            await Task.Run(()=>store.ApplyTicketPro037(eventId,snapshot),token);token.ThrowIfCancellationRequested();
+            var snapshot=TicketPro037.Parse(result.Json,DateTimeOffset.UtcNow);
+            await Task.Run(()=>
+            {
+                if (result.Page is not null)
+                    store.ApplyLinkedTicketPro(eventId, snapshot, result.Page, result.Url!);
+                else
+                    store.ApplyTicketPro037(eventId,snapshot);
+            },token);
+            token.ThrowIfCancellationRequested();
             if(current?.Id==eventId){ReloadProHall038();UpdateSelectedProStatus037();}
         }
         catch(OperationCanceledException) when(token.IsCancellationRequested){}

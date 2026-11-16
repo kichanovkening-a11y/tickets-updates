@@ -95,6 +95,44 @@ internal sealed partial class TicketProSession037
         }
         throw new TicketException("Ticket PRO: список слишком большой. Последние данные сохранены.");
     }
+    internal async Task<string> FindLinkedSession(string? card, string? sessionId, string posterTitle,
+        DateTime startsAt, string venue, CancellationToken token)
+    {
+        IReadOnlyList<CatalogRow038> candidates;
+        if (card is not null)
+        {
+            candidates = [new(posterTitle, card)];
+        }
+        else
+        {
+            const string catalogUrl = "https://pro.ticketland.ru/management/show";
+            await NavigateDocument038(catalogUrl, token);
+            var catalog = await AllPages038<CatalogRow038>(CatalogScript038, catalogUrl, token);
+            await RememberSignIn039Async();
+            // Title only affects the order of requests. External session ID establishes identity.
+            candidates = catalog.DistinctBy(show => show.Url)
+                .OrderByDescending(show => MainWindow.RelatedTitle(posterTitle, show.Title)).ToArray();
+        }
+
+        foreach (var candidate in candidates)
+        {
+            if (!TicketPro037.IsSchemeUrl(candidate.Url + "/ticket-control/1")) continue;
+            await NavigateDocument038(candidate.Url, token);
+            var sessions = await AllPages038<SessionRow038>(SessionsScript038, candidate.Url, token);
+            var matches = sessions.Where(session => TicketPro037.IsSchemeUrl(session.Url) &&
+                session.Url.StartsWith(candidate.Url + "/ticket-control/", StringComparison.Ordinal) &&
+                (sessionId is null || session.Url.EndsWith("/" + sessionId, StringComparison.Ordinal)) &&
+                DateTime.TryParseExact(session.Date, ["dd.MM.yyyy HH:mm", "dd.MM.yyyy HH:mm:ss"],
+                    CultureInfo.InvariantCulture, DateTimeStyles.None, out var date) &&
+                date == startsAt && TicketProPerformance.SameVenue(venue, session.Venue))
+                .Select(session => session.Url).Distinct().ToArray();
+            if (matches.Length == 1) return matches[0];
+            if (matches.Length > 1)
+                throw new TicketException("Ticket PRO: в карточке спектакля найдено несколько подходящих сеансов.");
+        }
+        throw new TicketException("Ticket PRO: сеанс привязанного спектакля не найден по ID, дате, времени и площадке.");
+    }
+
     internal async Task<Discovery038> DiscoverShows038Async(CancellationToken token,long? eventId=null)
     {
         await NavigateDocument038("https://pro.ticketland.ru/management/show",token);

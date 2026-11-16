@@ -50,6 +50,47 @@ internal static class TicketPro037Checks
             Check(Call(s,typeof(Store),"MatchTicketProShow038",f.Title,f.At,"Another hall") is null,"different venue matched");
             Check(Call(s,typeof(Store),"MatchTicketProShow038","Another title",f.At,venue) is null,"different title matched");
         });
+        run("038 PRO linked poster selects the exact session and resolves its frame ID",_=>{
+            string Event(string date,string venue,string id)=>JsonSerializer.Serialize(new
+            {
+                startDate=date,location=new{name=venue},
+                offers=new{url="/ticket.html?performance_id="+id}
+            });
+            var first=Event("2027-02-12T19:00:00+03:00","Театр «Русская песня» - основная сцена","10531284");
+            var second=Event("2027-02-12T11:00:00+03:00","Театр «Русская песня» - основная сцена","10531285");
+            var other=Event("2027-02-12T19:00:00+03:00","Московский театр Эстрады","10531286");
+            string Html(params string[] entries)=>"<script id=\"vip-visible-events\">{\"@graph\":["+string.Join(",",entries)+"]}</script>";
+            var date=new DateTime(2027,2,12,19,0,0);
+            Check(TicketProPerformance.SitePerformanceId(Html(first,second,other),date,"Театр Русская песня")=="10531284","wrong session picked");
+            Check(TicketProPerformance.SitePerformanceId(Html(first,second,other),date,"Театр Эстрады")=="10531286","site venue variant not recognized");
+            Check(TicketProPerformance.SitePerformanceId(Html(first,second,other),date.AddHours(1),"Театр Русская песня") is null,"wrong-time session picked");
+            Reject(()=>TicketProPerformance.SitePerformanceId(Html(first,first.Replace("10531284","10531287")),date,"Театр Русская песня"));
+            var script="var TLConf = {start:'/teatry/gig/t_20270212_1900_p_29307309/'}";
+            var json=JsonSerializer.Serialize(new{script=Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(script))});
+            Check(TicketProPerformance.FrameSessionId(json)=="29307309","wrong ID read from frame");
+        });
+        run("038 PRO site link binds the card for all sessions without requiring matching titles",s=>{
+            var f=Fixture(s);var now=DateTimeOffset.UtcNow;
+            var show=s.Events().Single(e=>e.Id==f.Event);
+            var performance=s.Performances().Single(p=>p.Title==f.Title).Id;
+            var plan=s.Plans(show.VenueId).Single().Id;
+            var next=s.CreateEvent(performance,show.VenueId,plan,f.At.AddHours(2));
+            const string page="/repertuar/test.html";
+            s.SaveHomeLayout(JsonSerializer.Serialize(new[]{new HomeCard(page,performance)}));
+            var first=TicketPro037.Parse(Json("Другой заголовок в PRO",["Продано","В продаже","В продаже"]),now);
+            Reject(()=>s.ApplyTicketPro037(f.Event,first));
+            Call(s,typeof(Store),"ApplyLinkedTicketPro",f.Event,first,page,first.SourceUrl);
+            var reopened=new Store(s.Path);
+            Check((string)Call(reopened,typeof(Store),"TicketProCardForPage",next,page)=="https://pro.ticketland.ru/management/show/21540221","next session did not inherit the verified card");
+            var second=first with{StartsAt=f.At.AddHours(2),SourceUrl=first.SourceUrl.Replace("28886198","28886199")};
+            Reject(()=>Call(reopened,typeof(Store),"ApplyLinkedTicketPro",next,second,page,first.SourceUrl));
+            var wrongCard=second with{SourceUrl=second.SourceUrl.Replace("21540221","21540222")};
+            Reject(()=>Call(reopened,typeof(Store),"ApplyLinkedTicketPro",next,wrongCard,page,wrongCard.SourceUrl));
+            Call(reopened,typeof(Store),"ApplyLinkedTicketPro",next,second,page,second.SourceUrl);
+            Check(reopened.TicketProBindings037().Count(b=>b.EventId==f.Event||b.EventId==next)==2,"sessions did not retain separate URLs");
+            reopened.SaveHomeLayout(JsonSerializer.Serialize(new[]{new HomeCard("/repertuar/other.html",performance)}));
+            Reject(()=>Call(reopened,typeof(Store),"ApplyLinkedTicketPro",next,second,page,second.SourceUrl));
+        });
         run("038 PRO automatic match rejects duplicate local identities",s=>{
             var f=Fixture(s);var show=s.Events().Single(e=>e.Id==f.Event);
             using(var c=new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={s.Path}")){c.Open();using var q=c.CreateCommand();q.CommandText="DROP TRIGGER IF EXISTS event_slot_insert; INSERT INTO event(venue_id,title,starts_at,legacy_date) SELECT venue_id,title,starts_at,legacy_date FROM event WHERE id=$e";q.Parameters.AddWithValue("$e",f.Event);q.ExecuteNonQuery();}

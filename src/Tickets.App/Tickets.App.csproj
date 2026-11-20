@@ -7,6 +7,11 @@
     <ApplicationIcon>Assets/Tickets.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(ClassicVisual)' == 'true'">
+    <DefineConstants>$(DefineConstants);CLASSIC</DefineConstants>
+    <AssemblyName>Tickets.Classic</AssemblyName>
+    <DefaultItemExcludes>$(DefaultItemExcludes);obj-classic/**;obj/**</DefaultItemExcludes>
+  </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4314.35" />
     <Resource Include="Assets/Tickets.ico" />

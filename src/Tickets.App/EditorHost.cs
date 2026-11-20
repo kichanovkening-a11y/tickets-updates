@@ -100,7 +100,11 @@ internal sealed class SettingsWindow:EditorWindow
         var sender=Field(form,"От кого по умолчанию",store.Sender);
         var directory=Field(form,"Папка накладных и спецификаций",store.DocumentsDirectory);
         Button(form,"Выбрать папку…",()=>{var dialog=new Microsoft.Win32.OpenFolderDialog{Title="Папка документов"};if(System.IO.Directory.Exists(directory.Text))dialog.InitialDirectory=directory.Text;if(dialog.ShowDialog(DialogOwner)==true)directory.Text=dialog.FolderName;});
+#if CLASSIC
+        Button(form,"Обновление",()=>MessageBox.Show(DialogOwner,"Для классической версии используется отдельный архив обновления.","Классическая версия"));
+#else
         Button(form,"Обновление",()=>new UpdateWindow(store).ShowDialog());
+#endif
         Button(form,"Резервная копия…",()=>main.BackupFromSettings());
         Button(form,"Ticket PRO",()=>main.OpenTicketPro037());
         Button(form,"Сохранить",()=>Try(()=>{var accepted=SenderConfirmation025.Choose(DialogOwner,store.Sender,sender.Text);if(accepted!=sender.Text){sender.Text=accepted;return;}store.SaveDocumentSettings(sender.Text,directory.Text);main.SaveWindowSettings(separate.IsChecked==true);Finish(true);}));

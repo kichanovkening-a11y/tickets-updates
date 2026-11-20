@@ -46,6 +46,9 @@ public partial class MainWindow : Window
             ShowHome();
             UpdateNumber();
         });
+#if CLASSIC
+        InitializeClassic();
+#endif
     }
     private void Run(Action action)
     {

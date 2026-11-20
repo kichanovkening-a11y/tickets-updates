@@ -10,6 +10,9 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+#if CLASSIC
+        ClassicVisual.Install();
+#endif
         if(e.Args.Length==2&&e.Args[0]=="--validate-update")
         {
             try
@@ -52,12 +55,36 @@ public partial class App : Application
             var daily=Path.Combine(backup,$"tickets-{DateTime.Now:yyyy-MM-dd}.db");
             if(!File.Exists(daily)) store.Backup(daily);
             LocalBackupRetention036.Prune(store,backup);
+#if !CLASSIC
             try{Tickets.Update.UpdateFiles.EnsureLauncher(AppContext.BaseDirectory);}catch(IOException){}catch(UnauthorizedAccessException){}
+#endif
             MainWindow=new MainWindow(store); MainWindow.Show();
+#if CLASSIC
+            if(e.Args.Length==2&&e.Args[0]=="--classic-preview")
+                Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle,new Action(()=>
+                {
+                    try
+                    {
+                        MainWindow.UpdateLayout();
+                        var dpi=System.Windows.Media.VisualTreeHelper.GetDpi(MainWindow);
+                        var image=new System.Windows.Media.Imaging.RenderTargetBitmap(
+                            (int)(MainWindow.ActualWidth*dpi.DpiScaleX),(int)(MainWindow.ActualHeight*dpi.DpiScaleY),
+                            96*dpi.DpiScaleX,96*dpi.DpiScaleY,System.Windows.Media.PixelFormats.Pbgra32);
+                        image.Render(MainWindow);
+                        var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();
+                        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+                        using var output=File.Create(e.Args[1]);encoder.Save(output);
+                        MainWindow.Close();
+                    }
+                    catch(Exception ex){File.WriteAllText(e.Args[1]+".error",ex.ToString());Shutdown(1);}
+                }));
+#endif
             if(updateReceipt is not null)Tickets.Update.UpdateTransaction.PublishHealth(updateReceipt,e.Args[1]);
             if(e.Args.Length==2&&e.Args[0]=="--ticketpro-event"&&long.TryParse(e.Args[1],out var proEventId))
                 Dispatcher.BeginInvoke(new Action(()=>{if(MainWindow is MainWindow main){main.SelectEvent(proEventId);main.OpenTicketPro037();}}));
+#if !CLASSIC
             try{Shortcut023.Ensure(AppContext.BaseDirectory);}catch(IOException){}catch(System.Runtime.InteropServices.COMException){}catch(System.Reflection.TargetInvocationException){}catch(UnauthorizedAccessException){}
+#endif
         }
         catch(Exception ex)
         {

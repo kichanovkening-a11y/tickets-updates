@@ -11,8 +11,15 @@ root, out = map(Path, sys.argv[1:3])
 repository, version = sys.argv[3:5]
 assert re.fullmatch(r'[A-Za-z0-9-]+/[A-Za-z0-9_.-]+', repository)
 assert re.fullmatch(r'\d+\.\d+\.\d+', version)
+classic = sys.argv[5:] == ['--classic']
+assert not sys.argv[5:] or classic, 'Unknown packaging option'
 out.mkdir(parents=True, exist_ok=True)
-shutil.copyfile(root/'Tickets.exe',root/'! Tickets.exe')
+if classic:
+    assert all((root/name).is_file() for name in ('Tickets.Classic.exe', 'Tickets.Classic.dll', 'Tickets.Classic.Updater.exe')), 'Incomplete classic application'
+    assert not (root/'Tickets.dll').exists() and not (root/'Tickets.exe').exists(), 'Mixed application editions'
+else:
+    assert not (root/'Tickets.Classic.dll').exists(), 'Mixed application editions'
+    shutil.copyfile(root/'Tickets.exe',root/'! Tickets.exe')
 groups = {'application': [], 'database-engine': [], 'runtime': []}
 for path in root.rglob('*'):
     if not path.is_file():
@@ -35,7 +42,7 @@ manifest = {'Format': 1, 'Repository': repository, 'Version': version, 'Packages
 for group, files in groups.items():
     if not files:
         continue
-    name = f'Tickets-{group}.zip'
+    name = f"{'Tickets.Classic' if classic else 'Tickets'}-{group}.zip"
     target = out/name
     entries = []
     with zipfile.ZipFile(target, 'w', compression=zipfile.ZIP_DEFLATED, compresslevel=6) as archive:
@@ -48,4 +55,4 @@ for group, files in groups.items():
     manifest['Packages'].append({'Name': group, 'Asset': name, 'Sha256': digest(target), 'Files': entries})
     print(name, target.stat().st_size, 'bytes', len(entries), 'files')
 (out/'update-manifest.json').write_text(json.dumps(manifest, ensure_ascii=False, indent=2), encoding='utf-8')
-print('No user data included. Publish all assets to release tag: v'+version)
+print('No user data included. Publish all assets to release tag: '+('classic-v'+version if classic else 'v'+version))

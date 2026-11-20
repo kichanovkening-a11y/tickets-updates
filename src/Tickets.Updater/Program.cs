@@ -8,6 +8,11 @@ using Tickets.Update;
 namespace Tickets.Updater;
 internal static class Program
 {
+#if CLASSIC
+    private static readonly UpdateChannel Channel=UpdateChannel.Classic;
+#else
+    private static readonly UpdateChannel Channel=UpdateChannel.Standard;
+#endif
     [STAThread] public static void Main(string[] args)
     {
         var application=new Application();var window=new Window{Title="Обновление Билетов",Width=620,Height=390,WindowStartupLocation=WindowStartupLocation.CenterScreen};
@@ -42,7 +47,7 @@ internal static class Program
                 var target=Arg("--target");
                 if(target.Length==0){var picker=new Microsoft.Win32.OpenFolderDialog{Title="Папка программы Билеты"};if(picker.ShowDialog(window)!=true)return;target=picker.FolderName;}
                 target=Path.GetFullPath(target);
-                if(!UpdateFiles.CanUpdate(target))throw new IOException("В выбранной папке нет программы Билеты.");
+                if(!Channel.CanUpdate(target))throw new IOException("В выбранной папке нет программы Билеты.");
                 Stage("Ожидание закрытия программы");if(int.TryParse(Arg("--parent"),out var pid))
                 {try{using var parent=Process.GetProcessById(pid);using var wait=new CancellationTokenSource(TimeSpan.FromSeconds(60));await parent.WaitForExitAsync(wait.Token);}catch(ArgumentException){}}
                 work=Path.Combine(Path.GetTempPath(),"TicketsUpdates",Guid.NewGuid().ToString("N"));Directory.CreateDirectory(work);
@@ -54,7 +59,7 @@ internal static class Program
                         var files=Directory.EnumerateFiles(AppContext.BaseDirectory).Where(file=>{var name=Path.GetFileName(file);return name.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".dll",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".deps.json")||name.EndsWith(".runtimeconfig.json");}).ToArray();
                         for(var i=0;i<files.Length;i++){var name=Path.GetFileName(files[i]);File.Copy(files[i],Path.Combine(runner,name));((IProgress<UpdateProgress>)progress).Report(new("Подготовка обновлятора",i+1,files.Length,name));}
                     });
-                    var start=new ProcessStartInfo(Path.Combine(runner,"Tickets.Updater.exe")){UseShellExecute=false,WorkingDirectory=runner};
+                    var start=new ProcessStartInfo(Path.Combine(runner,Channel.UpdaterExecutable)){UseShellExecute=false,WorkingDirectory=runner};
                     foreach(var arg in new[]{"--target",target,"--repository",Arg("--repository","kichanovkening-a11y/tickets-updates"),"--temporary"})start.ArgumentList.Add(arg);
                     _ = Process.Start(start)??throw new IOException("Не удалось запустить обновлятор.");busy=false;window.Close();return;
                 }
@@ -62,9 +67,9 @@ internal static class Program
                 InstallPlan plan;
                 if(Arg("--plan").Length==0)
                 {
-                    Stage("Проверка обновления");var client=new GitHubUpdates();var manifest=await client.CheckAsync(Arg("--repository","kichanovkening-a11y/tickets-updates"));
+                    Stage("Проверка обновления");var client=new GitHubUpdates(Channel);var manifest=await client.CheckAsync(Arg("--repository","kichanovkening-a11y/tickets-updates"));
                     plan=await client.DownloadAsync(manifest,target,work,full:true,detailedProgress:progress);
-                    var helper=Path.Combine(plan.Stage,"Tickets.Updater.exe");
+                    var helper=Path.Combine(plan.Stage,Channel.UpdaterExecutable);
                     if(!File.Exists(helper))throw new IOException("В обновлении нет независимого обновлятора.");
                     var planFile=Path.Combine(work,"install-plan.json");File.WriteAllText(planFile,JsonSerializer.Serialize(plan));
                     var handoff=new ProcessStartInfo(helper){UseShellExecute=false,WorkingDirectory=plan.Stage};
@@ -74,8 +79,12 @@ internal static class Program
                 }
                 plan=JsonSerializer.Deserialize<InstallPlan>(File.ReadAllText(Arg("--plan")))??throw new IOException("Не найден план установки.");
                 if(!Path.GetFullPath(plan.Target).Equals(target,StringComparison.OrdinalIgnoreCase))throw new IOException("План относится к другой папке.");
-                File.Copy(Path.Combine(plan.Stage,"Tickets.exe"),Path.Combine(plan.Stage,"! Tickets.exe"),true);
-                plan.Files.Add(new("! Tickets.exe",UpdateFiles.Hash(Path.Combine(plan.Stage,"! Tickets.exe"))));
+                Channel.ValidateFiles(plan.Files);
+                if(Channel.LauncherExecutable!=Channel.ApplicationExecutable)
+                {
+                    File.Copy(Path.Combine(plan.Stage,Channel.ApplicationExecutable),Path.Combine(plan.Stage,Channel.LauncherExecutable),true);
+                    plan.Files.Add(new(Channel.LauncherExecutable,UpdateFiles.Hash(Path.Combine(plan.Stage,Channel.LauncherExecutable))));
+                }
                 Stage("Резервное копирование и проверка файлов…");
                 transaction=await Task.Run(()=>UpdateTransaction.Prepare(plan,progress));
                 // Probe migrations against a separate database copy; never mutate the recovery snapshot.
@@ -86,7 +95,7 @@ internal static class Program
                 Stage("Установка файлов…");await Task.Run(()=>transaction.Install(progress));
                 var token=Guid.NewGuid().ToString("N");var receipt=Path.Combine(transaction.BackupDirectory,"health.json");File.WriteAllText(Path.Combine(transaction.BackupDirectory,"startup-token"),token);
                 transaction.ReleaseSession();
-                var startApp=new ProcessStartInfo(Path.Combine(target,"! Tickets.exe")){UseShellExecute=false,WorkingDirectory=target};
+                var startApp=new ProcessStartInfo(Path.Combine(target,Channel.LauncherExecutable)){UseShellExecute=false,WorkingDirectory=target};
                 foreach(var arg in new[]{"--updated",token,receipt})startApp.ArgumentList.Add(arg);
                 using var child=Process.Start(startApp)??throw new IOException("Не удалось запустить новую версию.");
                 try
@@ -125,7 +134,7 @@ internal static class Program
     }
     private static async Task Validate(string app,string data)
     {
-        var start=new ProcessStartInfo(Path.Combine(app,"Tickets.exe")){UseShellExecute=false,WorkingDirectory=app};start.ArgumentList.Add("--validate-update");start.ArgumentList.Add(data);
+        var start=new ProcessStartInfo(Path.Combine(app,Channel.ApplicationExecutable)){UseShellExecute=false,WorkingDirectory=app};start.ArgumentList.Add("--validate-update");start.ArgumentList.Add(data);
         using var child=Process.Start(start)??throw new IOException("Не удалось проверить новую версию.");
         using var timeout=new CancellationTokenSource(TimeSpan.FromMinutes(2));
         try{await child.WaitForExitAsync(timeout.Token);}catch{if(!child.HasExited){child.Kill();await child.WaitForExitAsync();}throw;}

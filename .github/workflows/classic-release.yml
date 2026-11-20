@@ -1,0 +1,68 @@
+name: Publish classic Tickets
+# Change version-classic.json only after the user authorizes this particular release.
+on:
+  push:
+    branches: [visual/classic]
+    paths: [version-classic.json]
+permissions:
+  contents: write
+concurrency:
+  group: tickets-classic-release
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Build classic application and updater
+        shell: pwsh
+        run: |
+          $v = (Get-Content version-classic.json | ConvertFrom-Json).version
+          if ($v -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid classic version' }
+          "CLASSIC_VERSION=$v" >> $env:GITHUB_ENV
+          python scripts/restore_seed.py
+          if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
+          dotnet run --project tests/Tickets.UpdateChecks -- --classic-channel
+          if ($LASTEXITCODE -ne 0) { throw 'Classic updater checks failed' }
+          dotnet publish src/Tickets.App/Tickets.App.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:ClassicVisual=true "-p:Version=$v" -o release/Tickets-Classic
+          if ($LASTEXITCODE -ne 0) { throw 'Classic app build failed' }
+          dotnet publish src/Tickets.Updater/Tickets.Updater.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:ClassicVisual=true "-p:Version=$v" -o release/Tickets-Classic
+          if ($LASTEXITCODE -ne 0) { throw 'Classic updater build failed' }
+      - name: Verify one installation with preserved data and healthy startup
+        shell: pwsh
+        run: ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets-Classic).Path -Seed (Resolve-Path data/seed.db).Path -Classic
+      - name: Package classic updates and first installation
+        shell: pwsh
+        run: |
+          python scripts/package_release.py release/Tickets-Classic release-assets $env:GITHUB_REPOSITORY $env:CLASSIC_VERSION --classic
+          if ($LASTEXITCODE -ne 0) { throw 'Classic update packaging failed' }
+          python scripts/package_portable.py release/Tickets-Classic release-assets/Tickets-Classic-Windows-x64.zip --classic
+          if ($LASTEXITCODE -ne 0) { throw 'Classic portable packaging failed' }
+          dotnet publish src/Tickets.Updater/Tickets.Updater.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:ClassicVisual=true "-p:Version=$env:CLASSIC_VERSION" -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o release/bootstrap
+          if ($LASTEXITCODE -ne 0) { throw 'Classic bootstrap build failed' }
+          Copy-Item release/bootstrap/Tickets.Classic.Updater.exe release-assets/Tickets-Classic-Update.exe
+      - name: Publish classic channel without changing standard updates
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $head = gh api "repos/$env:GITHUB_REPOSITORY/git/ref/heads/visual/classic" --jq '.object.sha'
+          if ($LASTEXITCODE -ne 0 -or $head -ne $env:GITHUB_SHA) { throw 'Classic release revision changed' }
+          $tag = "classic-v$env:CLASSIC_VERSION"
+          $assets = @(Get-ChildItem release-assets -File | ForEach-Object FullName)
+          gh release create $tag @assets --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title "Билеты: классический вид $env:CLASSIC_VERSION" --notes 'Классическая версия. Обновление через кнопку с сохранением данных и оформления.' --draft --prerelease
+          if ($LASTEXITCODE -ne 0) { throw 'Classic release upload failed' }
+          gh release edit $tag --repo $env:GITHUB_REPOSITORY --draft=false --latest=false
+          if ($LASTEXITCODE -ne 0) { throw 'Classic release publication failed' }
+          gh release view classic --repo $env:GITHUB_REPOSITORY *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create classic --repo $env:GITHUB_REPOSITORY --target $env:GITHUB_SHA --title 'Обновления классической версии' --notes 'Канал обновления классической версии.' --prerelease --latest=false
+            if ($LASTEXITCODE -ne 0) { throw 'Classic channel creation failed' }
+          }
+          # All immutable versioned assets are available before changing the channel pointer.
+          gh release upload classic release-assets/update-manifest.json --clobber --repo $env:GITHUB_REPOSITORY
+          if ($LASTEXITCODE -ne 0) { throw 'Classic channel manifest upload failed' }

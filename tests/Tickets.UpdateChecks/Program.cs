@@ -1,4 +1,5 @@
 using Tickets.Update;
+if(args.Contains("--classic-channel")){ClassicChannelChecks.Run();return 0;}
 var failures=0;
 void Check(bool b,string message){if(!b)throw new Exception(message);}
 void Test(string name,Action<string> test){var root=Path.Combine(Path.GetTempPath(),"updater046-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(root);try{test(root);Console.WriteLine("PASS "+name);}catch(Exception e){failures++;Console.WriteLine("FAIL "+name+": "+e.Message);}finally{Directory.Delete(root,true);}}

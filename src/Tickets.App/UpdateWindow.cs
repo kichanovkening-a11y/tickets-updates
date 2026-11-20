@@ -12,7 +12,12 @@ namespace Tickets.App;
 internal sealed class UpdateWindow : EditorWindow
 {
     private UpdateManifest? manifest;
-    private readonly GitHubUpdates client=new();
+#if CLASSIC
+    private static readonly UpdateChannel Channel=UpdateChannel.Classic;
+#else
+    private static readonly UpdateChannel Channel=UpdateChannel.Standard;
+#endif
+    private readonly GitHubUpdates client=new(Channel);
     private readonly CancellationTokenSource cancel=new();
     private bool busy;
     public UpdateWindow(Store store):base(store,"Обновление программы",700,540)
@@ -46,8 +51,8 @@ internal sealed class UpdateWindow : EditorWindow
             if(busy||manifest is null)return;
             try
             {
-                var exe=Path.Combine(AppContext.BaseDirectory,"Tickets.Updater.exe");
-                if(!File.Exists(exe))throw new IOException("Не найден Tickets.Updater.exe. Перенесите полную папку программы.");
+                var exe=Path.Combine(AppContext.BaseDirectory,Channel.UpdaterExecutable);
+                if(!File.Exists(exe))throw new IOException("Не найден "+Channel.UpdaterExecutable+". Перенесите полную папку программы.");
                 var start=new ProcessStartInfo(exe){UseShellExecute=false,WorkingDirectory=AppContext.BaseDirectory};
                 foreach(var arg in new[]{"--target",AppContext.BaseDirectory,"--parent",Environment.ProcessId.ToString(),"--repository",manifest.Repository})start.ArgumentList.Add(arg);
                 if(Process.Start(start) is null)throw new IOException("Не удалось запустить обновлятор.");
@@ -68,8 +73,14 @@ internal static class UpdateRunner
             var plan=JsonSerializer.Deserialize<InstallPlan>(File.ReadAllText(planFile))??throw new InvalidDataException("Нет плана установки.");
             if(!int.TryParse(parentPid,out var pid))throw new InvalidDataException("Неизвестен процесс программы.");
             try{using var parent=Process.GetProcessById(pid);if(!parent.WaitForExit(60000))throw new IOException("Закройте программу перед обновлением.");}catch(ArgumentException){}
+#if CLASSIC
+            var channel=UpdateChannel.Classic;
+#else
+            var channel=UpdateChannel.Standard;
+#endif
+            channel.ValidateFiles(plan.Files);
             UpdateFiles.Apply(plan);
-            Process.Start(new ProcessStartInfo(Path.Combine(plan.Target,"Tickets.exe")){UseShellExecute=true,WorkingDirectory=plan.Target});
+            Process.Start(new ProcessStartInfo(Path.Combine(plan.Target,channel.ApplicationExecutable)){UseShellExecute=true,WorkingDirectory=plan.Target});
         }
         catch(Exception ex){MessageBox.Show("Обновление не выполнено.\n\n"+ex.Message,"Билеты",MessageBoxButton.OK,MessageBoxImage.Error);}
     }

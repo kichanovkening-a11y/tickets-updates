@@ -1,5 +1,8 @@
-param([Parameter(Mandatory=$true)][string]$Payload,[Parameter(Mandatory=$true)][string]$Seed,[string]$Legacy,[switch]$Interrupt,[switch]$RejectStartup)
+param([Parameter(Mandatory=$true)][string]$Payload,[Parameter(Mandatory=$true)][string]$Seed,[string]$Legacy,[switch]$Interrupt,[switch]$RejectStartup,[switch]$Classic)
 $ErrorActionPreference='Stop'
+$appName=if($Classic){'Tickets.Classic'}else{'Tickets'}
+$updaterName=if($Classic){'Tickets.Classic.Updater.exe'}else{'Tickets.Updater.exe'}
+$launcherName=if($Classic){'Tickets.Classic.exe'}else{'! Tickets.exe'}
 $root=Join-Path $env:TEMP ('Tickets046-integration-'+[guid]::NewGuid().ToString('N'))
 $target=Join-Path $root 'app';$stage=Join-Path $root 'payload'
 New-Item -ItemType Directory -Force $target,$stage | Out-Null
@@ -7,7 +10,7 @@ New-Item -ItemType Directory -Force $target,$stage | Out-Null
 # canonical directory spelling before taking relative file names.
 $stage=(Get-Item -LiteralPath $stage).FullName
 $target=(Get-Item -LiteralPath $target).FullName
-if($Legacy){Copy-Item "$Legacy\*" $target -Recurse -Force}else{Set-Content "$target\Tickets.dll" "old binary fixture"}
+if($Legacy){Copy-Item "$Legacy\*" $target -Recurse -Force}else{Set-Content "$target\$appName.dll" "old binary fixture"}
 New-Item -ItemType Directory -Force "$target\Data" | Out-Null
 Copy-Item $Seed "$target\Data\tickets.db"
 Copy-Item $Seed "$target\Data\seed.db"
@@ -19,15 +22,15 @@ $files=@(Get-ChildItem $stage -File -Recurse | ForEach-Object {
   @{Path=$relative;Sha256=(Get-FileHash $_.FullName -Algorithm SHA256).Hash}
  }
 })
-foreach($required in @('Tickets.exe','Tickets.dll','Tickets.runtimeconfig.json','Tickets.deps.json','hostfxr.dll','hostpolicy.dll')){
+foreach($required in @("$appName.exe","$appName.dll","$appName.runtimeconfig.json","$appName.deps.json",'hostfxr.dll','hostpolicy.dll')){
  if($required -notin $files.Path){throw "Incomplete test payload: missing $required ($($files.Count) files)"}
 }
 Write-Host "Verified complete integration payload: $($files.Count) files"
 $plan=Join-Path $root 'plan.json'
 @{Target=$target;Stage=$stage;Files=$files}|ConvertTo-Json -Depth 8|Set-Content $plan -Encoding UTF8
-$oldBinaryHash=(Get-FileHash "$target\Tickets.dll").Hash
+$oldBinaryHash=(Get-FileHash "$target\$appName.dll").Hash
 $oldDataHash=(Get-FileHash "$target\Data\tickets.db").Hash
-$updater=Start-Process "$stage\Tickets.Updater.exe" -ArgumentList @('--temporary','--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
+$updater=Start-Process "$stage\$updaterName" -ArgumentList @('--temporary','--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
 try {
  if($RejectStartup){
   $deadline=(Get-Date).AddMinutes(2);$blocked=$false
@@ -50,8 +53,8 @@ try {
   }while((Get-Date) -lt $deadline)
   if(-not $cut){throw 'Did not reach interruption boundary'}
   Start-Sleep -Seconds 1
-  Get-Process | Where-Object {$_.Path -eq "$target\! Tickets.exe"} | ForEach-Object {$null=$_.CloseMainWindow();if(-not $_.WaitForExit(5000)){$_.Kill();$_.WaitForExit()}}
-  $updater=Start-Process "$stage\Tickets.Updater.exe" -ArgumentList @('--temporary','--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
+  Get-Process | Where-Object {$_.Path -eq "$target\$launcherName"} | ForEach-Object {$null=$_.CloseMainWindow();if(-not $_.WaitForExit(5000)){$_.Kill();$_.WaitForExit()}}
+  $updater=Start-Process "$stage\$updaterName" -ArgumentList @('--temporary','--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
  }
  $deadline=(Get-Date).AddMinutes(4);$confirmed=$false
  do {
@@ -73,18 +76,18 @@ try {
  if($RejectStartup){
   if($updater.WaitForExit(1000)){throw 'Updater closed the error window after failed startup'}
   $updater.Refresh();if($updater.MainWindowHandle -eq [IntPtr]::Zero){throw 'Updater error window is not visible'}
-  if((Get-FileHash "$target\Tickets.dll").Hash -ne $oldBinaryHash){throw 'Failed startup did not restore original binary'}
+  if((Get-FileHash "$target\$appName.dll").Hash -ne $oldBinaryHash){throw 'Failed startup did not restore original binary'}
   if((Get-FileHash "$target\Data\tickets.db").Hash -ne $oldDataHash){throw 'Failed startup did not restore original database bytes'}
   Write-Host "PASS failed startup keeps the error window open and restores exact old binary and database: $root"
   return
  }
  if(-not $updater.WaitForExit(10000)){throw 'Updater did not close after successful update and healthy startup'}
  if($updater.ExitCode -ne 0){throw "Updater exited with code $($updater.ExitCode) after successful update"}
- if((Get-FileHash "$target\! Tickets.exe").Hash -ne (Get-FileHash "$target\Tickets.exe").Hash){throw 'Launchers differ'}
- if(-not (Get-Process | Where-Object {$_.Path -eq "$target\! Tickets.exe"})){throw 'New app did not stay running'}
+ if((Get-FileHash "$target\$launcherName").Hash -ne (Get-FileHash "$target\$appName.exe").Hash){throw 'Launchers differ'}
+ if(-not (Get-Process | Where-Object {$_.Path -eq "$target\$launcherName"})){throw 'New app did not stay running'}
  Write-Host "PASS independent updater installs, validates database, preserves settings, confirms healthy leading launcher and closes itself: $root"
 } finally {
- Get-Process | Where-Object {$_.Path -eq "$target\! Tickets.exe" -or $_.Id -eq $updater.Id} | ForEach-Object {
+ Get-Process | Where-Object {$_.Path -eq "$target\$launcherName" -or $_.Id -eq $updater.Id} | ForEach-Object {
   $null=$_.CloseMainWindow();if(-not $_.WaitForExit(5000)){$_.Kill();$_.WaitForExit()}
  }
 }

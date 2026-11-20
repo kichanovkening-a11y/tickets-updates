@@ -8,7 +8,7 @@ permissions:
   contents: write
 concurrency:
   group: tickets-classic-release
-  cancel-in-progress: false
+  cancel-in-progress: true
 jobs:
   build:
     runs-on: windows-2022
@@ -18,13 +18,16 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
-      - name: Compare classic functionality on Windows
+      - name: Verify accounting halls documents and integrations on Windows
         shell: pwsh
         run: |
           if (-not (Test-Path data/seed.db)) { python scripts/restore_seed.py }
           if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
           dotnet run --project tests/Tickets.Tests -- data/seed.db
           if ($LASTEXITCODE -ne 0) { throw 'Accounting, halls, documents and integration checks failed' }
+      - name: Verify classic menus windows search printing and saved modes
+        shell: pwsh
+        run: |
           dotnet run --project tests/Tickets.UiChecks -p:ClassicVisual=true -- data/seed.db --classic-parity
           if ($LASTEXITCODE -ne 0) { throw 'Classic functional parity failed' }
       - name: Build classic application and updater

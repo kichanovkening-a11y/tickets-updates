@@ -98,9 +98,7 @@ public partial class App : Application
             if(updateReceipt is not null)Tickets.Update.UpdateTransaction.PublishHealth(updateReceipt,e.Args[1]);
             if(e.Args.Length==2&&e.Args[0]=="--ticketpro-event"&&long.TryParse(e.Args[1],out var proEventId))
                 Dispatcher.BeginInvoke(new Action(()=>{if(MainWindow is MainWindow main){main.SelectEvent(proEventId);main.OpenTicketPro037();}}));
-#if !CLASSIC
             try{Shortcut023.Ensure(AppContext.BaseDirectory);}catch(IOException){}catch(System.Runtime.InteropServices.COMException){}catch(System.Reflection.TargetInvocationException){}catch(UnauthorizedAccessException){}
-#endif
         }
         catch(Exception ex)
         {

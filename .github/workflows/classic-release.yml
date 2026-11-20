@@ -21,7 +21,7 @@ jobs:
       - name: Compare classic functionality on Windows
         shell: pwsh
         run: |
-          python scripts/restore_seed.py
+          if (-not (Test-Path data/seed.db)) { python scripts/restore_seed.py }
           if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
           dotnet run --project tests/Tickets.Tests -- data/seed.db
           if ($LASTEXITCODE -ne 0) { throw 'Accounting, halls, documents and integration checks failed' }
@@ -33,7 +33,7 @@ jobs:
           $v = (Get-Content version-classic.json | ConvertFrom-Json).version
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid classic version' }
           "CLASSIC_VERSION=$v" >> $env:GITHUB_ENV
-          python scripts/restore_seed.py
+          if (-not (Test-Path data/seed.db)) { python scripts/restore_seed.py }
           if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
           dotnet run --project tests/Tickets.UpdateChecks -- --classic-channel
           if ($LASTEXITCODE -ne 0) { throw 'Classic updater checks failed' }

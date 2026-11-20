@@ -30,7 +30,8 @@ internal static class Shortcut023
     internal static void Ensure(string directory)
     {
         if(!OperatingSystem.IsWindows())return;
-        var target=Path.Combine(directory,"Tickets.exe");if(!File.Exists(target))return;
+        var appName=Assembly.GetExecutingAssembly().GetName().Name!;
+        var target=Path.Combine(directory,appName+".exe");if(!File.Exists(target))return;
         var icon=Path.Combine(directory,"Data","Tickets-red023.ico");Directory.CreateDirectory(Path.GetDirectoryName(icon)!);
         using(var source=Assembly.GetExecutingAssembly().GetManifestResourceStream("Tickets.App.ShortcutRed.ico"))
         {
@@ -39,7 +40,7 @@ internal static class Shortcut023
             if(!File.Exists(icon)||!File.ReadAllBytes(icon).SequenceEqual(current))
             {File.WriteAllBytes(icon+".tmp",current);File.Move(icon+".tmp",icon,true);}
         }
-        var path=Path.Combine(directory,"! Билеты.lnk");
+        var path=Path.Combine(directory,appName=="Tickets.Classic"?"! Билеты — классическая версия.lnk":"! Билеты.lnk");
         var type=Type.GetTypeFromCLSID(new Guid("00021401-0000-0000-C000-000000000046"))!;
         var instance=Activator.CreateInstance(type)!;
         try

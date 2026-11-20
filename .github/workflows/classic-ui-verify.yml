@@ -1,0 +1,22 @@
+name: Verify classic interface
+on:
+  push:
+    branches: [verify/classic-0522-ui]
+permissions:
+  contents: read
+jobs:
+  ui:
+    runs-on: windows-2022
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+      - name: Verify classic interface and printing
+        shell: pwsh
+        run: |
+          python scripts/restore_seed.py
+          if ($LASTEXITCODE -ne 0) { throw 'Seed failed' }
+          dotnet run --project tests/Tickets.UiChecks -p:ClassicVisual=true -- data/seed.db --classic-parity
+          if ($LASTEXITCODE -ne 0) { throw 'Classic UI failed' }

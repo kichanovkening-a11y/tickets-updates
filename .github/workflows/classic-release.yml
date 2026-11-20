@@ -25,37 +25,28 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          foreach ($tested in @('44a48344d0104918ff47e8fa053e5f2b3b88b028','902183a24a546ae1bd91a1d2531e5aa594db7a9a')) {
+          foreach ($tested in @('4724c2f57cc6a3768e2cd22fd7c369cf443789c4','902183a24a546ae1bd91a1d2531e5aa594db7a9a')) {
             git fetch --no-tags --depth=1 origin $tested
             if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect tested sources' }
             git diff --quiet $tested HEAD -- src tests data scripts
             if ($LASTEXITCODE -eq 1) { Write-Host 'Application changed; run checks again'; exit 0 }
             if ($LASTEXITCODE -ne 0) { throw 'Cannot compare tested sources' }
           }
-          $core = gh api "repos/$env:GITHUB_REPOSITORY/actions/jobs/136479509925" | ConvertFrom-Json
+          $core = gh api "repos/$env:GITHUB_REPOSITORY/actions/jobs/136493648080" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Cannot verify accounting checks' }
           $check = $core.steps | Where-Object name -eq 'Verify accounting halls documents and integrations on Windows'
           if ($check.conclusion -eq 'success') { 'core=true' >> $env:GITHUB_OUTPUT }
           $ui = gh api "repos/$env:GITHUB_REPOSITORY/actions/jobs/136481093814" | ConvertFrom-Json
           if ($LASTEXITCODE -ne 0) { throw 'Cannot verify classic interface checks' }
           if ($ui.conclusion -eq 'success') { 'ui=true' >> $env:GITHUB_OUTPUT }
-          if ($check.conclusion -ne 'success') {
-            # Resume the successful prefix from job 136479509925 only after source equality above.
-            $sourcePath = 'tests/Tickets.Tests/Program.cs'
-            $source = [IO.File]::ReadAllText($sourcePath)
-            $prefixInit = 'var total = 0;' + [Environment]::NewLine + 'var passedPrefix = new Queue<string>(System.Text.Json.JsonSerializer.Deserialize<string[]>(File.ReadAllText(".github/classic-0522-passed-prefix.json"))!);'
-            $skip = '    if(passedPrefix.Count>0){if(passedPrefix.Peek()==name){passedPrefix.Dequeue();total++;Console.WriteLine("REUSE "+name);return;}passedPrefix.Clear();}' + [Environment]::NewLine + '    total++;'
-            if (-not $source.Contains('var total = 0;') -or -not $source.Contains('    total++;')) { throw 'Test runner checkpoint markers changed' }
-            $source = $source.Replace('    total++;',$skip).Replace('var total = 0;',$prefixInit)
-            [IO.File]::WriteAllText($sourcePath,$source)
-            Write-Host 'Resuming after up to 276 completed independent checks; a name mismatch stops reuse.'
-          }
       - name: Verify accounting halls documents and integrations on Windows
         if: steps.cached.outputs.core != 'true'
         shell: pwsh
         run: |
-          if (-not (Test-Path data/seed.db)) { python scripts/restore_seed.py }
-          if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
+          if (-not (Test-Path data/seed.db)) {
+            python scripts/restore_seed.py
+            if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
+          }
           dotnet run --project tests/Tickets.Tests -- data/seed.db
           if ($LASTEXITCODE -ne 0) { throw 'Accounting, halls, documents and integration checks failed' }
       - name: Verify classic menus windows search printing and saved modes
@@ -70,8 +61,10 @@ jobs:
           $v = (Get-Content version-classic.json | ConvertFrom-Json).version
           if ($v -notmatch '^\d+\.\d+\.\d+$') { throw 'Invalid classic version' }
           "CLASSIC_VERSION=$v" >> $env:GITHUB_ENV
-          if (-not (Test-Path data/seed.db)) { python scripts/restore_seed.py }
-          if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
+          if (-not (Test-Path data/seed.db)) {
+            python scripts/restore_seed.py
+            if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
+          }
           dotnet run --project tests/Tickets.UpdateChecks -- --classic-channel
           if ($LASTEXITCODE -ne 0) { throw 'Classic updater checks failed' }
           dotnet publish src/Tickets.App/Tickets.App.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:ClassicVisual=true "-p:Version=$v" -o release/Tickets-Classic

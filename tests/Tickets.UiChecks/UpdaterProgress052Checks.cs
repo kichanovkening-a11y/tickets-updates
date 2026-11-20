@@ -5,7 +5,7 @@ internal static class UpdaterProgress052Checks
 {
     internal static void Run()
     {
-        var type=System.Reflection.Assembly.Load("Tickets.Updater").GetType("Tickets.Updater.DispatcherProgress");
+        var type=System.Reflection.Assembly.Load(typeof(Tickets.App.MainWindow).Assembly.GetName().Name=="Tickets.Classic"?"Tickets.Classic.Updater":"Tickets.Updater").GetType("Tickets.Updater.DispatcherProgress");
         if(type is null)throw new Exception("updater progress must explicitly marshal to the dispatcher");
         var window=new Window();window.Show();var called=false;var uiThread=Environment.CurrentManagedThreadId;
         Action<UpdateProgress> callback=p=>{if(Environment.CurrentManagedThreadId!=uiThread)throw new Exception("progress callback left UI thread");called=p.Completed==3;};

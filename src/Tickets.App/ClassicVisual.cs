@@ -55,7 +55,6 @@ public partial class MainWindow
     private void InitializeClassic()
     {
         Title = "Распространение театральных билетов · Классическая версия";
-        SeparateWindows = true;
         TopBanner043.Visibility = Visibility.Collapsed;
         WorkspaceNavigation.Background = ClassicVisual.Blue;
         WorkspaceNavigation.Padding = new Thickness(8);
@@ -68,6 +67,11 @@ public partial class MainWindow
         AddNavigation("Выдача билетов",()=>ShowClassicIssue());
         AddNavigation("Редактор схем",()=>Run(()=>{HallsClick(this,new RoutedEventArgs());RefreshClassicCatalog();}));
         AddNavigation("Настройки",()=>SettingsClick(this,new RoutedEventArgs()));
+        ((Panel)SearchBox.Parent).Children.Remove(SearchBox);
+        SearchBox.Width=190;SearchBox.Margin=new Thickness(0,4,0,0);
+        nav.Children.Add(new TextBlock{Text="Поиск",Margin=new Thickness(4,14,0,0)});
+        nav.Children.Add(SearchBox);
+        SearchBox.TextChanged+=(_,_)=>{if(classicCatalog?.Visibility==Visibility.Visible)RefreshClassicCatalog();};
         var body = (UIElement)Content;
         Content = null;
         var host = new Grid();
@@ -75,7 +79,11 @@ public partial class MainWindow
         classicCatalog = BuildClassicCatalog();
         host.Children.Add(classicCatalog);
         root.Children.Add(host);
-        Content = root;
+        // Keep embedded dialogs above both the catalog and the classic navigation.
+        ((Panel)DialogLayer.Parent).Children.Remove(DialogLayer);
+        var outer=new Grid();outer.Children.Add(root);outer.Children.Add(DialogLayer);
+        DialogLayer.IsVisibleChanged+=(_,_)=>root.IsEnabled=!DialogLayer.IsVisible;
+        Content = outer;
         Loaded += (_,_)=>ShowClassicCatalog(0);
 
         void AddNavigation(string label,Action action)
@@ -193,7 +201,10 @@ public partial class MainWindow
     {
         var id=(classicPerformances.SelectedItem as PerformanceInfo)?.Id;
         var venueId=(classicVenues.SelectedItem as VenueInfo)?.Id;
-        classicPerformances.ItemsSource=store.Performances();
+        var matching=store.Events().Where(e=>SearchText.Matches(e.Title+" "+e.Venue+" "+e.Date,SearchBox.Text))
+            .Select(e=>CatalogText.Key(e.Title)).ToHashSet();
+        classicPerformances.ItemsSource=store.Performances()
+            .Where(p=>SearchText.Matches(p.Title,SearchBox.Text)||matching.Contains(CatalogText.Key(p.Title))).ToArray();
         classicVenues.ItemsSource=store.Venues();
         classicPerformances.SelectedItem=classicPerformances.Items.Cast<PerformanceInfo>().FirstOrDefault(p=>p.Id==id);
         classicVenues.SelectedItem=classicVenues.Items.Cast<VenueInfo>().FirstOrDefault(v=>v.Id==venueId);

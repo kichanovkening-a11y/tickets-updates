@@ -6,6 +6,11 @@ namespace Tickets.App;
 
 public partial class App : Application
 {
+#if CLASSIC
+    private static Tickets.Update.UpdateChannel UpdateChannelForApp=>Tickets.Update.UpdateChannel.Classic;
+#else
+    private static Tickets.Update.UpdateChannel UpdateChannelForApp=>Tickets.Update.UpdateChannel.Standard;
+#endif
     private FileStream? sessionLock;
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -36,7 +41,7 @@ public partial class App : Application
             string? updateReceipt=null;
             if(Tickets.Update.UpdateTransaction.HasPending(AppContext.BaseDirectory))
             {
-                if(e.Args.Length!=3||e.Args[0]!="--updated")throw new IOException("Обновление не завершено. Запустите Tickets.Updater.exe для восстановления.");
+                if(e.Args.Length!=3||e.Args[0]!="--updated")throw new IOException("Обновление не завершено. Запустите "+UpdateChannelForApp.UpdaterExecutable+" для восстановления.");
                 var updates=Path.Combine(AppContext.BaseDirectory,".updates");
                 var id=System.Text.Json.JsonSerializer.Deserialize<string>(File.ReadAllText(Path.Combine(updates,"pending.json")));
                 if(id is null||!System.Text.RegularExpressions.Regex.IsMatch(id,"^transaction-[a-f0-9]{32}$"))throw new IOException("Повреждён журнал обновления.");
@@ -99,7 +104,7 @@ public partial class App : Application
         }
         catch(Exception ex)
         {
-            MessageBox.Show("Не удалось открыть программу. Распакуйте всю папку в место, где разрешена запись, и запустите Tickets.exe.\n\n"+ex.Message,"Билеты");
+            MessageBox.Show("Не удалось открыть программу. Распакуйте всю папку в место, где разрешена запись, и запустите "+UpdateChannelForApp.ApplicationExecutable+".\n\n"+ex.Message,"Билеты");
             Shutdown(1);
         }
     }

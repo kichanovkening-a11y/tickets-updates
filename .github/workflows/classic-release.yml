@@ -18,6 +18,15 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Compare classic functionality on Windows
+        shell: pwsh
+        run: |
+          python scripts/restore_seed.py
+          if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
+          dotnet run --project tests/Tickets.Tests -- data/seed.db
+          if ($LASTEXITCODE -ne 0) { throw 'Accounting, halls, documents and integration checks failed' }
+          dotnet run --project tests/Tickets.UiChecks -p:ClassicVisual=true -- data/seed.db --classic-parity
+          if ($LASTEXITCODE -ne 0) { throw 'Classic functional parity failed' }
       - name: Build classic application and updater
         shell: pwsh
         run: |
@@ -45,6 +54,9 @@ jobs:
           dotnet publish src/Tickets.Updater/Tickets.Updater.csproj -c Release -r win-x64 --self-contained true -p:RuntimeFrameworkVersion=8.0.32 -p:ClassicVisual=true "-p:Version=$env:CLASSIC_VERSION" -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o release/bootstrap
           if ($LASTEXITCODE -ne 0) { throw 'Classic bootstrap build failed' }
           Copy-Item release/bootstrap/Tickets.Classic.Updater.exe release-assets/Tickets-Classic-Update.exe
+      - name: Verify standalone updater for previously issued classic builds
+        shell: pwsh
+        run: ./scripts/check_updater_windows.ps1 -Payload (Resolve-Path release/Tickets-Classic).Path -Seed (Resolve-Path data/seed.db).Path -Classic -Bootstrap (Resolve-Path release-assets/Tickets-Classic-Update.exe).Path
       - name: Publish classic channel without changing standard updates
         shell: pwsh
         env:

@@ -56,11 +56,17 @@ internal static class Program
                 {
                     var runner=Path.Combine(work,"runner");Directory.CreateDirectory(runner);
                     await Task.Run(()=>{
+                        if(!File.Exists(Path.Combine(AppContext.BaseDirectory,Path.GetFileNameWithoutExtension(Channel.UpdaterExecutable)+".dll")))
+                        {
+                            File.Copy(Environment.ProcessPath??throw new IOException("Не найден файл обновлятора."),Path.Combine(runner,Channel.UpdaterExecutable));
+                            return;
+                        }
                         var files=Directory.EnumerateFiles(AppContext.BaseDirectory).Where(file=>{var name=Path.GetFileName(file);return name.EndsWith(".exe",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".dll",StringComparison.OrdinalIgnoreCase)||name.EndsWith(".deps.json")||name.EndsWith(".runtimeconfig.json");}).ToArray();
                         for(var i=0;i<files.Length;i++){var name=Path.GetFileName(files[i]);File.Copy(files[i],Path.Combine(runner,name));((IProgress<UpdateProgress>)progress).Report(new("Подготовка обновлятора",i+1,files.Length,name));}
                     });
                     var start=new ProcessStartInfo(Path.Combine(runner,Channel.UpdaterExecutable)){UseShellExecute=false,WorkingDirectory=runner};
                     foreach(var arg in new[]{"--target",target,"--repository",Arg("--repository","kichanovkening-a11y/tickets-updates"),"--temporary"})start.ArgumentList.Add(arg);
+                    if(Arg("--plan").Length>0){start.ArgumentList.Add("--plan");start.ArgumentList.Add(Arg("--plan"));}
                     _ = Process.Start(start)??throw new IOException("Не удалось запустить обновлятор.");busy=false;window.Close();return;
                 }
                 Stage("Проверка незавершённых установок…");await Task.Run(()=>UpdateTransaction.Recover(target));

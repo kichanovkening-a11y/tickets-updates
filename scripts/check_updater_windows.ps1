@@ -1,4 +1,4 @@
-param([Parameter(Mandatory=$true)][string]$Payload,[Parameter(Mandatory=$true)][string]$Seed,[string]$Legacy,[switch]$Interrupt,[switch]$RejectStartup,[switch]$Classic)
+param([Parameter(Mandatory=$true)][string]$Payload,[Parameter(Mandatory=$true)][string]$Seed,[string]$Legacy,[switch]$Interrupt,[switch]$RejectStartup,[switch]$Classic,[string]$Bootstrap)
 $ErrorActionPreference='Stop'
 $appName=if($Classic){'Tickets.Classic'}else{'Tickets'}
 $updaterName=if($Classic){'Tickets.Classic.Updater.exe'}else{'Tickets.Updater.exe'}
@@ -30,7 +30,11 @@ $plan=Join-Path $root 'plan.json'
 @{Target=$target;Stage=$stage;Files=$files}|ConvertTo-Json -Depth 8|Set-Content $plan -Encoding UTF8
 $oldBinaryHash=(Get-FileHash "$target\$appName.dll").Hash
 $oldDataHash=(Get-FileHash "$target\Data\tickets.db").Hash
-$updater=Start-Process "$stage\$updaterName" -ArgumentList @('--temporary','--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
+if($Bootstrap){
+ $updater=Start-Process $Bootstrap -ArgumentList @('--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
+}else{
+ $updater=Start-Process "$stage\$updaterName" -ArgumentList @('--temporary','--target',"`"$target`"",'--plan',"`"$plan`"") -PassThru
+}
 try {
  if($RejectStartup){
   $deadline=(Get-Date).AddMinutes(2);$blocked=$false
@@ -67,7 +71,7 @@ try {
    $journals=@(Get-ChildItem "$target\.updates\transaction-*\journal.json" -ErrorAction SilentlyContinue | Sort-Object CreationTimeUtc -Descending | Select-Object -First 1)
    foreach($j in $journals){if((Get-Content $j.FullName -Raw|ConvertFrom-Json).Phase -eq $(if($RejectStartup){'restored'}else{'confirmed'})){$confirmed=$true}}
    if($confirmed){break}
-   throw 'Updater exited before confirmation'
+   if(-not $Bootstrap){throw 'Updater exited before confirmation'}
   }
  } while((Get-Date) -lt $deadline)
  if(-not $confirmed){throw "No healthy-start confirmation: $root"}

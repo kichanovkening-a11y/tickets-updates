@@ -20,7 +20,7 @@ internal static class Program
     {
         var work=Path.Combine(Path.GetTempPath(),"Tickets-ui-"+Guid.NewGuid().ToString("N"));Directory.CreateDirectory(work);
         var app=new Application{ShutdownMode=ShutdownMode.OnExplicitShutdown};
-        app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/Tickets;component/UiResources.xaml",UriKind.Relative)});
+        app.Resources.MergedDictionaries.Add(new ResourceDictionary{Source=new Uri("/"+typeof(Tickets.App.MainWindow).Assembly.GetName().Name+";component/UiResources.xaml",UriKind.Relative)});
         var dialogGuard=new DispatcherTimer(DispatcherPriority.Background){Interval=TimeSpan.FromMilliseconds(500)};
         dialogGuard.Tick+=(_,_)=>EnumWindows((window,_)=>{
             GetWindowThreadProcessId(window,out var process);var name=new System.Text.StringBuilder(128);GetClassName(window,name,name.Capacity);
@@ -36,6 +36,7 @@ internal static class Program
         {
             if(args.Length>0&&Path.GetFileName(args[0]).Equals("seed.db",StringComparison.OrdinalIgnoreCase)&&!args.Any(a=>a.Contains("live",StringComparison.OrdinalIgnoreCase)))
             {var fixture=Path.Combine(work,"current-seed.db");File.Copy(args[0],fixture);FixtureDates047.PrepareSeedCopy(fixture);args[0]=fixture;}
+            if(args.Contains("--classic-parity")){ClassicParityChecks.Run(args[0],work);return 0;}
             if(args.Contains("--poster-choice"))
             {
                 var copy=Path.Combine(work,"poster-choice.db");File.Copy(args[0],copy);var fixtureStore=new Store(copy);

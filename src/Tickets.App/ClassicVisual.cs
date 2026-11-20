@@ -100,9 +100,12 @@ public partial class MainWindow
             ("＋ Создать",()=>Run(()=>{new PerformanceWindow(store).ShowDialog();RefreshClassicCatalog();})),
             ("Изменить",()=>Run(()=>{PerformancesClick(this,new RoutedEventArgs());RefreshClassicCatalog();})),
             ("Удалить",()=>Run(()=>{
-                if(classicPerformances.SelectedItem is PerformanceInfo p &&
-                    MessageBox.Show(this,$"Удалить спектакль «{p.Title}» и его показы?","Удаление",MessageBoxButton.YesNo,MessageBoxImage.Question)==MessageBoxResult.Yes)
-                    store.DeletePerformance(p.Id);
+                if(classicPerformances.SelectedItem is not PerformanceInfo p)return;
+                var linked=store.PerformanceDeletionSummary(p.Id);
+                var text=$"Полностью удалить спектакль «{p.Title}»?\n\nПоказы, включая прошедшие: {linked.Shows}. Накладные: {linked.Issues}. Билеты: {linked.Tickets}.\nПеред удалением сохранится резервная копия.";
+                if(MessageBox.Show(this,text,"Удаление спектакля",MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,MessageBoxResult.No)==MessageBoxResult.Yes)
+                    store.DeletePerformance(p.Id,includeArchived:true);
                 RefreshClassicCatalog();
             })));
         grid.Children.Add(shows);

@@ -95,6 +95,8 @@ public sealed partial class Store
 
     public void DeletePerformance(long id)=>DeletePerformanceOrEvents(id,null);
 
+    public void DeletePerformance(long id,bool includeArchived)=>DeletePerformanceOrEvents(id,null,includeArchived);
+
     /// <summary>Explicit event purge, leaving shared halls, seat geometry and price plans intact.</summary>
     public void DeleteEventsPermanently(IReadOnlyList<long> eventIds)
     {
@@ -107,7 +109,7 @@ public sealed partial class Store
         catch(SqliteException ex) when(ex.SqliteErrorCode is 5 or 6){throw new TicketException("Данные удалены, резервная копия сохранена. Уплотнение базы отложено: файл занят другим процессом.");}
     }
 
-    private void DeletePerformanceOrEvents(long id,IReadOnlyList<long>? selectedEvents)
+    private void DeletePerformanceOrEvents(long id,IReadOnlyList<long>? selectedEvents,bool includeArchived=false)
     {
         // A complete recoverable copy is made before deleting any linked records/files.
         if(selectedEvents is null)PerformanceDeletionSummary(id);
@@ -122,7 +124,7 @@ public sealed partial class Store
             var name=selectedEvents is null?title.ExecuteScalar() as string??throw new TicketException("Спектакль не найден."):"";var key=CatalogText.Key(name);
             using(var create=Command(c,"CREATE TEMP TABLE deleting_events(id INTEGER PRIMARY KEY); CREATE TEMP TABLE deleting_issues(id INTEGER PRIMARY KEY)")){create.Transaction=tx;create.ExecuteNonQuery();}
             var events=new List<long>();using(var q=Command(c,"SELECT id,title FROM event")){q.Transaction=tx;using var r=q.ExecuteReader();while(r.Read())if(selectedEvents is null?CatalogText.Key(r.GetString(1))==key:selectedEvents.Contains(r.GetInt64(0)))events.Add(r.GetInt64(0));}
-            foreach(var eventId in events)RequireWritableEvent(c,tx,eventId);
+            if(!includeArchived)foreach(var eventId in events)RequireWritableEvent(c,tx,eventId);
             foreach(var e in events){using var add=Command(c,"INSERT INTO deleting_events VALUES($e)","$e",e);add.Transaction=tx;add.ExecuteNonQuery();}
             using(var add=Command(c,"INSERT INTO deleting_issues SELECT id FROM issue_batch WHERE event_id IN(SELECT id FROM deleting_events)")){add.Transaction=tx;add.ExecuteNonQuery();}
             var journalPath=System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!,"journal-columns-by-event.json");

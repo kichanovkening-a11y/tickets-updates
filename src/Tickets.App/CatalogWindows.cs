@@ -15,6 +15,9 @@ internal class EditorWindow : Window
     internal Store PrintStore=>Store;
     internal EditorWindow(Store store,string title,double width=1100,double height=760)
     {
+#if CLASSIC
+        Background=ClassicVisual.Gray;FontFamily=new FontFamily("Tahoma");FontSize=14;FontWeight=FontWeights.Normal;
+#endif
         Store=store; Title=title; Owner=Application.Current.MainWindow; WindowStartupLocation=WindowStartupLocation.CenterOwner;
         Width=Math.Min(width,SystemParameters.WorkArea.Width); Height=Math.Min(height,SystemParameters.WorkArea.Height);
         MinWidth=Math.Min(650,Width); MinHeight=Math.Min(450,Height);

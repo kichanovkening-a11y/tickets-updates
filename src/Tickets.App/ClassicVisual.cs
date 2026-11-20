@@ -171,6 +171,21 @@ public partial class MainWindow
         return new GroupBox{Header=title,Content=panel};
     }
 
+    internal void VerifyClassicNavigation()
+    {
+        classicFuture.IsChecked=false;
+        classicPerformances.SelectedItem=classicPerformances.Items.Cast<PerformanceInfo>()
+            .FirstOrDefault(p=>store.Events().Any(e=>CatalogText.Key(e.Title)==CatalogText.Key(p.Title)));
+        if(classicDates.Items.Count==0)throw new InvalidOperationException("Не загрузилось расписание спектакля.");
+        classicDates.SelectedIndex=0;
+        var selected=(EventInfo)classicDates.SelectedItem;
+        ShowClassicIssue();
+        if(Workspace.Visibility!=Visibility.Visible||current?.Id!=selected.Id)
+            throw new InvalidOperationException("Не открылся выбранный сеанс.");
+        ShowClassicCatalog(0);
+        classicFuture.IsChecked=true;
+    }
+
     private void RefreshClassicCatalog()
     {
         var id=(classicPerformances.SelectedItem as PerformanceInfo)?.Id;

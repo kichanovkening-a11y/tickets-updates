@@ -65,15 +65,26 @@ public partial class App : Application
                 {
                     try
                     {
-                        MainWindow.UpdateLayout();
-                        var dpi=System.Windows.Media.VisualTreeHelper.GetDpi(MainWindow);
-                        var image=new System.Windows.Media.Imaging.RenderTargetBitmap(
-                            (int)(MainWindow.ActualWidth*dpi.DpiScaleX),(int)(MainWindow.ActualHeight*dpi.DpiScaleY),
-                            96*dpi.DpiScaleX,96*dpi.DpiScaleY,System.Windows.Media.PixelFormats.Pbgra32);
-                        image.Render(MainWindow);
-                        var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();
-                        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
-                        using var output=File.Create(e.Args[1]);encoder.Save(output);
+                        void Capture(Window window,string path)
+                        {
+                            window.UpdateLayout();
+                            var dpi=System.Windows.Media.VisualTreeHelper.GetDpi(window);
+                            var image=new System.Windows.Media.Imaging.RenderTargetBitmap(
+                                (int)(window.ActualWidth*dpi.DpiScaleX),(int)(window.ActualHeight*dpi.DpiScaleY),
+                                96*dpi.DpiScaleX,96*dpi.DpiScaleY,System.Windows.Media.PixelFormats.Pbgra32);
+                            image.Render(window);
+                            var encoder=new System.Windows.Media.Imaging.PngBitmapEncoder();
+                            encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(image));
+                            using var output=File.Create(path);encoder.Save(output);
+                        }
+                        Capture(MainWindow,e.Args[1]);
+                        var classic=(MainWindow)MainWindow;
+                        classic.VerifyClassicNavigation();
+                        var settings=new SettingsWindow(store,classic);settings.Show();
+                        Capture(settings,e.Args[1]+".settings.png");settings.Close();
+                        var hall=new HallEditorWindow(store);hall.Show();
+                        Capture(hall,e.Args[1]+".hall.png");hall.Close();
+                        File.WriteAllText(e.Args[1]+".ok","PASS catalog, schedule, selected showing, settings and hall editor");
                         MainWindow.Close();
                     }
                     catch(Exception ex){File.WriteAllText(e.Args[1]+".error",ex.ToString());Shutdown(1);}

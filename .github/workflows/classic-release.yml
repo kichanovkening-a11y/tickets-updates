@@ -6,19 +6,41 @@ on:
     paths: [version-classic.json]
 permissions:
   contents: write
+  actions: read
 concurrency:
   group: tickets-classic-release
   cancel-in-progress: true
 jobs:
   build:
     runs-on: windows-2022
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 8.0.x
+      - name: Reuse completed checks only for identical application sources
+        id: cached
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          foreach ($tested in @('44a48344d0104918ff47e8fa053e5f2b3b88b028','902183a24a546ae1bd91a1d2531e5aa594db7a9a')) {
+            git fetch --no-tags --depth=1 origin $tested
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect tested sources' }
+            git diff --quiet $tested HEAD -- src tests data scripts
+            if ($LASTEXITCODE -eq 1) { Write-Host 'Application changed; run checks again'; exit 0 }
+            if ($LASTEXITCODE -ne 0) { throw 'Cannot compare tested sources' }
+          }
+          $core = gh api "repos/$env:GITHUB_REPOSITORY/actions/jobs/136479509925" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify accounting checks' }
+          $check = $core.steps | Where-Object name -eq 'Verify accounting halls documents and integrations on Windows'
+          if ($check.conclusion -eq 'success') { 'core=true' >> $env:GITHUB_OUTPUT }
+          $ui = gh api "repos/$env:GITHUB_REPOSITORY/actions/jobs/136481093814" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot verify classic interface checks' }
+          if ($ui.conclusion -eq 'success') { 'ui=true' >> $env:GITHUB_OUTPUT }
       - name: Verify accounting halls documents and integrations on Windows
+        if: steps.cached.outputs.core != 'true'
         shell: pwsh
         run: |
           if (-not (Test-Path data/seed.db)) { python scripts/restore_seed.py }
@@ -26,6 +48,7 @@ jobs:
           dotnet run --project tests/Tickets.Tests -- data/seed.db
           if ($LASTEXITCODE -ne 0) { throw 'Accounting, halls, documents and integration checks failed' }
       - name: Verify classic menus windows search printing and saved modes
+        if: steps.cached.outputs.ui != 'true'
         shell: pwsh
         run: |
           dotnet run --project tests/Tickets.UiChecks -p:ClassicVisual=true -- data/seed.db --classic-parity

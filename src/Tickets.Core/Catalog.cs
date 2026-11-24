@@ -78,6 +78,17 @@ public sealed partial class Store
         using var cmd=Command(c,"INSERT OR IGNORE INTO performance(title,name_key) VALUES($n,$k)","$n",title,"$k",key); cmd.Transaction=tx; cmd.ExecuteNonQuery();
         using var find=Command(c,"SELECT id FROM performance WHERE name_key=$k","$k",key); find.Transaction=tx; var id=Convert.ToInt64(find.ExecuteScalar()); tx.Commit(); return id;
     }
+    public void RenamePerformance(long id,string title)
+    {
+        title=Required(title,"Спектакль");using var c=Open();using var tx=c.BeginTransaction(deferred:false);
+        using var find=Command(c,"SELECT title FROM performance WHERE id=$id","$id",id);find.Transaction=tx;
+        var previous=find.ExecuteScalar() as string??throw new TicketException("Спектакль не найден.");
+        using var duplicate=Command(c,"SELECT COUNT(*) FROM performance WHERE id<>$id AND name_key=$k","$id",id,"$k",title.Normalize().ToUpperInvariant());duplicate.Transaction=tx;
+        if(Convert.ToInt64(duplicate.ExecuteScalar())>0)throw new TicketException("Спектакль с таким названием уже существует.");
+        using var update=Command(c,"UPDATE performance SET title=$t,name_key=$k WHERE id=$id","$t",title,"$k",title.Normalize().ToUpperInvariant(),"$id",id);update.Transaction=tx;update.ExecuteNonQuery();
+        using var events=Command(c,"UPDATE event SET title=$t WHERE title=$old","$t",title,"$old",previous);events.Transaction=tx;events.ExecuteNonQuery();
+        tx.Commit();
+    }
     public List<DraftSeat> HallDraft(long venueId)
     {
         using var c=Open();using var cmd=Command(c,"SELECT z.name,s.row_label,s.number,s.x,s.y,h.seat_id IS NOT NULL,(SELECT anchors FROM hall_row_anchors a WHERE a.seat_id=s.id),(SELECT caption FROM hall_sector_caption_029 cap WHERE cap.venue_id=z.venue_id AND cap.sector_id=z.id) FROM seat s JOIN sector z ON z.venue_id=s.venue_id AND z.id=s.sector_id LEFT JOIN hall_hidden_seat h ON h.seat_id=s.id WHERE s.venue_id=$v AND NOT EXISTS(SELECT 1 FROM catalog_hidden x WHERE x.kind='sector' AND x.entity_key=CAST(s.venue_id AS TEXT)||':'||CAST(s.sector_id AS TEXT)) ORDER BY z.y,z.x,s.id","$v",venueId);

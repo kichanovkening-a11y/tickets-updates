@@ -26,6 +26,7 @@ public partial class MainWindow
             }
         };
     }
+    internal void OpenTicketBlanksFromSettings()=>TicketBlanksClick(this,new RoutedEventArgs());
     private void SettingsClick(object sender,RoutedEventArgs e)=>Run(()=>new SettingsWindow(store,this).ShowDialog());
     internal void SaveWindowSettings(bool separate)
     {
@@ -34,6 +35,7 @@ public partial class MainWindow
     internal bool? PresentEditor(EditorWindow editor)
     {
         if(SeparateWindows)return editor.ShowSeparateDialog();
+        DialogLayer.IsEnabled=true;
         var body=editor.Content as UIElement??throw new InvalidOperationException("Нет содержимого формы.");editor.Content=null;editor.IsInline=true;
         var page=new Grid{Background=new SolidColorBrush(Color.FromArgb(105,15,23,42))};
         var card=new Border{Background=Brushes.White,BorderBrush=Brushes.SlateGray,BorderThickness=new Thickness(1),Margin=new Thickness(12),
@@ -96,8 +98,17 @@ internal sealed class SettingsWindow:EditorWindow
     {
         var form=new StackPanel{Margin=new Thickness(25)};Content=new ScrollViewer{Content=form,VerticalScrollBarVisibility=ScrollBarVisibility.Auto};
         var separate=new CheckBox{Content="Открывать формы в отдельных окнах",IsChecked=main.SeparateWindows,Margin=new Thickness(0,15,0,20),FontSize=17};form.Children.Add(separate);
+        separate.Checked+=(_,_)=>Try(()=>main.SaveWindowSettings(true));
+        separate.Unchecked+=(_,_)=>Try(()=>main.SaveWindowSettings(false));
         form.Children.Add(new TextBlock{Text="По умолчанию формы открываются внутри главного окна. Настройка применяется к следующим открываемым формам.",TextWrapping=TextWrapping.Wrap});
         var sender=Field(form,"От кого по умолчанию",store.Sender);
+        var other=new CheckBox{Content="Выбрать другую организацию",Margin=new Thickness(0,8,0,4)};form.Children.Add(other);
+        var choices=new ComboBox{ItemsSource=store.Senders(),Visibility=Visibility.Collapsed};form.Children.Add(choices);
+        sender.IsReadOnly=true;
+        other.Checked+=(_,_)=>{choices.Visibility=Visibility.Visible;};
+        other.Unchecked+=(_,_)=>{choices.Visibility=Visibility.Collapsed;sender.Text=store.Sender;};
+        choices.SelectionChanged+=(_,_)=>{if(choices.SelectedItem is string value)sender.Text=value;};
+        Button(form,"Бланки печати",()=>main.OpenTicketBlanksFromSettings());
         var directory=Field(form,"Папка накладных и спецификаций",store.DocumentsDirectory);
         Button(form,"Выбрать папку…",()=>{var dialog=new Microsoft.Win32.OpenFolderDialog{Title="Папка документов"};if(System.IO.Directory.Exists(directory.Text))dialog.InitialDirectory=directory.Text;if(dialog.ShowDialog(DialogOwner)==true)directory.Text=dialog.FolderName;});
         Button(form,"Обновление",()=>new UpdateWindow(store).ShowDialog());

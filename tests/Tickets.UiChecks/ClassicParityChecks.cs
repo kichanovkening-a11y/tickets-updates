@@ -52,9 +52,11 @@ internal static class ClassicParityChecks
             }
             main.GetType().GetMethod("ShowClassicIssue",Private)!.Invoke(main,null);Pump();
             var labelsIssue=Tree(main).OfType<Button>().Where(b=>b.IsVisible).Select(b=>b.Content?.ToString()).ToArray();
-            foreach(var label in new[]{"Залы","Спектакли","Получатели / организации","Расценовки","Бланки печати","Новый показ"})
+            foreach(var label in new[]{"Получатели","Расценовки","Настройки"})
                 Check(labelsIssue.Contains(label),"classic issuance command: "+label);
             Check(search.IsVisible,"search is reachable from classic issuance");
+            Check(((FrameworkElement)main.FindName("HomePanel")).IsVisible,"issuance opens poster home");
+            Check(!labelsIssue.Contains("Новый показ")&&!labelsIssue.Contains("Бланки печати"),"duplicate commands removed from issuance");
             main.SeparateWindows=true;
             Agreed052UiChecks.Run(store);
             Console.WriteLine("PASS classic navigation, command parity, search, persisted modes, embedded overlays, hall editing and price-free printing");

@@ -44,6 +44,7 @@ public partial class MainWindow
             return null;
         }
         var chain=Find(EventsList,[]);if(chain is null)return;
+        WorkspaceTabs.SelectedIndex=0;
         foreach(var ancestor in chain.SkipLast(1))ancestor.IsExpanded=true;EventsList.UpdateLayout();chain[^1].IsSelected=true;chain[^1].BringIntoView();
     }
     private void RecipientSelected(object sender,SelectionChangedEventArgs e)

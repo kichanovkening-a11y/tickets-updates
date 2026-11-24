@@ -121,6 +121,11 @@ public partial class MainWindow : Window
             Hall.Load([],[],true); HistoryGrid.ItemsSource=null; LegendPanel.Children.Clear();
             ShowHome(); return;
         }
+        WorkspaceTabs.SelectedIndex=0;
+#if CLASSIC
+        if(classicCatalog is not null)classicCatalog.Visibility=Visibility.Collapsed;
+        SetClassicNavigation(1);
+#endif
         HomePanel.Visibility=Visibility.Collapsed; Workspace.Visibility=Visibility.Visible;
         Run(()=>LoadEvent(true));
         if(current?.Id!=previous)_=RefreshTicketPro037();
@@ -194,7 +199,7 @@ public partial class MainWindow : Window
         IssuedRecipients.Visibility=string.IsNullOrEmpty(IssuedRecipients.Text)?Visibility.Collapsed:Visibility.Visible;
         var archived=currentArchived=current is not null&&store.IsEventReadOnly(current.Id);
         var free=selected.Count(s=>s.Available); var issued=selected.Count(s=>s.TicketId.HasValue);
-        SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count} · Сумма: {selected.Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
+        SelectedSummary.Text=selected.Count==0?"Ничего не выбрано":$"Мест: {selected.Count}\nСумма: {selected.Sum(s=>(decimal)(s.Amount??0)):N0} ₽";
         IssueButton.IsEnabled=!archived && current is not null && selected.Count>0 && free==selected.Count &&
             !string.IsNullOrWhiteSpace(RecipientName) && !string.IsNullOrWhiteSpace(SeriesBox.Text) &&
             long.TryParse(NumberBox.Text,out var n) && n>0;

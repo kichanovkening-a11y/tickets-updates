@@ -11,6 +11,7 @@ var failed = 0;
 var total = 0;
 void Test(string name, Action<Store> body)
 {
+    if(args.Contains("--hall053")&&!name.StartsWith("053"))return;
     if(args.Contains("--approved050")&&!name.StartsWith("050"))return;
     if(args.Contains("--agreed052")&&!name.StartsWith("052"))return;
     if(args.Contains("--portable048")&&!name.StartsWith("048"))return;
@@ -395,6 +396,7 @@ Test("41-ticket complete document package uses recipient and exact totals",s=>{
     var directory=System.IO.Path.Combine(System.IO.Path.GetTempPath(),"tickets-docqa");Directory.CreateDirectory(directory);
     foreach(var file in s.SaveAllDocuments(e.Id,issue))File.Copy(file,System.IO.Path.Combine(directory,System.IO.Path.GetFileName(file)),true);
 });
+HallGeometry053Checks.Register(Test);
 DocsLayoutChecks.Register(Test);
 Docs012Checks.Register(Test);
 Docs013Checks.Register(Test);

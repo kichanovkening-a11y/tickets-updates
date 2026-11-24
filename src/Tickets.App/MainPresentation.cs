@@ -26,10 +26,19 @@ public partial class MainWindow
             var toggleName=expanded?"Свернуть зал":"Раскрыть зал";
             ToggleHallButton038.ToolTip=toggleName;
             System.Windows.Automation.AutomationProperties.SetName(ToggleHallButton038,toggleName);
+            #if CLASSIC
+            if(classicSidebar is not null)classicSidebar.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
+            var navigation=0d;
+#else
             var navigation=expanded?0:layout.ActualWidth<1050?236d:280d;
+#endif
+            #if CLASSIC
+            WorkspaceNavigation.Visibility=Visibility.Collapsed;
+#else
             WorkspaceNavigation.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
+#endif
             if(layout.ColumnDefinitions[0].Width.Value!=navigation)layout.ColumnDefinitions[0].Width=new GridLength(navigation);
-            layout.ColumnDefinitions[1].Width=new GridLength(expanded?0:8);
+            layout.ColumnDefinitions[1].Width=new GridLength(navigation==0?0:8);
             ApplySidebarWidth043();
         }
     }

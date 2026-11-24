@@ -394,6 +394,7 @@ public sealed partial class HallView : FrameworkElement
             dc.DrawRoundedRectangle(null,innerPen,new Rect(s.X-1/zoom,s.Y-1/zoom,SeatSelection.SeatSize+2/zoom,SeatSelection.SeatSize+2/zoom),2,2);
         }
         dc.Pop();
+        DrawGeometry053(dc);
         if(marquee && dragging) dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(30,30,110,220)),
             new Pen(Brushes.DodgerBlue,1),new Rect(Screen(worldAnchor),last));
         if(seats.Count==0) dc.DrawText(Text("В этом зале пока нет мест",16,Brushes.SlateGray),new Point(25,25));
@@ -403,8 +404,9 @@ public sealed partial class HallView : FrameworkElement
     private bool dismissedPriceOnPreviousClick049;
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
+        if(GeometryDown053(e))return;
         if(e.ChangedButton is not (MouseButton.Left or MouseButton.Right or MouseButton.Middle))return;
-        if(transformRow is not null&&e.ChangedButton==MouseButton.Left){EndGesture();e.Handled=true;return;}
+        if(transformRow is not null&&transformDragging&&e.ChangedButton==MouseButton.Left){EndGesture();e.Handled=true;return;}
         if(dragging)return;
         // WPF's ClickCount already enforces the native double-click interval and
         // position. Keep the second click part of the first price dismissal.
@@ -433,7 +435,7 @@ public sealed partial class HallView : FrameworkElement
         }
         if(e.ChangedButton==MouseButton.Left&&transformSector is not null)
         {
-            transformStart=seats.Where(s=>s.Sector==transformSector&&s.Id>0).ToArray();
+            transformStart=seats.Where(s=>s.Sector==transformSector&&(transformRow is null||s.Row==transformRow)&&s.Id>0).ToArray();
             transformDragging=transformStart.Length>0;panning=false;
             if(transformDragging)CacheSectorDrawing();
         }
@@ -442,6 +444,7 @@ public sealed partial class HallView : FrameworkElement
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        if(GeometryMove053(e))return;
         var p=e.GetPosition(this);
         if(dragging&&draggingCaption029 is {} captionSector&&captionDragStart029 is {} caption)
         {
@@ -455,9 +458,9 @@ public sealed partial class HallView : FrameworkElement
             }
             last=p;return;
         }
-        if(transformRow is not null&&transformDragging)
+        if(transformRow is not null&&transformDragging&&!rotateSector)
         {
-            sectorMatrix=Matrix.Identity;sectorMatrix.Translate(World(p).X-worldAnchor.X,0);
+            sectorMatrix=Matrix.Identity;sectorMatrix.Translate(World(p).X-worldAnchor.X,World(p).Y-worldAnchor.Y);
             InvalidateVisual();return;
         }
         if(dragging)
@@ -498,6 +501,7 @@ public sealed partial class HallView : FrameworkElement
     }
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
+        if(GeometryUp053(e))return;
         if(!dragging || e.ChangedButton!=gestureButton) return;
         var p=e.GetPosition(this);
         if(draggingCaption029 is not null){EndGesture();e.Handled=true;return;}

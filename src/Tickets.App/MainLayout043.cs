@@ -16,7 +16,7 @@ public partial class MainWindow
         Resources["HallIconsMargin044"]=new Thickness(0,Math.Max(0,hallHeaderHeight044-32),5/CompactText043.PhysicalScale((Visual)Content).X,0);
     }
     private Vector spacingScale043;
-    private double sidebarPreferredWidth043=250;
+    private double sidebarPreferredWidth043=180;
     private bool sidebarDragging043;
     private string SidebarWidthPath043=>Path.Combine(Path.GetDirectoryName(store.Path)!,"hall-sidebar-width.txt");
     private void InitializeLayout043()
@@ -24,7 +24,7 @@ public partial class MainWindow
         try
         {
             if(File.Exists(SidebarWidthPath043)&&double.TryParse(File.ReadAllText(SidebarWidthPath043),NumberStyles.Float,CultureInfo.InvariantCulture,out var width)&&double.IsFinite(width))
-                sidebarPreferredWidth043=Math.Clamp(width,200,500);
+                sidebarPreferredWidth043=Math.Clamp(width,150,500);
         }
         catch(IOException){}catch(UnauthorizedAccessException){}
         Workspace.ColumnDefinitions[2].Width=new GridLength(sidebarPreferredWidth043);
@@ -70,7 +70,7 @@ public partial class MainWindow
     private void ApplySidebarWidth043()
     {
         if(Workspace.ActualWidth<=0)return;
-        var max=Math.Max(200,Math.Min(500,Workspace.ActualWidth-6-220));
+        var max=Math.Max(150,Math.Min(500,Workspace.ActualWidth-6-220));
         // GridSplitter honors the definition's maximum during both mouse and
         // keyboard resizing; constrain the gesture itself, not just restoration.
         Workspace.ColumnDefinitions[2].MaxWidth=max;
@@ -80,7 +80,7 @@ public partial class MainWindow
     }
     private void SaveSidebarWidth043()
     {
-        sidebarPreferredWidth043=Math.Clamp(Workspace.ColumnDefinitions[2].ActualWidth,200,500);
+        sidebarPreferredWidth043=Math.Clamp(Workspace.ColumnDefinitions[2].ActualWidth,150,500);
         ApplySidebarWidth043();
         try
         {

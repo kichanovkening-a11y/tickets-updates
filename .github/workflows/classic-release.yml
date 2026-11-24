@@ -47,7 +47,7 @@ jobs:
             python scripts/restore_seed.py
             if ($LASTEXITCODE -ne 0) { throw 'Seed restore failed' }
           }
-          dotnet run --project tests/Tickets.Tests -- data/seed.db
+          dotnet run --project tests/Tickets.Tests -- data/seed.db --hall053
           if ($LASTEXITCODE -ne 0) { throw 'Accounting, halls, documents and integration checks failed' }
       - name: Verify classic menus windows search printing and saved modes
         if: steps.cached.outputs.ui != 'true'

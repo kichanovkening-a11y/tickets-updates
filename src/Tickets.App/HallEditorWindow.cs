@@ -9,7 +9,7 @@ using Tickets.Core;
 
 namespace Tickets.App;
 
-internal sealed class HallEditorWindow : EditorWindow
+internal sealed partial class HallEditorWindow : EditorWindow
 {
     public long CreatedId{get;private set;}
     private readonly ObservableCollection<DraftSeat> seats=[];
@@ -45,9 +45,10 @@ internal sealed class HallEditorWindow : EditorWindow
             var y=seats.Count==0?initialY:seats.Max(s=>s.Y)+80;
             Remember();foreach(var seat in added){var draft=Clone(seat);draft.Y+=y;draft.RowAisleAnchors=HallAnchors027.Move(draft.RowAisleAnchors,0,y);seats.Add(draft);}Refresh();
         }
-        Button(sidebar,"Добавить сектор",()=>Try(()=>{
+        Button(sidebar,"Добавить сектор — Вариант 1",()=>Try(()=>{
             var dialog=new HallSectorWindow023(Store,!editExisting);if(dialog.ShowDialog()!=true)return;Append(dialog.Result,26);
         }));
+        Button(sidebar,"Добавить зону — Вариант 2",()=>Try(()=>{var dialog=new HallSectorVariant2Window(Store);if(dialog.ShowDialog()==true)Append(dialog.Result,26);}));
         undo=Button(sidebar,"Шаг назад",()=>Try(Undo));undo.IsEnabled=false;
         Button(sidebar,editExisting?"Сохранить изменения":"Сохранить как новый зал",()=>Try(()=>{
             if(!CommitEdits())return;
@@ -58,6 +59,7 @@ internal sealed class HallEditorWindow : EditorWindow
         var area=new DockPanel();Grid.SetColumn(area,1);grid.Children.Add(area);
         var toolbar=new WrapPanel();DockPanel.SetDock(toolbar,Dock.Top);area.Children.Add(toolbar);
         toolbar.Children.Add(showHidden);
+        InstallGeometryControls(toolbar);
         showHidden.Checked+=(_,_)=>Refresh(false);showHidden.Unchecked+=(_,_)=>Refresh(false);
         area.Children.Add(preview);
         grid.PreviewKeyDown+=(_,e)=>{if(e.Key==Key.Z&&Keyboard.Modifiers==ModifierKeys.Control&&Keyboard.FocusedElement is not TextBox){Try(Undo);e.Handled=true;}};
@@ -67,8 +69,10 @@ internal sealed class HallEditorWindow : EditorWindow
             else if(!preview.Selected.Contains(id))preview.SetSelection(new[]{id});
             var menu=new ContextMenu{PlacementTarget=preview};
             void Item(string title,Action action){var item=new MenuItem{Header=title};item.Click+=(_,_)=>Try(action);menu.Items.Add(item);}
-            if(rowCaption)Item("Сдвинуть ряд",()=>preview.EditRow(target.Sector,target.Row));
-            Item("Сделать проход",()=>{Remember();HallEditing025.MakeAisle(seats,Selection());Refresh(false);});
+            if(rowCaption){Item("Сдвинуть ряд",()=>preview.EditRow(target.Sector,target.Row));Item("Повернуть ряд",()=>preview.EditRowRotation053(target.Sector,target.Row));}
+            Item("Изгиб выбранных рядов",()=>SelectGeometryRows(target.Sector,target.Row));
+            Item("Изгиб всей зоны",()=>SelectGeometryZone(target.Sector));
+            Item("Сделать проход перед этим местом",()=>{Remember();HallEditing023.MakeAisle(seats.ToArray(),new[]{target});Refresh(false);});
             Item("Проход после ряда",()=>{var dialog=new RowAisleWindow024(Store);if(dialog.ShowDialog()!=true)return;Remember();HallEditing024.MakeRowAisle(seats,Selection(),dialog.Gap);Refresh(false);});
             Item("Назначить букву",()=>{var dialog=new HallLetterWindow025(Store);if(dialog.ShowDialog()!=true)return;Remember();HallEditing025.AssignLetter(seats,target,dialog.Letter,rowCaption);Refresh(false);});
             Item("Удалить места",DeleteSelected);
@@ -91,7 +95,10 @@ internal sealed class HallEditorWindow : EditorWindow
                 Remember();HallEditing027.RenameSector(seats,sector,dialog.Result);foreach(var seat in seats.Where(s=>s.Sector==dialog.Result))seat.SectorCaption=dialog.ResultCaption;Refresh(false);
             });
             var rotate=new MenuItem{Header="Повернуть название"};rotate.Click+=(_,_)=>preview.EditSectorCaption031(sector);
-            menu.Items.Add(rename);menu.Items.Add(rotate);preview.ContextMenu=menu;menu.IsOpen=true;
+            menu.Items.Add(rename);menu.Items.Add(rotate);
+            var bend=new MenuItem{Header="Изгиб всей зоны"};bend.Click+=(_,_)=>SelectGeometryZone(sector);menu.Items.Add(bend);
+            var move=new MenuItem{Header="Переместить зону"};move.Click+=(_,_)=>preview.EditSector(sector,false);menu.Items.Add(move);
+            var turn=new MenuItem{Header="Повернуть зону"};turn.Click+=(_,_)=>preview.EditSector(sector,true);menu.Items.Add(turn);preview.ContextMenu=menu;menu.IsOpen=true;
         });
         preview.SectorCaptionChanged029+=(sector,caption)=>Try(()=>{Remember();foreach(var seat in seats.Where(s=>s.Sector==sector))seat.SectorCaption=caption;Refresh(false);});
         void Transform(IReadOnlyList<SeatInfo> changed)=>Try(()=>{
@@ -110,8 +117,10 @@ internal sealed class HallEditorWindow : EditorWindow
     private bool CommitEdits()=>table.CommitEdit(DataGridEditingUnit.Cell,true)&&table.CommitEdit(DataGridEditingUnit.Row,true);
     private void Refresh(bool fit=true)
     {
+        var selected=preview.Selected.ToArray();
         var view=seats.Select((s,i)=>new SeatInfo(i+1,s.Sector,s.Row,s.Number,s.X,s.Y,0,s.Hidden?"#BBBBBB":"#7AA8D9",null,"","",null,IsHidden:s.Hidden&&showHidden.IsChecked!=true){RowAisleAnchors=s.RowAisleAnchors}).ToList();
         preview.Load(view,seats.GroupBy(s=>s.Sector).Select(g=>new SectorInfo(g.Key,g.Min(s=>s.X),g.Min(s=>s.Y)-26){Caption=g.First().SectorCaption}).ToList(),fit);
+        preview.SetSelection(selected);
         summary.Text=$"Мест: {seats.Count(s=>!s.Hidden)} · Скрыто: {seats.Count(s=>s.Hidden)} · Секторов: {seats.Select(s=>s.Sector).Distinct().Count()}";
     }
 }

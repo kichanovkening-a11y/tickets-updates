@@ -77,11 +77,12 @@ public partial class MainWindow
             var picture = new Border { Background = Brushes.WhiteSmoke, Child = photo, ClipToBounds = true };
             var name = new TextBlock { Text = title, FontSize = 16, FontWeight = FontWeights.Medium, TextWrapping = TextWrapping.Wrap,
                 Foreground = Brushes.Black, TextAlignment = TextAlignment.Center, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(5) };
-            var body = new DockPanel();
-            var caption = new Border { Child = name, MinHeight = 44 };
+            var body = new DockPanel{VerticalAlignment=VerticalAlignment.Top};
+            var caption = new Border { Child = name, Height = 76 };
             DockPanel.SetDock(caption, Dock.Bottom);
-            body.Children.Add(caption);
+            DockPanel.SetDock(picture,Dock.Top);
             body.Children.Add(picture);
+            body.Children.Add(caption);
             var tile = new Border { Child = body, Tag = card, Margin = new Thickness(6), CornerRadius = new CornerRadius(10),
                 BorderThickness = new Thickness(1), BorderBrush = Brushes.Gainsboro, Background = Brushes.White, AllowDrop = true, Cursor = Cursors.Hand };
             picture.SizeChanged += (_, _) => picture.Clip = new RectangleGeometry(new Rect(picture.RenderSize), 8, 8);

@@ -45,6 +45,8 @@ internal static class ClassicVisual
 public partial class MainWindow
 {
     private Grid? classicCatalog;
+    private Border? classicSidebar;
+    private bool classicNavigationBusy;
     private readonly ListBox classicPerformances = new(){DisplayMemberPath="Title"};
     private readonly ListBox classicVenues = new(){DisplayMemberPath="Name"};
     private readonly ListBox classicDates = new(){DisplayMemberPath="Date"};
@@ -58,19 +60,28 @@ public partial class MainWindow
         TopBanner043.Visibility = Visibility.Collapsed;
         WorkspaceNavigation.Background = ClassicVisual.Blue;
         WorkspaceNavigation.Padding = new Thickness(8);
-        MainWorkspaceLayout.ColumnDefinitions[0].Width = new GridLength(210);
+        MainWorkspaceLayout.ColumnDefinitions[0].Width = new GridLength(0);
+        MainWorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(0);
+        WorkspaceNavigation.Visibility=Visibility.Collapsed;
         var root = new DockPanel{Background=ClassicVisual.Gray,Margin=new Thickness(5)};
-        var nav = new StackPanel{Width=190,Background=ClassicVisual.Blue};
-        DockPanel.SetDock(nav,Dock.Left);
-        root.Children.Add(new Border{Child=nav,Background=ClassicVisual.Blue,BorderBrush=ClassicVisual.Edge,BorderThickness=new Thickness(1),Margin=new Thickness(0,0,5,0)});
+        var nav = new DockPanel{Width=130,Background=ClassicVisual.Blue};
+        var buttons=new StackPanel();DockPanel.SetDock(buttons,Dock.Top);nav.Children.Add(buttons);
+        classicSidebar=new Border{Child=nav,Background=ClassicVisual.Blue,BorderBrush=ClassicVisual.Edge,BorderThickness=new Thickness(1),Margin=new Thickness(0,0,5,0)};
+        DockPanel.SetDock(classicSidebar,Dock.Left);root.Children.Add(classicSidebar);
         AddNavigation("Спектакли и\nплощадки",()=>ShowClassicCatalog(0));
-        AddNavigation("Выдача билетов",()=>ShowClassicIssue());
-        AddNavigation("Редактор схем",()=>Run(()=>{HallsClick(this,new RoutedEventArgs());RefreshClassicCatalog();}));
+        AddNavigation("Выдача\nбилетов",()=>ShowClassicIssue());
+        AddNavigation("Редактор\nсхем",()=>Run(()=>{HallsClick(this,new RoutedEventArgs());RefreshClassicCatalog();}));
         AddNavigation("Настройки",()=>SettingsClick(this,new RoutedEventArgs()));
+        AddNavigation("Расценовки",()=>PricesClick(this,new RoutedEventArgs()));
+        AddNavigation("Получатели",()=>RecipientsClick(this,new RoutedEventArgs()));
+        nav.Width=Math.Ceiling(classicNavigation.SelectMany(b=>b.Content.ToString()!.Split(new[]{' ','\n'},StringSplitOptions.RemoveEmptyEntries))
+            .Max(word=>new FormattedText(word,CultureInfo.GetCultureInfo("ru-RU"),FlowDirection.LeftToRight,new Typeface("Tahoma"),16,Brushes.Black,1).WidthIncludingTrailingWhitespace)+16);
         ((Panel)SearchBox.Parent).Children.Remove(SearchBox);
-        SearchBox.Width=190;SearchBox.Margin=new Thickness(0,4,0,0);
-        nav.Children.Add(new TextBlock{Text="Поиск",Margin=new Thickness(4,14,0,0)});
-        nav.Children.Add(SearchBox);
+        SearchBox.Width=double.NaN;SearchBox.Visibility=Visibility.Visible;SearchBox.Margin=new Thickness(2,4,2,6);
+        buttons.Children.Add(new TextBlock{Text="Поиск",Margin=new Thickness(4,8,0,0)});
+        buttons.Children.Add(SearchBox);
+        ((Panel)EventsList.Parent).Children.Remove(EventsList);nav.Children.Add(EventsList);
+        EventsList.Background=Brushes.White;
         SearchBox.TextChanged+=(_,_)=>{if(classicCatalog?.Visibility==Visibility.Visible)RefreshClassicCatalog();};
         var body = (UIElement)Content;
         Content = null;
@@ -88,11 +99,16 @@ public partial class MainWindow
 
         void AddNavigation(string label,Action action)
         {
-            var button = new Button{Content=label,ContentTemplate=null,Width=190,Height=56,
+            var index=classicNavigation.Count;
+            var button = new Button{Content=label,ContentTemplate=null,Width=double.NaN,Height=double.NaN,MinHeight=38,Padding=new Thickness(5,6,5,6),
                 FontSize=16,HorizontalContentAlignment=HorizontalAlignment.Left,Margin=new Thickness(0,2,0,2),
                 Background=ClassicVisual.Blue};
-            button.Click+=(_,_)=>action();
-            nav.Children.Add(button);
+            button.Click+=(_,_)=>{
+                if(classicNavigationBusy)return;
+                classicNavigationBusy=true;SetClassicNavigation(index);
+                try{action();}finally{classicNavigationBusy=false;}
+            };
+            buttons.Children.Add(button);
             classicNavigation.Add(button);
         }
     }
@@ -105,8 +121,8 @@ public partial class MainWindow
         grid.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
         grid.RowDefinitions.Add(new(){Height=new GridLength(1,GridUnitType.Star)});
         var shows = Group("Спектакли",classicPerformances,
-            ("＋ Создать",()=>Run(()=>{new PerformanceWindow(store).ShowDialog();RefreshClassicCatalog();})),
-            ("Изменить",()=>Run(()=>{PerformancesClick(this,new RoutedEventArgs());RefreshClassicCatalog();})),
+            ("＋ Создать",()=>Run(()=>{var picker=new PosterPicker(store,repertoire,Cards(),null,null,"");if(picker.ShowDialog()==true)SavePicked(picker);RefreshClassicCatalog();})),
+            ("Изменить",()=>Run(()=>{if(classicPerformances.SelectedItem is PerformanceInfo p)new ClassicPerformanceEditor(store,p,()=>EditPoster(p.Title,p.Id)).ShowDialog();RefreshClassicCatalog();RefreshCatalogNavigation();ShowClassicCatalog(0);})),
             ("Удалить",()=>Run(()=>{
                 if(classicPerformances.SelectedItem is not PerformanceInfo p)return;
                 var linked=store.PerformanceDeletionSummary(p.Id);
@@ -154,13 +170,13 @@ public partial class MainWindow
         DockPanel.SetDock(plans,Dock.Top);lower.Children.Add(plans);
         var issue = new Button{Content="Перейти к выдаче билетов",ContentTemplate=null,Height=78,
             Width=double.NaN,HorizontalAlignment=HorizontalAlignment.Stretch,Margin=new Thickness(8),Background=Brushes.White};
-        issue.Click+=(_,_)=>ShowClassicIssue();
+        issue.Click+=(_,_)=>OpenClassicSelectedShow();
         DockPanel.SetDock(issue,Dock.Top);lower.Children.Add(issue);lower.Children.Add(new Border());
         Grid.SetColumn(lower,1);Grid.SetRow(lower,1);grid.Children.Add(lower);
         classicPerformances.SelectionChanged+=(_,_)=>RefreshClassicDates();
         classicVenues.SelectionChanged+=(_,_)=>RefreshClassicPlans();
         classicFuture.Checked+=(_,_)=>RefreshClassicDates();classicFuture.Unchecked+=(_,_)=>RefreshClassicDates();
-        classicDates.MouseDoubleClick+=(_,_)=>ShowClassicIssue();
+        classicDates.MouseDoubleClick+=(_,_)=>OpenClassicSelectedShow();
         classicDates.SelectionChanged+=(_,_)=>{
             if(classicDates.SelectedItem is EventInfo e)
                 classicVenues.SelectedItem=classicVenues.Items.Cast<VenueInfo>().FirstOrDefault(v=>v.Id==e.VenueId);
@@ -190,7 +206,7 @@ public partial class MainWindow
         if(classicDates.Items.Count==0)throw new InvalidOperationException("Не загрузилось расписание спектакля.");
         classicDates.SelectedIndex=0;
         var selected=(EventInfo)classicDates.SelectedItem;
-        ShowClassicIssue();
+        OpenClassicSelectedShow();
         if(Workspace.Visibility!=Visibility.Visible||current?.Id!=selected.Id)
             throw new InvalidOperationException("Не открылся выбранный сеанс.");
         ShowClassicCatalog(0);
@@ -247,8 +263,24 @@ public partial class MainWindow
         classicCatalog.Visibility=Visibility.Collapsed;
         SetClassicNavigation(1);
         ReadEventCatalog();ApplyFilter();
-        if(classicDates.SelectedItem is EventInfo selected)SelectEvent(selected.Id);
-        else ShowHome();
+        current=null;foreach(var row in EventRows())row.IsSelected=false;
+        ShowHome();
+    }
+    private void OpenClassicSelectedShow()
+    {
+        var selected=classicDates.SelectedItem as EventInfo;
+        ShowClassicIssue();
+        if(selected is not null)SelectEvent(selected.Id);
+    }
+}
+internal sealed class ClassicPerformanceEditor:EditorWindow
+{
+    internal ClassicPerformanceEditor(Store store,PerformanceInfo performance,Action poster):base(store,"Изменить спектакль",560,300)
+    {
+        var form=new StackPanel{Margin=new Thickness(16)};Content=form;
+        var name=Field(form,"Название спектакля",performance.Title);
+        Button(form,"Афиша",()=>Try(poster));
+        Button(form,"Сохранить",()=>Try(()=>{store.RenamePerformance(performance.Id,name.Text);Finish(true);}));
     }
 }
 #endif

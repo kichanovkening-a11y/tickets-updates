@@ -45,7 +45,7 @@ internal sealed partial class HallEditorWindow : EditorWindow
             var y=seats.Count==0?initialY:seats.Max(s=>s.Y)+80;
             Remember();foreach(var seat in added){var draft=Clone(seat);draft.Y+=y;draft.RowAisleAnchors=HallAnchors027.Move(draft.RowAisleAnchors,0,y);seats.Add(draft);}Refresh();
         }
-        Button(sidebar,"Добавить сектор — Вариант 1",()=>Try(()=>{
+        Button(sidebar,"Добавить сектор",()=>Try(()=>{
             var dialog=new HallSectorWindow023(Store,!editExisting);if(dialog.ShowDialog()!=true)return;Append(dialog.Result,26);
         }));
         Button(sidebar,"Добавить зону — Вариант 2",()=>Try(()=>{var dialog=new HallSectorVariant2Window(Store);if(dialog.ShowDialog()==true)Append(dialog.Result,26);}));

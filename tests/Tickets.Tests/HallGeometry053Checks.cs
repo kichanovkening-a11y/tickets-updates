@@ -29,6 +29,21 @@ internal static class HallGeometry053Checks
             Check(seats.All(s=>Math.Abs(-(s.X-cx)*dy+(s.Y-cy)*dx)<.001),"Row is not straight");
             Check(seats[0].Number=="15"&&seats[^1].Number=="1","Reverse numbering changed");
         });
+        run("053 selected seats create individual aisles across rows",_=>{
+            var seats=HallLayout.Generate("S",[new(){Label="1",SeatCount=20},new(){Label="2",SeatCount=20}],"1",false,0).ToArray();
+            var before=seats.Select(s=>(s.X,s.Y,s.Number)).ToArray();
+            HallEditing023.MakeAisle(seats,[seats[9],seats[10],seats[29]],eachSelected:true);
+            for(var i=0;i<seats.Length;i++)
+            {
+                var shift=i<9?0:i<10?20:i<20?40:i<29?0:20;
+                Check(seats[i].X==before[i].X+shift&&seats[i].Y==before[i].Y&&seats[i].Number==before[i].Number,"Wrong selected-seat aisle or numbering");
+            }
+        });
+        run("053 legacy selected-run aisle behavior remains unchanged",_=>{
+            var seats=HallLayout.Generate("S",[new(){Label="1",SeatCount=20}],"1",false,0).ToArray();
+            var x=seats[^1].X;HallEditing023.MakeAisle(seats,[seats[9],seats[10]]);
+            Check(seats[^1].X==x+20,"Legacy run now creates duplicate aisles");
+        });
         run("053 aisle before seat shifts following seats without removing seat",_=>{
             var seats=HallLayout.Generate("S",[new(){Label="1",SeatCount=20}],"1",false,0).ToArray();
             var before=seats.Select(s=>s.X).ToArray();HallEditing023.MakeAisle(seats,[seats[10]]);

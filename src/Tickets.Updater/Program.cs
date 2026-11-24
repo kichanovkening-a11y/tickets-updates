@@ -69,6 +69,8 @@ internal static class Program
                     if(Arg("--plan").Length>0){start.ArgumentList.Add("--plan");start.ArgumentList.Add(Arg("--plan"));}
                     _ = Process.Start(start)??throw new IOException("Не удалось запустить обновлятор.");busy=false;window.Close();return;
                 }
+                Stage("Закройте «Билеты» и все её окна. Обновление продолжится автоматически.");
+                await WaitForApplicationExit(target);
                 Stage("Проверка незавершённых установок…");await Task.Run(()=>UpdateTransaction.Recover(target));
                 InstallPlan plan;
                 if(Arg("--plan").Length==0)
@@ -131,6 +133,39 @@ internal static class Program
             finally{reporting=false;transaction?.Dispose();busy=false;button.IsEnabled=true;button.Content="Повторить обновление";bar.IsIndeterminate=false;if(succeeded){finished=true;button.Content="Закрыть";await Task.Delay(2000);if(window.IsVisible)window.Close();}}
         }
         button.Click+=async(_,_)=>{if(finished)window.Close();else await Run();};window.Loaded+=async(_,_)=>{if(args.Contains("--target"))await Run();};application.Run(window);
+    }
+    private static async Task WaitForApplicationExit(string target)
+    {
+        var expected=Path.GetFullPath(Path.Combine(target,Channel.ApplicationExecutable));
+        var requested=new HashSet<int>();var deadline=DateTime.UtcNow.AddSeconds(60);
+        var lockFile=Path.Combine(target,"Data","session.lock");
+        while(true)
+        {
+            var running=false;
+            foreach(var process in Process.GetProcessesByName(Channel.ApplicationName))
+            {
+                using(process)
+                {
+                    try
+                    {
+                        if(process.HasExited||!string.Equals(process.MainModule?.FileName,expected,StringComparison.OrdinalIgnoreCase))continue;
+                        running=true;if(requested.Add(process.Id))process.CloseMainWindow();
+                    }
+                    catch(InvalidOperationException){}
+                    catch(System.ComponentModel.Win32Exception){}
+                }
+            }
+            var locked=false;
+            if(File.Exists(lockFile))
+            {
+                try{using var probe=new FileStream(lockFile,FileMode.Open,FileAccess.ReadWrite,FileShare.None);}
+                catch(FileNotFoundException){}
+                catch(IOException){locked=true;}
+            }
+            if(!running&&!locked)return;
+            if(DateTime.UtcNow>=deadline)throw new IOException("Программа ещё открыта. Закройте «Билеты» и её дополнительные окна, затем нажмите «Повторить обновление». Данные не изменены.");
+            await Task.Delay(500);
+        }
     }
     private static void CopyTree(string source,string target)
     {

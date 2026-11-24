@@ -63,6 +63,9 @@ public partial class MainWindow : Window
         var id=current?.Id; var q=Normalize(SearchBox.Text.Trim());
         var filtered=events.Where(x=>SearchText.Matches(x.Title+" "+x.Venue+" "+x.Date,q)).ToList();
         EventsList.Items.Clear();var now=DateTime.Now;
+#if CLASSIC
+        Dispatcher.BeginInvoke(new Action(WrapClassicEvents));
+#endif
         TreeViewItem Group(PerformanceShows group,bool past)
         {
             var title=new TextBlock{Text=group.Title,TextWrapping=TextWrapping.Wrap,FontWeight=FontWeights.SemiBold,FontSize=13,MaxWidth=205};

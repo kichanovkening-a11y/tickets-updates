@@ -1,5 +1,7 @@
 #if CLASSIC
 using System.Globalization;
+using System.IO;
+using System.Windows.Controls.Primitives;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -46,6 +48,10 @@ public partial class MainWindow
 {
     private Grid? classicCatalog;
     private Border? classicSidebar;
+    private Grid? classicRoot;
+    private GridSplitter? classicSplitter;
+    private double classicSidebarWidth;
+    private string ClassicSidebarPath=>Path.Combine(Path.GetDirectoryName(store.Path)!,"classic-sidebar-width.txt");
     private bool classicNavigationBusy;
     private readonly ListBox classicPerformances = new(){DisplayMemberPath="Title"};
     private readonly ListBox classicVenues = new(){DisplayMemberPath="Name"};
@@ -63,25 +69,38 @@ public partial class MainWindow
         MainWorkspaceLayout.ColumnDefinitions[0].Width = new GridLength(0);
         MainWorkspaceLayout.ColumnDefinitions[1].Width = new GridLength(0);
         WorkspaceNavigation.Visibility=Visibility.Collapsed;
-        var root = new DockPanel{Background=ClassicVisual.Gray,Margin=new Thickness(5)};
-        var nav = new DockPanel{Width=130,Background=ClassicVisual.Blue};
+        var root = new Grid{Background=ClassicVisual.Gray,Margin=new Thickness(5)};classicRoot=root;
+        root.ColumnDefinitions.Add(new(){Width=GridLength.Auto});
+        root.ColumnDefinitions.Add(new(){Width=new GridLength(6)});
+        root.ColumnDefinitions.Add(new(){Width=new GridLength(1,GridUnitType.Star),MinWidth=220});
+        var nav = new DockPanel{Background=ClassicVisual.Blue};
         var buttons=new StackPanel();DockPanel.SetDock(buttons,Dock.Top);nav.Children.Add(buttons);
-        classicSidebar=new Border{Child=nav,Background=ClassicVisual.Blue,BorderBrush=ClassicVisual.Edge,BorderThickness=new Thickness(1),Margin=new Thickness(0,0,5,0)};
-        DockPanel.SetDock(classicSidebar,Dock.Left);root.Children.Add(classicSidebar);
+        classicSidebar=new Border{Child=nav,Background=ClassicVisual.Blue,BorderBrush=ClassicVisual.Edge,BorderThickness=new Thickness(1),Margin=new Thickness(0)};
+        root.Children.Add(classicSidebar);
+        classicSplitter=new GridSplitter{Width=6,HorizontalAlignment=HorizontalAlignment.Stretch,VerticalAlignment=VerticalAlignment.Stretch,ResizeDirection=GridResizeDirection.Columns,ResizeBehavior=GridResizeBehavior.PreviousAndNext,Background=ClassicVisual.Edge};
+        Grid.SetColumn(classicSplitter,1);root.Children.Add(classicSplitter);
         AddNavigation("Спектакли и\nплощадки",()=>ShowClassicCatalog(0));
         AddNavigation("Выдача\nбилетов",()=>ShowClassicIssue());
         AddNavigation("Редактор\nсхем",()=>Run(()=>{HallsClick(this,new RoutedEventArgs());RefreshClassicCatalog();}));
         AddNavigation("Настройки",()=>SettingsClick(this,new RoutedEventArgs()));
         AddNavigation("Расценовки",()=>PricesClick(this,new RoutedEventArgs()));
         AddNavigation("Получатели",()=>RecipientsClick(this,new RoutedEventArgs()));
-        nav.Width=Math.Ceiling(classicNavigation.SelectMany(b=>b.Content.ToString()!.Split(new[]{' ','\n'},StringSplitOptions.RemoveEmptyEntries))
+        var compactWidth=Math.Ceiling(classicNavigation.SelectMany(b=>b.Content.ToString()!.Split(new[]{' ','\n'},StringSplitOptions.RemoveEmptyEntries))
             .Max(word=>new FormattedText(word,CultureInfo.GetCultureInfo("ru-RU"),FlowDirection.LeftToRight,new Typeface("Tahoma"),16,Brushes.Black,1).WidthIncludingTrailingWhitespace)+16);
+        buttons.Width=compactWidth;buttons.HorizontalAlignment=HorizontalAlignment.Left;
+        foreach(var button in classicNavigation){button.Width=compactWidth;button.HorizontalAlignment=HorizontalAlignment.Stretch;}
+        root.ColumnDefinitions[0].MinWidth=compactWidth+4;root.ColumnDefinitions[0].MaxWidth=480;
+        classicSidebarWidth=compactWidth+4;
+        try{if(File.Exists(ClassicSidebarPath)&&double.TryParse(File.ReadAllText(ClassicSidebarPath),NumberStyles.Float,CultureInfo.InvariantCulture,out var saved)&&double.IsFinite(saved))classicSidebarWidth=Math.Clamp(saved,compactWidth+4,480);}catch(IOException){}catch(UnauthorizedAccessException){}
+        root.ColumnDefinitions[0].Width=new GridLength(classicSidebarWidth);
+        classicSplitter.DragCompleted+=(_,e)=>{if(e.Canceled)return;classicSidebarWidth=root.ColumnDefinitions[0].ActualWidth;Run(()=>File.WriteAllText(ClassicSidebarPath,classicSidebarWidth.ToString("R",CultureInfo.InvariantCulture)));};
         ((Panel)SearchBox.Parent).Children.Remove(SearchBox);
         SearchBox.Width=double.NaN;SearchBox.Visibility=Visibility.Visible;SearchBox.Margin=new Thickness(2,4,2,6);
         buttons.Children.Add(new TextBlock{Text="Поиск",Margin=new Thickness(4,8,0,0)});
         buttons.Children.Add(SearchBox);
         ((Panel)EventsList.Parent).Children.Remove(EventsList);nav.Children.Add(EventsList);
         EventsList.Background=Brushes.White;
+        EventsList.SizeChanged+=(_,_)=>WrapClassicEvents();
         SearchBox.TextChanged+=(_,_)=>{if(classicCatalog?.Visibility==Visibility.Visible)RefreshClassicCatalog();};
         var body = (UIElement)Content;
         Content = null;
@@ -89,7 +108,7 @@ public partial class MainWindow
         host.Children.Add(body);
         classicCatalog = BuildClassicCatalog();
         host.Children.Add(classicCatalog);
-        root.Children.Add(host);
+        Grid.SetColumn(host,2);root.Children.Add(host);
         // Keep embedded dialogs above both the catalog and the classic navigation.
         ((Panel)DialogLayer.Parent).Children.Remove(DialogLayer);
         var outer=new Grid();outer.Children.Add(root);outer.Children.Add(DialogLayer);
@@ -113,6 +132,28 @@ public partial class MainWindow
         }
     }
 
+    private void WrapClassicEvents()
+    {
+        void Wrap(ItemsControl parent,int depth)
+        {
+            foreach(var item in parent.Items.OfType<TreeViewItem>())
+            {
+                if(item.Header is string title)item.Header=new TextBlock{Text=title};
+                if(item.Header is TextBlock text){text.MaxWidth=Math.Max(24,EventsList.ActualWidth-30-depth*16);text.TextWrapping=TextWrapping.Wrap;text.ToolTip=new System.Windows.Documents.TextRange(text.ContentStart,text.ContentEnd).Text;}
+                Wrap(item,depth+1);
+            }
+        }
+        Wrap(EventsList,0);
+    }
+    private void SetClassicExpanded(bool expanded)
+    {
+        if(classicRoot is null||classicSidebar is null||classicSplitter is null)return;
+        if(expanded&&classicSidebar.IsVisible)classicSidebarWidth=classicRoot.ColumnDefinitions[0].ActualWidth;
+        classicSidebar.Visibility=classicSplitter.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
+        classicRoot.ColumnDefinitions[0].MinWidth=expanded?0:classicNavigation[0].Width+4;
+        classicRoot.ColumnDefinitions[0].Width=new GridLength(expanded?0:classicSidebarWidth);
+        classicRoot.ColumnDefinitions[1].Width=new GridLength(expanded?0:6);
+    }
     private Grid BuildClassicCatalog()
     {
         var grid = new Grid{Background=ClassicVisual.Gray};

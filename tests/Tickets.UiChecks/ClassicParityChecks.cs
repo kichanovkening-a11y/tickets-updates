@@ -55,6 +55,15 @@ internal static class ClassicParityChecks
             foreach(var label in new[]{"Получатели","Расценовки","Настройки"})
                 Check(labelsIssue.Contains(label),"classic issuance command: "+label);
             Check(search.IsVisible,"search is reachable from classic issuance");
+            var nav=(System.Collections.IEnumerable)main.GetType().GetField("classicNavigation",Private)!.GetValue(main)!;
+            var navButtons=nav.Cast<Button>().ToArray();
+            Check(navButtons.All(b=>Math.Abs(b.ActualWidth-navButtons[0].ActualWidth)<1),"classic menu buttons have equal widths");
+            var layout=(Grid)main.GetType().GetField("classicRoot",Private)!.GetValue(main)!;
+            Check(layout.Children.OfType<GridSplitter>().Any(),"left sidebar is resizable");
+            var oldWidth=layout.ColumnDefinitions[0].Width;
+            layout.ColumnDefinitions[0].Width=new GridLength(300);Pump();
+            Check(navButtons.All(b=>Math.Abs(b.ActualWidth-navButtons[0].ActualWidth)<1),"menu buttons stay compact after resizing");
+            layout.ColumnDefinitions[0].Width=oldWidth;Pump();
             Check(((FrameworkElement)main.FindName("HomePanel")).IsVisible,"issuance opens poster home");
             Check(!labelsIssue.Contains("Новый показ")&&!labelsIssue.Contains("Бланки печати"),"duplicate commands removed from issuance");
             main.SeparateWindows=true;

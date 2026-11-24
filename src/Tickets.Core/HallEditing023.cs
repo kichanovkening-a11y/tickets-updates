@@ -17,7 +17,7 @@ public static class HallEditing023
     }
     // Insert one chair-width gap before each selected run, following the stored row order,
     // including rotated rows. No place is removed or renumbered by this operation.
-    public static void MakeAisle(IReadOnlyList<DraftSeat> seats,IReadOnlyList<DraftSeat> selected)
+    public static void MakeAisle(IReadOnlyList<DraftSeat> seats,IReadOnlyList<DraftSeat> selected,bool eachSelected=false)
     {
         var chosen=selected.ToHashSet();
         foreach(var row in seats.GroupBy(s=>(s.Sector,s.Row)))
@@ -38,7 +38,7 @@ public static class HallEditing023
             for(var i=0;i<ordered.Length;i++)
             {
                 var seat=ordered[i];var active=chosen.Contains(seat);
-                if(active&&!previous){gaps++;starts.Add(i);}
+                if(active&&(eachSelected||!previous)){gaps++;starts.Add(i);}
                 shifts[i]=20*gaps;seat.X+=dx*shifts[i];seat.Y+=dy*shifts[i];previous=active;
             }
             // Carry saved centres by this explicit geometry edit only. Never derive

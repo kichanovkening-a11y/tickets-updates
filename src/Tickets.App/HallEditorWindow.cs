@@ -72,7 +72,7 @@ internal sealed partial class HallEditorWindow : EditorWindow
             if(rowCaption){Item("Сдвинуть ряд",()=>preview.EditRow(target.Sector,target.Row));Item("Повернуть ряд",()=>preview.EditRowRotation053(target.Sector,target.Row));}
             Item("Изгиб выбранных рядов",()=>SelectGeometryRows(target.Sector,target.Row));
             Item("Изгиб всей зоны",()=>SelectGeometryZone(target.Sector));
-            Item("Сделать проход перед этим местом",()=>{Remember();HallEditing023.MakeAisle(seats.ToArray(),new[]{target});Refresh(false);});
+            Item(preview.Selected.Count>1?"Сделать проходы перед выбранными местами":"Сделать проход перед этим местом",()=>{Remember();HallEditing023.MakeAisle(seats.ToArray(),Selection(),eachSelected:true);Refresh(false);});
             Item("Проход после ряда",()=>{var dialog=new RowAisleWindow024(Store);if(dialog.ShowDialog()!=true)return;Remember();HallEditing024.MakeRowAisle(seats,Selection(),dialog.Gap);Refresh(false);});
             Item("Назначить букву",()=>{var dialog=new HallLetterWindow025(Store);if(dialog.ShowDialog()!=true)return;Remember();HallEditing025.AssignLetter(seats,target,dialog.Letter,rowCaption);Refresh(false);});
             Item("Удалить места",DeleteSelected);

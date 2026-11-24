@@ -27,7 +27,7 @@ public partial class MainWindow
             ToggleHallButton038.ToolTip=toggleName;
             System.Windows.Automation.AutomationProperties.SetName(ToggleHallButton038,toggleName);
             #if CLASSIC
-            if(classicSidebar is not null)classicSidebar.Visibility=expanded?Visibility.Collapsed:Visibility.Visible;
+            SetClassicExpanded(expanded);
             var navigation=0d;
 #else
             var navigation=expanded?0:layout.ActualWidth<1050?236d:280d;
